@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@iconify-json/ic": "^1.2.4",
     "@nuxt/icon": "^2.4.1",
     "@tailwindcss/vite": "^4.3.3",
     "motion-v": "^2.3.0",

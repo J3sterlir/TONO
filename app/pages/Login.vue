@@ -46,7 +46,7 @@ const showPassword = ref(false)
             class="bg-[#D0D4F7] text-[#151A34] w-full p-2.5 px-4 rounded-full mt-4 hover:bg-[#B0B4D7] cursor-pointer">Login</button>
         </div>
         <p class="mt-4 text-center text-[13px]">Don't have an account? <span class="text-[#D0D4F7] cursor-pointer"
-            @click="navigateTo('/Register')">Sign Up</span></p>
+            @click="navigateTo('/Signin')">Sign Up</span></p>
       </div>
     </div>
 
