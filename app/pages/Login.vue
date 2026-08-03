@@ -5,6 +5,7 @@ const showPassword = ref(false)
 </script>
 
 <template>
+  <title>Login</title>
   <div class="flex flex-row h-screen">
     <div class="basis-[40%] flex justify-center items-center bg-[#131315] w-screen">
       <div class="text-white w-[65%] flex flex-col gap-2">

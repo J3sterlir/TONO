@@ -25,6 +25,7 @@ const features = [
 </script>
 
 <template>
+    <title>TONO</title>
     <div
         class="bg-cover bg-center bg-blend-multiply h-screen bg-[radial-gradient(circle,rgba(255,255,255,0.09)_5%,rgba(18,18,20,1)_71%),radial-gradient(circle,rgba(255,255,255,0.09)_5%,rgba(18,18,20,1)_71%),linear-gradient(0deg,rgba(18,18,20,0.95)_0%,rgba(93,93,94,0)_51%,rgba(255,255,255,0.1)_100%),url('https://images.unsplash.com/photo-1604514288114-3851479df2f2')]">
         <nav class="flex bg-[#121214]/80 p-5 items-center justify-between backdrop-blur-[30px] sticky top-0 z-50">
