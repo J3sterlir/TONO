@@ -50,7 +50,7 @@ const toggleTag = (tagId: string) => {
             <button 
               :disabled="selectedTags.length === 0"
               @click="emit('complete')"
-              :class="{ 'opacity-50 cursor-not-allowed': selectedTags.length === 0 }"
+              :class="{ 'bg-[#A0A4D0] cursor-pointer': selectedTags.length > 0, 'opacity-50 cursor-not-allowed': selectedTags.length === 0 }"
               class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Complete</button>
         </div>
     </div>

@@ -56,16 +56,16 @@ const updateForm = (key: keyof BusinessFormData, value: any) => {
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">
-            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
+            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>
             <button 
               :disabled="!isValid"
               @click="emit('proceed')"
-              :class="{ 'opacity-50 cursor-not-allowed': !isValid }"
-              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Next</button>
+              :class="{ 'bg-[#A0A4D0] cursor-pointer': isValid, 'opacity-50 cursor-not-allowed': !isValid }"
+              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition  disabled:hover:bg-[#B4B8DA]">Next</button>
         </div>
 
-        <button @click="emit('skip')" class="mt-4 text-center underline text-[#B0B4D7] hover:text-[#D0D4F7] transition text-sm">
-            I am not a Business Owner
+        <button @click="emit('skip')" class="mt-4 text-center text-[#B0B4D7] hover:text-[#D0D4F7] hover:underline transition text-sm cursor-pointer">
+            I am not a <b>Business Owner</b>
         </button>
     </div>
 </template>

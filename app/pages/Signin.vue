@@ -184,8 +184,8 @@ const goBack = () => {
                 <Userselect 
                   v-if="currentStep === 'userSelect'"
                   :user-type="userType"
-                  @select-artist="goToArtistPath"
-                  @select-user="goToUserPath"
+                  @update:user-type="userType = $event"
+                  @proceed="userType === 'Artist' ? goToArtistPath() : goToUserPath()"
                   @back="goBack"
                 />
 

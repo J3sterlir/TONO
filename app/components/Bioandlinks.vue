@@ -87,7 +87,7 @@ const addLink = () => {
             <button 
               :disabled="!isValid"
               @click="emit('proceed')"
-              :class="{ 'opacity-50 cursor-not-allowed': !isValid }"
+              :class="{ 'bg-[#A0A4D0] cursor-pointer': isValid, 'opacity-50 cursor-not-allowed': !isValid }"
               class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Next</button>
         </div>
     </div>

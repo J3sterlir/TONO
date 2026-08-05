@@ -120,9 +120,9 @@ const checkPasswordMatch = () => {
                     <div class="flex items-center justify-center">
                         <button
                             :disabled="!isValid"
-                            :class="{ 'opacity-50 cursor-not-allowed': !isValid }"
+                            :class="{ 'bg-[#A0A4D0] cursor-pointer': isValid, 'opacity-50 cursor-not-allowed': !isValid }"
                             @click="handleContinue"
-                            class="bg-[#D0D4F7] text-[#151A34] w-full p-2.5 px-4 rounded-full mt-3 sm:mt-4 hover:bg-[#B0B4D7] cursor-pointer disabled:hover:bg-[#D0D4F7]">Continue</button>
+                            class="bg-[#D0D4F7] text-[#151A34] w-full p-2.5 px-4 rounded-full mt-3 sm:mt-4 hover:bg-[#B0B4D7] disabled:hover:bg-[#D0D4F7]">Continue</button>
                     </div>
                     <p class="mt-4 text-center text-[13px]">Already have an account? <span
                             class="text-[#D0D4F7] cursor-pointer" @click="navigateTo('/Login')">Log In</span></p>

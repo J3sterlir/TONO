@@ -46,7 +46,7 @@ const emit = defineEmits<{
                     <button 
                       :disabled="!artistType"
                       @click="emit('proceed')"
-                      :class="{ 'opacity-50 cursor-not-allowed': !artistType }"
+                      :class="{ 'bg-[#A0A4D0] cursor-pointer': artistType, 'opacity-50 cursor-not-allowed': !artistType }"
                       class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Next</button>
                 </div>
             </div>

@@ -50,12 +50,12 @@ const emit = defineEmits<{
                 </div>
             </div>
             <div class="flex items-center justify-between gap-2 mt-6">
-                    <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
+                    <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>
                     <button 
                       :disabled="!userType"
-                      @click="userType === 'Artist' ? emit('update:userType', 'Artist') : emit('update:userType', 'User')"
-                      :class="{ 'opacity-50 cursor-not-allowed': !userType }"
-                      class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Next</button>
+                      @click="emit('proceed')"
+                      :class="{ 'bg-[#A0A4D0] cursor-pointer': userType, 'opacity-50 cursor-not-allowed': !userType }"
+                      class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA] cursor-pointer">Next</button>
                 </div>
         </div>
     </div>
