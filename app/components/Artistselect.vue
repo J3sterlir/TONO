@@ -4,7 +4,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:artistType': [value: 'Solo' | 'Band']
+  'update:artist-type': [value: 'Solo' | 'Band']
   proceed: []
   back: []
 }>()
@@ -22,7 +22,7 @@ const emit = defineEmits<{
             <p class="font-extralight text-[15px] mt-5">ARTIST CATEGORY</p>
             <div class="flex flex-col gap-4 mt-2">
                 <div 
-                  @click="emit('update:artistType', 'Solo')"
+                  @click="emit('update:artist-type', 'Solo')"
                   :class="{ 'border-[#D0D4F7] bg-[#2A2A2D]': artistType === 'Solo' }"
                   class="flex border-2 border-[#46464D]/30 bg-[#1B1B1D] rounded-lg px-5 py-5 cursor-pointer hover:border-[#D0D4F7] hover:bg-[#2A2A2D] transition">
                     <input type="radio" name="artist" value="Solo" id="solo" class="mr-3 w-5" :checked="artistType === 'Solo'">
@@ -32,7 +32,7 @@ const emit = defineEmits<{
                 </div>
 
                 <div 
-                  @click="emit('update:artistType', 'Band')"
+                  @click="emit('update:artist-type', 'Band')"
                   :class="{ 'border-[#D0D4F7] bg-[#2A2A2D]': artistType === 'Band' }"
                   class="flex border-2 border-[#46464D]/30 bg-[#1B1B1D] rounded-lg px-5 py-5 cursor-pointer hover:border-[#D0D4F7] hover:bg-[#2A2A2D] transition">
                     <input type="radio" name="artist" value="Band" id="band" class="mr-3 w-5" :checked="artistType === 'Band'">

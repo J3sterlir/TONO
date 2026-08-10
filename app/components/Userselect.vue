@@ -4,7 +4,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-   'update:userType': [value: 'Artist' | 'User']
+    'update:user-type': [value: 'Artist' | 'User']
   proceed: []
   back: []
 }>()
@@ -25,7 +25,7 @@ const emit = defineEmits<{
             </div>
             <div class="flex flex-col gap-4 mt-2">
                 <div 
-                  @click="emit('update:userType', 'Artist')"
+                                    @click="emit('update:user-type', 'Artist')"
                   :class="{ 'border-[#D0D4F7] bg-[#2A2A2D]': userType === 'Artist' }"
                   class="flex border-2 border-[#46464D]/30 bg-[#1B1B1D] rounded-lg px-5 py-5 cursor-pointer hover:border-[#D0D4F7] hover:bg-[#2A2A2D] transition">
                     <input type="radio" name="user" value="Artist" id="artist-radio" class="mr-3 w-5" :checked="userType === 'Artist'">
@@ -38,7 +38,7 @@ const emit = defineEmits<{
                 </div>
 
                 <div 
-                  @click="emit('update:userType', 'User')"
+                                    @click="emit('update:user-type', 'User')"
                   :class="{ 'border-[#D0D4F7] bg-[#2A2A2D]': userType === 'User' }"
                   class="flex border-2 border-[#46464D]/30 bg-[#1B1B1D] rounded-lg px-5 py-5 cursor-pointer hover:border-[#D0D4F7] hover:bg-[#2A2A2D] transition">
                     <input type="radio" name="user" value="User" id="user-radio" class="mr-3 w-5" :checked="userType === 'User'">

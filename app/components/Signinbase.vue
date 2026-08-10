@@ -16,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+    'update:form': [value: SigninFormData]
   continue: []
 }>()
 
@@ -26,6 +27,10 @@ const handleContinue = () => {
   if (props.isValid) {
     emit('continue')
   }
+}
+
+const updateForm = (key: keyof SigninFormData, value: string) => {
+    emit('update:form', { ...props.form, [key]: value })
 }
 
 const checkPasswordMatch = () => {
@@ -43,7 +48,8 @@ const checkPasswordMatch = () => {
                         <Icon name="ic:baseline-mail-outline"
                             class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
                         <input type="email" placeholder="Enter your email"
-                            v-model="form.email"
+                            :value="props.form.email"
+                            @input="updateForm('email', ($event.target as HTMLInputElement).value)"
                             class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
                     </div>
                     <p class="font-light">Username</p>
@@ -51,7 +57,8 @@ const checkPasswordMatch = () => {
                         <Icon name="ic:outline-person"
                             class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
                         <input type="text" placeholder="Enter your username"
-                            v-model="form.username"
+                            :value="props.form.username"
+                            @input="updateForm('username', ($event.target as HTMLInputElement).value)"
                             class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
                     </div>
                     <div class="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
@@ -63,7 +70,8 @@ const checkPasswordMatch = () => {
                                 <Icon name="ic:round-home-work"
                                     class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
                                 <input type="text" placeholder="Enter your city"
-                                    v-model="form.city"
+                                    :value="props.form.city"
+                                    @input="updateForm('city', ($event.target as HTMLInputElement).value)"
                                     class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
                             </div>
                         </div>
@@ -75,7 +83,8 @@ const checkPasswordMatch = () => {
                                 <Icon name="ic:round-home"
                                     class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
                                 <input type="text" placeholder="Enter your barangay"
-                                    v-model="form.barangay"
+                                    :value="props.form.barangay"
+                                    @input="updateForm('barangay', ($event.target as HTMLInputElement).value)"
                                     class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
                             </div>
                         </div>
@@ -88,8 +97,8 @@ const checkPasswordMatch = () => {
                             class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
 
                         <input :type="showPassword ? 'text' : 'password'" placeholder="Enter your password"
-                            v-model="form.password"
-                            @input="checkPasswordMatch"
+                            :value="props.form.password"
+                            @input="updateForm('password', ($event.target as HTMLInputElement).value); checkPasswordMatch()"
                             class="placeholder:text-sm w-full pl-12 pr-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
 
                         <button type="button" class="flex absolute right-3 top-1/2 -translate-y-1/2 text-[#7A7A7D]"
@@ -106,8 +115,8 @@ const checkPasswordMatch = () => {
                             class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
 
                         <input :type="showPassword ? 'text' : 'password'" placeholder="Re-enter your password"
-                            v-model="form.confirmPassword"
-                            @input="checkPasswordMatch"
+                            :value="props.form.confirmPassword"
+                            @input="updateForm('confirmPassword', ($event.target as HTMLInputElement).value); checkPasswordMatch()"
                             class="placeholder:text-sm w-full pl-12 pr-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
 
                         <button type="button" class="flex absolute right-3 top-1/2 -translate-y-1/2 text-[#7A7A7D]"

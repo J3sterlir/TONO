@@ -1,156 +1,209 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
-// Flow state management
-const currentStep = ref<'signin' | 'userSelect' | 'artistSelect' | 'bioAndLinks' | 'artistGenre' | 'artistInstrument' | 'bandGenre' | 'businessSetup' | 'userGenre' | 'userInstrument'>('signin')
+type Step = 'signin' | 'userSelect' | 'artistSelect' | 'bioAndLinks' | 'artistGenre' | 'artistInstrument' | 'bandGenre' | 'businessSetup' | 'userGenre' | 'userInstrument'
 
-// Form data
-const signinForm = ref({
-  email: '',
-  username: '',
-  city: '',
-  barangay: '',
-  password: '',
-  confirmPassword: ''
-})
-
-const userType = ref<'Artist' | 'User' | null>(null)
-const artistType = ref<'Solo' | 'Band' | null>(null)
-const bioForm = ref({
-  stageName: '',
-  bio: '',
-  facebook: '',
-  instagram: '',
-  youtube: ''
-})
-
-const businessForm = ref({
-  businessName: '',
-  businessAddress: '',
-  businessService: '',
-  isBusinessOwner: true
-})
-
-const selectedGenres = ref<string[]>([])
-const selectedInstruments = ref<string[]>([])
-
-// Validation checks
-const isSigninValid = computed<boolean>(() => {
-  return !!(signinForm.value.email &&
-           signinForm.value.username &&
-           signinForm.value.city &&
-           signinForm.value.barangay &&
-           signinForm.value.password &&
-           signinForm.value.confirmPassword &&
-           signinForm.value.password === signinForm.value.confirmPassword)
-})
-
-const isUserSelectValid = computed<boolean>(() => userType.value !== null)
-
-const isArtistSelectValid = computed<boolean>(() => artistType.value !== null)
-
-const isBioAndLinksValid = computed<boolean>(() => {
-  return !!(bioForm.value.stageName && bioForm.value.bio)
-})
-
-const isBusinessSetupValid = computed<boolean>(() => {
-  if (!businessForm.value.isBusinessOwner) return true
-  return !!(businessForm.value.businessName &&
-         businessForm.value.businessAddress &&
-         businessForm.value.businessService)
-})
-
-const isGenreValid = computed<boolean>(() => selectedGenres.value.length > 0)
-const isInstrumentValid = computed<boolean>(() => selectedInstruments.value.length > 0)
-
-// Navigation methods
-const goToArtistPath = () => {
-  userType.value = 'Artist'
-  currentStep.value = 'artistSelect'
-}
-
-const goToUserPath = () => {
-  userType.value = 'User'
-  if (businessForm.value.isBusinessOwner) {
-    currentStep.value = 'businessSetup'
-  } else {
-    currentStep.value = 'userGenre'
+type SignupDraft = {
+  account: {
+    email: string
+    username: string
+    city: string
+    barangay: string
+    password: string
+    confirmPassword: string
+  }
+  role: {
+    userType: 'Artist' | 'User' | null
+    artistType: 'Solo' | 'Band' | null
+  }
+  artistProfile: {
+    stageName: string
+    bio: string
+    facebook: string
+    instagram: string
+    youtube: string
+    specialty: string
+    bandName: string
+    additionalLinks: string[]
+  }
+  businessProfile: {
+    businessName: string
+    businessAddress: string
+    businessService: string
+    isBusinessOwner: boolean
+  }
+  preferences: {
+    genres: string[]
+    instruments: string[]
   }
 }
 
+const STORAGE_KEY = 'tono-signup-draft'
+
+const createDraft = (): SignupDraft => ({
+  account: {
+    email: '',
+    username: '',
+    city: '',
+    barangay: '',
+    password: '',
+    confirmPassword: '',
+  },
+  role: {
+    userType: null,
+    artistType: null,
+  },
+  artistProfile: {
+    stageName: '',
+    bio: '',
+    facebook: '',
+    instagram: '',
+    youtube: '',
+    specialty: '',
+    bandName: '',
+    additionalLinks: [],
+  },
+  businessProfile: {
+    businessName: '',
+    businessAddress: '',
+    businessService: '',
+    isBusinessOwner: true,
+  },
+  preferences: {
+    genres: [],
+    instruments: [],
+  },
+})
+
+const currentStep = ref<Step>('signin')
+const signupDraft = reactive<SignupDraft>(createDraft())
+
+if (import.meta.client) {
+  const storedDraft = localStorage.getItem(STORAGE_KEY)
+  if (storedDraft) {
+    try {
+      const parsed = JSON.parse(storedDraft) as Partial<SignupDraft>
+      Object.assign(signupDraft.account, parsed.account)
+      Object.assign(signupDraft.role, parsed.role)
+      Object.assign(signupDraft.artistProfile, parsed.artistProfile)
+      Object.assign(signupDraft.businessProfile, parsed.businessProfile)
+      Object.assign(signupDraft.preferences, parsed.preferences)
+    } catch {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  }
+}
+
+watch(
+  signupDraft,
+  (draft) => {
+    if (!import.meta.client) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
+  },
+  { deep: true },
+)
+
+const isSigninValid = computed<boolean>(() => {
+  const { email, username, city, barangay, password, confirmPassword } = signupDraft.account
+  return !!(email && username && city && barangay && password && confirmPassword && password === confirmPassword)
+})
+
+const isUserSelectValid = computed<boolean>(() => signupDraft.role.userType !== null)
+const isArtistSelectValid = computed<boolean>(() => signupDraft.role.artistType !== null)
+const isBioAndLinksValid = computed<boolean>(() => !!(signupDraft.artistProfile.stageName && signupDraft.artistProfile.bio))
+const isBusinessSetupValid = computed<boolean>(() => {
+  if (!signupDraft.businessProfile.isBusinessOwner) return true
+  return !!(signupDraft.businessProfile.businessName && signupDraft.businessProfile.businessAddress && signupDraft.businessProfile.businessService)
+})
+const isGenreValid = computed<boolean>(() => signupDraft.preferences.genres.length > 0)
+const isInstrumentValid = computed<boolean>(() => signupDraft.preferences.instruments.length > 0)
+
+const setStep = (step: Step) => {
+  currentStep.value = step
+}
+
+const goToArtistPath = () => {
+  signupDraft.role.userType = 'Artist'
+  setStep('artistSelect')
+}
+
+const goToUserPath = () => {
+  signupDraft.role.userType = 'User'
+  setStep(signupDraft.businessProfile.isBusinessOwner ? 'businessSetup' : 'userGenre')
+}
+
 const proceedFromArtistSelect = () => {
-  if (artistType.value === 'Solo') {
-    currentStep.value = 'bioAndLinks'
-  } else if (artistType.value === 'Band') {
-    currentStep.value = 'bandGenre'
+  if (signupDraft.role.artistType === 'Solo') {
+    setStep('bioAndLinks')
+  } else if (signupDraft.role.artistType === 'Band') {
+    setStep('bandGenre')
   }
 }
 
 const proceedFromBioAndLinks = () => {
-  currentStep.value = 'artistGenre'
+  setStep('artistGenre')
 }
 
 const proceedFromArtistGenre = () => {
-  currentStep.value = 'artistInstrument'
+  setStep('artistInstrument')
+}
+
+const submitDraft = (targetRoute: string) => {
+  if (!import.meta.client) return
+  console.log('Signup draft ready for submit:', JSON.parse(JSON.stringify(signupDraft)))
+  localStorage.removeItem(STORAGE_KEY)
+  navigateTo(targetRoute)
 }
 
 const completeArtistFlow = () => {
-  navigateTo('/artist-home')
+  submitDraft('/artist-home')
 }
 
 const completeBandFlow = () => {
-  navigateTo('/artist-home')
+  submitDraft('/artist-home')
 }
 
 const proceedFromBusinessSetup = () => {
-  if (businessForm.value.isBusinessOwner) {
-    currentStep.value = 'userGenre'
-  } else {
-    currentStep.value = 'userGenre'
-  }
+  setStep('userGenre')
 }
 
 const completeUserFlow = () => {
-  navigateTo('/user-home')
+  submitDraft('/user-home')
 }
 
 const skipBusinessSetup = () => {
-  businessForm.value.isBusinessOwner = false
-  currentStep.value = 'userGenre'
+  signupDraft.businessProfile.isBusinessOwner = false
+  setStep('userGenre')
 }
 
 const goBack = () => {
-  switch(currentStep.value) {
+  switch (currentStep.value) {
     case 'userSelect':
-      currentStep.value = 'signin'
+      setStep('signin')
       break
     case 'artistSelect':
-      currentStep.value = 'userSelect'
+      setStep('userSelect')
       break
     case 'bioAndLinks':
-      currentStep.value = 'artistSelect'
+      setStep('artistSelect')
       break
     case 'artistGenre':
-      currentStep.value = 'bioAndLinks'
+      setStep('bioAndLinks')
       break
     case 'artistInstrument':
-      currentStep.value = 'artistGenre'
+      setStep('artistGenre')
       break
     case 'bandGenre':
-      currentStep.value = 'artistSelect'
+      setStep('artistSelect')
       break
     case 'businessSetup':
-      currentStep.value = 'userSelect'
+      setStep('userSelect')
       break
     case 'userGenre':
-      if (businessForm.value.isBusinessOwner) {
-        currentStep.value = 'businessSetup'
-      } else {
-        currentStep.value = 'userSelect'
-      }
+      setStep(signupDraft.businessProfile.isBusinessOwner ? 'businessSetup' : 'userSelect')
       break
     case 'userInstrument':
-      currentStep.value = 'userGenre'
+      setStep('userGenre')
       break
   }
 }
@@ -175,32 +228,32 @@ const goBack = () => {
                 <!-- Stage 1: Sign In -->
                 <Signinbase 
                   v-if="currentStep === 'signin'"
-                  :form="signinForm"
+                  v-model:form="signupDraft.account"
                   :is-valid="isSigninValid"
-                  @continue="currentStep = 'userSelect'"
+                  @continue="setStep('userSelect')"
                 />
 
                 <!-- Stage 2: User Select -->
                 <Userselect 
                   v-if="currentStep === 'userSelect'"
-                  :user-type="userType"
-                  @update:user-type="userType = $event"
-                  @proceed="userType === 'Artist' ? goToArtistPath() : goToUserPath()"
+                  :user-type="signupDraft.role.userType"
+                  @update:user-type="signupDraft.role.userType = $event"
+                  @proceed="signupDraft.role.userType === 'Artist' ? goToArtistPath() : goToUserPath()"
                   @back="goBack"
                 />
 
                 <!-- Artist Path -->
                 <Artistselect 
                   v-if="currentStep === 'artistSelect'"
-                  :artist-type="artistType"
-                  @update:artist-type="artistType = $event"
+                  :artist-type="signupDraft.role.artistType"
+                  @update:artist-type="signupDraft.role.artistType = $event"
                   @proceed="proceedFromArtistSelect"
                   @back="goBack"
                 />
 
                 <Bioandlinks 
                   v-if="currentStep === 'bioAndLinks'"
-                  :form="bioForm"
+                  v-model:form="signupDraft.artistProfile"
                   :is-valid="isBioAndLinksValid"
                   @proceed="proceedFromBioAndLinks"
                   @back="goBack"
@@ -208,27 +261,31 @@ const goBack = () => {
 
                 <Artistgenretags 
                   v-if="currentStep === 'artistGenre'"
-                  :selected="selectedGenres"
+                  :selected="signupDraft.preferences.genres"
                   :is-valid="isGenreValid"
-                  @update:selected="selectedGenres = $event"
+                  @update:selected="signupDraft.preferences.genres = $event"
                   @proceed="proceedFromArtistGenre"
                   @back="goBack"
                 />
 
                 <Artistinstrumenttags 
                   v-if="currentStep === 'artistInstrument'"
-                  :selected="selectedInstruments"
+                  :form="signupDraft.artistProfile"
+                  :selected="signupDraft.preferences.instruments"
                   :is-valid="isInstrumentValid"
-                  @update:selected="selectedInstruments = $event"
+                  @update:form="signupDraft.artistProfile = $event"
+                  @update:selected="signupDraft.preferences.instruments = $event"
                   @complete="completeArtistFlow"
                   @back="goBack"
                 />
 
                 <Bandgenretags 
                   v-if="currentStep === 'bandGenre'"
-                  :selected="selectedGenres"
+                  :form="signupDraft.artistProfile"
+                  :selected="signupDraft.preferences.genres"
                   :is-valid="isGenreValid"
-                  @update:selected="selectedGenres = $event"
+                  @update:form="signupDraft.artistProfile = $event"
+                  @update:selected="signupDraft.preferences.genres = $event"
                   @complete="completeBandFlow"
                   @back="goBack"
                 />
@@ -236,9 +293,8 @@ const goBack = () => {
                 <!-- User Path -->
                 <BuisnessSetup 
                   v-if="currentStep === 'businessSetup'"
-                  :form="businessForm"
+                  v-model:form="signupDraft.businessProfile"
                   :is-valid="isBusinessSetupValid"
-                  @update:form="businessForm = $event"
                   @proceed="proceedFromBusinessSetup"
                   @skip="skipBusinessSetup"
                   @back="goBack"
@@ -246,18 +302,18 @@ const goBack = () => {
 
                 <Usergenretags 
                   v-if="currentStep === 'userGenre'"
-                  :selected="selectedGenres"
+                  :selected="signupDraft.preferences.genres"
                   :is-valid="isGenreValid"
-                  @update:selected="selectedGenres = $event"
-                  @proceed="currentStep = 'userInstrument'"
+                  @update:selected="signupDraft.preferences.genres = $event"
+                  @proceed="setStep('userInstrument')"
                   @back="goBack"
                 />
 
                 <Userinstrumenttags 
                   v-if="currentStep === 'userInstrument'"
-                  :selected="selectedInstruments"
+                  :selected="signupDraft.preferences.instruments"
                   :is-valid="isInstrumentValid"
-                  @update:selected="selectedInstruments = $event"
+                  @update:selected="signupDraft.preferences.instruments = $event"
                   @complete="completeUserFlow"
                   @back="goBack"
                 />

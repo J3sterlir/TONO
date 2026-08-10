@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-
 const props = defineProps<{
   selected: string[]
   isValid: boolean
@@ -12,13 +10,10 @@ const emit = defineEmits<{
   back: []
 }>()
 
-const selectedTags = ref<string[]>([])
-
 const toggleTag = (tagId: string) => {
-  const newSelected = selectedTags.value.includes(tagId)
-    ? selectedTags.value.filter(id => id !== tagId)
-    : [...selectedTags.value, tagId]
-  selectedTags.value = newSelected
+  const newSelected = props.selected.includes(tagId)
+    ? props.selected.filter(id => id !== tagId)
+    : [...props.selected, tagId]
   emit('update:selected', newSelected)
 }
 </script>
@@ -35,22 +30,22 @@ const toggleTag = (tagId: string) => {
               v-for="i in 9"
               :key="i"
               @click="toggleTag(`tag-${i}`)"
-              :class="{ 'bg-[#D0D4F7] text-[#151A34] border-[#D0D4F7]': selectedTags.includes(`tag-${i}`), 'bg-[#353437]/40 border-[#46464D]/30': !selectedTags.includes(`tag-${i}`) }"
+              :class="{ 'bg-[#D0D4F7] text-[#151A34] border-[#D0D4F7]': props.selected.includes(`tag-${i}`), 'bg-[#353437]/40 border-[#46464D]/30': !props.selected.includes(`tag-${i}`) }"
               class="py-2 border-2 rounded-lg cursor-pointer hover:border-[#D0D4F7] transition font-medium text-sm">
               Tag {{ i }}
             </button>
         </div>
 
-        <div v-if="selectedTags.length > 0" class="mt-4 text-sm text-[#B0B4D7]">
-          Selected: {{ selectedTags.length }} instrument(s)
+        <div v-if="props.selected.length > 0" class="mt-4 text-sm text-[#B0B4D7]">
+          Selected: {{ props.selected.length }} instrument(s)
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">
             <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
             <button 
-              :disabled="selectedTags.length === 0"
+              :disabled="props.selected.length === 0"
               @click="emit('complete')"
-              :class="{ 'bg-[#A0A4D0] cursor-pointer': selectedTags.length > 0, 'opacity-50 cursor-not-allowed': selectedTags.length === 0 }"
+              :class="{ 'bg-[#A0A4D0] cursor-pointer': props.selected.length > 0, 'opacity-50 cursor-not-allowed': props.selected.length === 0 }"
               class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Complete</button>
         </div>
     </div>
