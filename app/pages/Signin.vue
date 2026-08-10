@@ -150,17 +150,17 @@ const proceedFromArtistGenre = () => {
 
 const submitDraft = (targetRoute: string) => {
   if (!import.meta.client) return
-  console.log('Signup draft ready for submit:', JSON.parse(JSON.stringify(signupDraft)))
+  // console.log('Signup draft ready for submit:', JSON.parse(JSON.stringify(signupDraft)))
   localStorage.removeItem(STORAGE_KEY)
   navigateTo(targetRoute)
 }
 
 const completeArtistFlow = () => {
-  submitDraft('/artist-home')
+  submitDraft('/Login')
 }
 
 const completeBandFlow = () => {
-  submitDraft('/artist-home')
+  submitDraft('/Login')
 }
 
 const proceedFromBusinessSetup = () => {
@@ -168,7 +168,7 @@ const proceedFromBusinessSetup = () => {
 }
 
 const completeUserFlow = () => {
-  submitDraft('/user-home')
+  submitDraft('/Login')
 }
 
 const skipBusinessSetup = () => {
