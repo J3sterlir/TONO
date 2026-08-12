@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 
-type Step = 'signin' | 'userSelect' | 'artistSelect' | 'bioAndLinks' | 'artistGenre' | 'artistInstrument' | 'bandGenre' | 'businessSetup' | 'userGenre' | 'userInstrument'
+type Step = 'signin' | 'userSelect' | 'artistSelect' | 'bioAndLinks' | 'artistGenre' | 'artistInstrument' | 'bandGenre' | 'Biolinksband' | 'businessSetup' | 'userGenre' | 'userInstrument'
 
 type SignupDraft = {
   account: {
@@ -23,13 +23,13 @@ type SignupDraft = {
     instagram: string
     youtube: string
     specialty: string
-    bandName: string
     additionalLinks: string[]
   }
   businessProfile: {
     businessName: string
     businessAddress: string
     businessService: string
+    cellphone: number
     isBusinessOwner: boolean
   }
   preferences: {
@@ -60,13 +60,13 @@ const createDraft = (): SignupDraft => ({
     instagram: '',
     youtube: '',
     specialty: '',
-    bandName: '',
     additionalLinks: [],
   },
   businessProfile: {
     businessName: '',
     businessAddress: '',
     businessService: '',
+    cellphone: 63,
     isBusinessOwner: true,
   },
   preferences: {
@@ -136,8 +136,12 @@ const proceedFromArtistSelect = () => {
   if (signupDraft.role.artistType === 'Solo') {
     setStep('bioAndLinks')
   } else if (signupDraft.role.artistType === 'Band') {
-    setStep('bandGenre')
+    setStep('Biolinksband')
   }
+}
+
+const proceedFromBioAndLinksBand = () => {
+  setStep('bandGenre')
 }
 
 const proceedFromBioAndLinks = () => {
@@ -150,7 +154,8 @@ const proceedFromArtistGenre = () => {
 
 const submitDraft = (targetRoute: string) => {
   if (!import.meta.client) return
-  // console.log('Signup draft ready for submit:', JSON.parse(JSON.stringify(signupDraft)))
+  const payloadSnapshot = JSON.parse(JSON.stringify(signupDraft))
+  console.log('Signup draft ready for submit:', payloadSnapshot)
   localStorage.removeItem(STORAGE_KEY)
   navigateTo(targetRoute)
 }
@@ -193,8 +198,11 @@ const goBack = () => {
     case 'artistInstrument':
       setStep('artistGenre')
       break
+    case 'Biolinksband':
+      setStep('bandGenre')
+      break
     case 'bandGenre':
-      setStep('artistSelect')
+      setStep('Biolinksband')
       break
     case 'businessSetup':
       setStep('userSelect')
@@ -220,12 +228,12 @@ const goBack = () => {
                         <img src="/TONO_LOGO.svg" alt="Logo" class="h-10 w-10 rounded-full" />
                         <h1>TONO</h1>
                     </div>
-                    <button class="text-white cursor-pointer text-start w-fit hover:text-[#B0B4D7]"
+                  <!-- <button class="text-white cursor-pointer text-start w-fit hover:text-[#B0B4D7]"
                         @click="navigateTo('/')">&larr;
-                        Back</button>
+                        Back</button>-->
                 </div>
 
-                <!-- Stage 1: Sign In -->
+                <!--Sign In -->
                 <Signinbase 
                   v-if="currentStep === 'signin'"
                   v-model:form="signupDraft.account"
@@ -233,7 +241,7 @@ const goBack = () => {
                   @continue="setStep('userSelect')"
                 />
 
-                <!-- Stage 2: User Select -->
+                <!-- User Select -->
                 <Userselect 
                   v-if="currentStep === 'userSelect'"
                   :user-type="signupDraft.role.userType"
@@ -242,7 +250,7 @@ const goBack = () => {
                   @back="goBack"
                 />
 
-                <!-- Artist Path -->
+                <!-- Artist -->
                 <Artistselect 
                   v-if="currentStep === 'artistSelect'"
                   :artist-type="signupDraft.role.artistType"
@@ -255,7 +263,7 @@ const goBack = () => {
                   v-if="currentStep === 'bioAndLinks'"
                   v-model:form="signupDraft.artistProfile"
                   :is-valid="isBioAndLinksValid"
-                  @proceed="proceedFromBioAndLinks"
+                  @proceed="proceedFromBioAndLinksBand"
                   @back="goBack"
                 />
 
@@ -279,6 +287,14 @@ const goBack = () => {
                   @back="goBack"
                 />
 
+                <Biolinksband
+                  v-if="currentStep === 'Biolinksband'"
+                  v-model:form="signupDraft.artistProfile"
+                  :is-valid="isBioAndLinksValid"
+                  @proceed="proceedFromBioAndLinks"
+                  @back="goBack"
+                />
+
                 <Bandgenretags 
                   v-if="currentStep === 'bandGenre'"
                   :form="signupDraft.artistProfile"
@@ -290,7 +306,7 @@ const goBack = () => {
                   @back="goBack"
                 />
 
-                <!-- User Path -->
+                <!-- User -->
                 <BuisnessSetup 
                   v-if="currentStep === 'businessSetup'"
                   v-model:form="signupDraft.businessProfile"

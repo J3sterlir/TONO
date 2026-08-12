@@ -3,6 +3,7 @@ interface BusinessFormData {
   businessName: string
   businessAddress: string
   businessService: string
+  cellphone: number
   isBusinessOwner: boolean
 }
 
@@ -43,6 +44,15 @@ const updateForm = (key: keyof BusinessFormData, value: any) => {
             <input type="text" placeholder="Enter your business address"
                 :value="form.businessAddress"
                 @input="updateForm('businessAddress', ($event.target as HTMLInputElement).value)"
+                class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
+        </div>
+
+        <p class="font-light mt-5">CELLPHONE NUMBER *</p>
+        <div class="relative">
+            <Icon name="ic:baseline-local-phone" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
+            <input type="text" placeholder="Enter your cellphone number"
+                :value="form.cellphone"
+                @input="updateForm('cellphone', ($event.target as HTMLInputElement).value)"
                 class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
         </div>
 

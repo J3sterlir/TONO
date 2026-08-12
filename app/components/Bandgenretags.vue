@@ -7,7 +7,6 @@ const props = defineProps<{
     instagram: string
     youtube: string
     specialty: string
-    bandName: string
     additionalLinks: string[]
   }
   selected: string[]
@@ -22,17 +21,12 @@ const emit = defineEmits<{
     instagram: string
     youtube: string
     specialty: string
-    bandName: string
     additionalLinks: string[]
   }]
   'update:selected': [value: string[]]
   complete: []
   back: []
 }>()
-
-const updateForm = (value: string) => {
-  emit('update:form', { ...props.form, bandName: value })
-}
 
 const toggleTag = (tagId: string) => {
   const newSelected = props.selected.includes(tagId)
@@ -45,14 +39,6 @@ const toggleTag = (tagId: string) => {
 <template>
     <div class="text-white w-full max-w-md flex flex-col gap-2">
         <h1 class="text-center font-bold text-[22px] mt-5">Band Setup</h1>
-        <p class="font-light mt-5">Band Name *</p>
-        <div class="relative">
-            <Icon name="material-symbols:groups-2-outline" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
-            <input type="text" placeholder="Enter your Band Name"
-            :value="props.form.bandName"
-            @input="updateForm(($event.target as HTMLInputElement).value)"
-                class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
-        </div>
 
         <p class="font-extralight text-[15px] mt-5">Select the genres that best define your sound. *</p>
 
@@ -75,9 +61,8 @@ const toggleTag = (tagId: string) => {
         <div class="flex items-center justify-between gap-2 mt-6">
             <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
             <button 
-              :disabled="props.form.bandName.trim() === '' || props.selected.length === 0"
+              :disabled="props.selected.length === 0"
               @click="emit('complete')"
-              :class="{ 'bg-[#A0A4D0] cursor-pointer': props.form.bandName.trim() !== '' && props.selected.length > 0, 'opacity-50 cursor-not-allowed': props.form.bandName.trim() === '' || props.selected.length === 0 }"
               class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Complete</button>
         </div>
     </div>

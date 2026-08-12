@@ -7,7 +7,6 @@ const props = defineProps<{
     instagram: string
     youtube: string
     specialty: string
-    bandName: string
     additionalLinks: string[]
   }
   selected: string[]
@@ -22,7 +21,6 @@ const emit = defineEmits<{
     instagram: string
     youtube: string
     specialty: string
-    bandName: string
     additionalLinks: string[]
   }]
   'update:selected': [value: string[]]

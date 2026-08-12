@@ -40,10 +40,10 @@ const updateLink = (index: number, value: string) => {
         <h1 class="text-[30px] font-bold">Bio & Social Links</h1>
         <p class="font-light">Tell the world who you are and where to find your music.</p>
 
-        <p class="font-light mt-5">Stage Name *</p>
+        <p class="font-light mt-5">Band Name *</p>
         <div class="relative">
             <Icon name="ic:outline-person" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
-            <input type="text" placeholder="Enter your Stage Name"
+            <input type="text" placeholder="Enter your Band Name"
                 :value="props.form.stageName"
                 @input="updateForm('stageName', ($event.target as HTMLInputElement).value)"
                 class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
