@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   userType: 'Artist' | 'User' | null
+  validationMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +49,9 @@ const emit = defineEmits<{
                             Business Owners</p>
                     </div>
                 </div>
+            </div>
+            <div v-if="validationMessage" class="mt-3 text-sm text-amber-300">
+                {{ validationMessage }}
             </div>
             <div class="flex items-center justify-between gap-2 mt-6">
                     <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>

@@ -12,6 +12,7 @@ interface BioFormData {
 const props = defineProps<{
   form: BioFormData
   isValid: boolean
+  validationMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -95,6 +96,10 @@ const updateLink = (index: number, value: string) => {
             @click="addLink"
             class="cursor-pointer text-center outline-dashed rounded-md outline py-2 text-sm text-[#46464D] hover:text-[#B0B4D7] transition">
             + Add Another Link
+        </div>
+
+        <div v-if="validationMessage" class="mt-2 text-sm text-amber-300">
+            {{ validationMessage }}
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">

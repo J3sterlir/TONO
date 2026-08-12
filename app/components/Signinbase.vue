@@ -24,6 +24,7 @@ interface BarangayOption {
 const props = defineProps<{
   form: SigninFormData
   isValid: boolean
+  validationMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -43,14 +44,14 @@ const CAM_SUR_PROV_CODE = '0517'
 const citiesList = ref<CityOption[]>([])
 const barangaysList = ref<BarangayOption[]>([])
 
-// Track the code locally to fetch barangays, but don't put it in the payload
+
 const localCityCode = ref('')
 
 onMounted(async () => {
   citiesList.value = await cities(CAM_SUR_PROV_CODE)
 })
 
-// Fetch barangays whenever the local city code changes
+// Fetch barangays to local city changes
 watch(localCityCode, async (newCode) => {
   if (newCode) {
     barangaysList.value = await barangays(newCode)
@@ -65,7 +66,7 @@ const selectCity = (cityObj: CityOption) => {
   
   emit('update:form', { 
     ...props.form, 
-    city: cityObj.city_name, // Saves "Naga City" instead of "051724000"
+    city: cityObj.city_name, // Saves string instead of "051724000" code
     barangay: '' 
   })
   isCityOpen.value = false
@@ -198,6 +199,7 @@ const checkPasswordMatch = () => {
     </div>
 
     <div v-if="passwordMismatch" class="text-red-400 text-sm mt-1">Passwords do not match</div>
+    <div v-if="validationMessage" class="mt-1 text-sm text-amber-300">{{ validationMessage }}</div>
     
     <div class="flex items-center justify-center mt-3 sm:mt-4">
       <button :disabled="!isValid"

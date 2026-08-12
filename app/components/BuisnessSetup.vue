@@ -10,6 +10,7 @@ interface BusinessFormData {
 const props = defineProps<{
   form: BusinessFormData
   isValid: boolean
+  validationMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -63,6 +64,10 @@ const updateForm = (key: keyof BusinessFormData, value: any) => {
                 :value="form.businessService"
                 @input="updateForm('businessService', ($event.target as HTMLInputElement).value)"
                 class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
+        </div>
+
+        <div v-if="validationMessage" class="mt-3 text-sm text-amber-300">
+            {{ validationMessage }}
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">
