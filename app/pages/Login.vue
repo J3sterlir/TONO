@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const { resolveLoginEmail, fetchCurrentUserProfile, signInWithTonoAccount } = useTonoAuth()
+const { resolveLoginEmail, signInWithTonoAccount } = useTonoAuth()
 const showPassword = ref(false)
 const loginForm = ref({
   emailOrUsername: '',
@@ -27,8 +27,11 @@ const handleLogin = async () => {
       throw new Error('Unable to sign in. Please check your credentials and try again.')
     }
 
-    await fetchCurrentUserProfile(result.user.id)
-    await navigateTo('/')
+    if (result.profile?.artistProfile) {
+      await navigateTo('/Artisthome')
+    } else {
+      await navigateTo('/userhome')
+    }
   } catch (error: any) {
     loginError.value = error?.message || 'Unable to sign in. Please check your credentials and try again.'
   } finally {

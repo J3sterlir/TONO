@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 
 const { signUpWithTonoAccount } = useTonoAuth()
 
@@ -82,21 +82,21 @@ const createDraft = (): SignupDraft => ({
 const currentStep = ref<Step>('signin')
 const signupDraft = reactive<SignupDraft>(createDraft())
 
-if (import.meta.client) {
+onMounted(() => {
   const storedDraft = localStorage.getItem(STORAGE_KEY)
   if (storedDraft) {
     try {
       const parsed = JSON.parse(storedDraft) as Partial<SignupDraft>
-      Object.assign(signupDraft.account, parsed.account)
-      Object.assign(signupDraft.role, parsed.role)
-      Object.assign(signupDraft.artistProfile, parsed.artistProfile)
-      Object.assign(signupDraft.businessProfile, parsed.businessProfile)
-      Object.assign(signupDraft.preferences, parsed.preferences)
+      if (parsed.account) Object.assign(signupDraft.account, parsed.account)
+      if (parsed.role) Object.assign(signupDraft.role, parsed.role)
+      if (parsed.artistProfile) Object.assign(signupDraft.artistProfile, parsed.artistProfile)
+      if (parsed.businessProfile) Object.assign(signupDraft.businessProfile, parsed.businessProfile)
+      if (parsed.preferences) Object.assign(signupDraft.preferences, parsed.preferences)
     } catch {
       localStorage.removeItem(STORAGE_KEY)
     }
   }
-}
+})
 
 watch(
   signupDraft,

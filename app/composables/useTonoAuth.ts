@@ -23,6 +23,7 @@ export type TonoArtistProfile = {
   ARTIST_ID: string
   ACCOUNT_ID: string
   Artist_Type: TonoArtistType
+  StageName: string
   Bio: string | null
   Links: Record<string, unknown> | null
   Is_Verified: boolean
@@ -46,14 +47,19 @@ export const useTonoAuth = () => {
     if (!value) return ''
     if (value.includes('@')) return value
 
-    const { data, error } = await db
-      .from('USER_ACCOUNT')
-      .select('Email')
-      .eq('Username', value)
-      .maybeSingle()
+    // Call a secure database function to look up the email without triggering RLS
+    const { data, error } = await db.rpc('get_email_by_username', { p_username: value })
 
-    if (error) throw error
-    return data?.Email || value
+    if (error) {
+      console.error('Error resolving username:', error)
+      throw new Error('Unable to look up username. (Is the RPC function created in Supabase?)')
+    }
+
+    if (!data) {
+      throw new Error('Username not found.')
+    }
+    
+    return data
   }
 
   const checkUserUniqueness = async (email: string, username: string) => {
@@ -79,90 +85,7 @@ export const useTonoAuth = () => {
     }
   }
 
-  const getOrCreateTagIds = async (table: 'TAG_GENRE' | 'TAG_INSTRUMENT', values: string[]): Promise<string[]> => {
-    const uniqueValues = [...new Set(values.map((value: string) => value.trim()).filter(Boolean))]
-    if (!uniqueValues.length) return []
 
-    const selectField = table === 'TAG_GENRE' ? 'Genre_ID, Name' : 'Instrument_ID, Name'
-    const { data: existingRows, error: readError } = await db
-      .from(table)
-      .select(selectField)
-      .in('Name', uniqueValues)
-
-    if (readError) throw readError
-
-    const typedRows: Record<string, any>[] = existingRows ?? []
-    const existingNames = new Set(typedRows.map((row) => row.Name))
-    const missingValues = uniqueValues.filter((value) => !existingNames.has(value))
-
-    if (missingValues.length) {
-      const createdRows = await db
-        .from(table)
-        .insert(missingValues.map((value) => ({ Name: value, Is_active: true })))
-        .select(selectField)
-
-      if (createdRows.error) throw createdRows.error
-
-      const allRows = [...typedRows, ...(createdRows.data ?? [])]
-      return allRows.map((row) => (table === 'TAG_GENRE' ? row.Genre_ID : row.Instrument_ID))
-    }
-
-    return typedRows.map((row) => (table === 'TAG_GENRE' ? row.Genre_ID : row.Instrument_ID))
-  }
-
-  const insertUserTagLinks = async (userId: string, genres: string[], instruments: string[]) => {
-    const genreIds = await getOrCreateTagIds('TAG_GENRE', genres)
-    const instrumentIds = await getOrCreateTagIds('TAG_INSTRUMENT', instruments)
-
-    if (genreIds.length) {
-      const { error: genreError } = await db
-        .from('ACCOUNT_PREF_GENRE')
-        .insert(genreIds.map((genreId: string) => ({ ACCOUNT_ID: userId, Genre_ID: genreId })))
-
-      if (genreError) throw genreError
-    }
-
-    if (instrumentIds.length) {
-      const { error: instrumentError } = await db
-        .from('ACCOUNT_PREF_INSTRUMENTS')
-        .insert(instrumentIds.map((instrumentId: string) => ({ ACCOUNT_ID: userId, Instrument_ID: instrumentId })))
-
-      if (instrumentError) throw instrumentError
-    }
-  }
-
-  const insertArtistTagLinks = async (artistId: string, artistType: TonoArtistType, genres: string[], instruments: string[]) => {
-    const genreIds = await getOrCreateTagIds('TAG_GENRE', genres)
-    const instrumentIds = await getOrCreateTagIds('TAG_INSTRUMENT', instruments)
-
-    if (artistType === 'Solo') {
-      if (genreIds.length) {
-        const { error: genreError } = await db
-          .from('SOLO_GENRES')
-          .insert(genreIds.map((genreId: string) => ({ ARTIST_ID: artistId, Genre_ID: genreId })))
-
-        if (genreError) throw genreError
-      }
-
-      if (instrumentIds.length) {
-        const { error: instrumentError } = await db
-          .from('SOLO_INSTRUMENTS')
-          .insert(instrumentIds.map((instrumentId: string) => ({ ARTIST_ID: artistId, Instrument_ID: instrumentId })))
-
-        if (instrumentError) throw instrumentError
-      }
-    }
-
-    if (artistType === 'Band') {
-      if (genreIds.length) {
-        const { error: genreError } = await db
-          .from('BAND_GENRES')
-          .insert(genreIds.map((genreId: string) => ({ ARTIST_ID: artistId, Genre_ID: genreId })))
-
-        if (genreError) throw genreError
-      }
-    }
-  }
 
   const fetchCurrentUserProfile = async (userIdOverride?: string): Promise<TonoProfile | null> => {
     const { data: authUserData } = await supabase.auth.getUser()
@@ -328,6 +251,12 @@ export const useTonoAuth = () => {
           username: cleanUsername,
           city: payload.city,
           barangay: payload.barangay,
+          userType: payload.userType,
+          artistType: payload.artistType,
+          artistProfile: payload.artistProfile,
+          businessProfile: payload.businessProfile,
+          genres: payload.genres,
+          instruments: payload.instruments,
         },
       },
     })
@@ -337,16 +266,6 @@ export const useTonoAuth = () => {
     const userId = authData.user?.id
     if (!userId) throw new Error('No user ID returned after signup.')
 
-    const { data: existingUserProfile } = await db
-      .from('USER_ACCOUNT')
-      .select('ACCOUNT_ID')
-      .eq('ACCOUNT_ID', userId)
-      .maybeSingle()
-
-    if (existingUserProfile) {
-      throw new Error('This account already has a profile record.')
-    }
-
     const accountPayload = {
       ACCOUNT_ID: userId,
       Username: cleanUsername,
@@ -354,86 +273,6 @@ export const useTonoAuth = () => {
       City: payload.city || null,
       Barangay: payload.barangay || null,
     }
-
-    const { error: accountError } = await db.from('USER_ACCOUNT').insert(accountPayload)
-    if (accountError) throw accountError
-
-    if (payload.userType === 'Artist') {
-      const { data: existingArtistProfile } = await db
-        .from('ARTIST')
-        .select('ARTIST_ID')
-        .eq('ACCOUNT_ID', userId)
-        .maybeSingle()
-
-      if (existingArtistProfile) {
-        throw new Error('This account already has an artist profile.')
-      }
-
-      const artistPayload = {
-        ACCOUNT_ID: userId,
-        Artist_Type: payload.artistType,
-        Bio: payload.artistProfile.bio.trim(),
-        Links: {
-          facebook: payload.artistProfile.facebook.trim() || null,
-          instagram: payload.artistProfile.instagram.trim() || null,
-          youtube: payload.artistProfile.youtube.trim() || null,
-          specialty: payload.artistProfile.specialty.trim() || null,
-          additionalLinks: payload.artistProfile.additionalLinks
-            .filter((link) => link && link.trim())
-            .map((link) => link.trim()),
-        },
-        Is_Verified: false,
-      }
-
-      const { data: artistRow, error: artistError } = await db
-        .from('ARTIST')
-        .insert(artistPayload)
-        .select('ARTIST_ID')
-        .single()
-
-      if (artistError) throw artistError
-
-      if (payload.artistType === 'Solo') {
-        const { error: soloError } = await db
-          .from('SOLO_ARTIST')
-          .insert({
-            ARTIST_ID: artistRow.ARTIST_ID,
-            Artist_Name: payload.artistProfile.stageName.trim(),
-          })
-
-        if (soloError) throw soloError
-      }
-
-      if (payload.artistType === 'Band') {
-        const { error: bandError } = await db
-          .from('BAND')
-          .insert({
-            ARTIST_ID: artistRow.ARTIST_ID,
-            Band_Name: payload.artistProfile.stageName.trim(),
-            Formation_Date: null,
-          })
-
-        if (bandError) throw bandError
-      }
-
-      await insertArtistTagLinks(artistRow.ARTIST_ID, payload.artistType || 'Solo', payload.genres, payload.instruments)
-    }
-
-    if (payload.userType === 'User') {
-      if (payload.businessProfile.isBusinessOwner) {
-        const { error: businessError } = await db.from('BUSINESS_PROFILE').insert({
-          ACCOUNT_ID: userId,
-          Business_Name: payload.businessProfile.businessName.trim(),
-          Business_Address: payload.businessProfile.businessAddress.trim(),
-          Contact_Information: String(payload.businessProfile.cellphone || ''),
-          Business_Service: payload.businessProfile.businessService.trim(),
-        })
-
-        if (businessError) throw businessError
-      }
-    }
-
-    await insertUserTagLinks(userId, payload.genres, payload.instruments)
 
     return {
       userId,
