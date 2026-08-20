@@ -20,13 +20,23 @@ const handleLogin = async () => {
   try {
     isLoading.value = true
     await signInAdmin(email.value, password.value)
-    await navigateTo('/admin')
+    await navigateTo('/admin/dashboard')
   } catch (err: any) {
     errorMessage.value = err.message || 'Login failed. Please check your admin credentials.'
   } finally {
     isLoading.value = false
   }
 }
+
+definePageMeta({
+  middleware: 'admin'
+})
+const { signOutAdmin, fetchCurrentAdmin } = useAdminAuth()
+const handleLogout = async () => {
+  await signOutAdmin()
+}
+
+const adminProfile = await fetchCurrentAdmin()
 </script>
 
 <template>
@@ -88,7 +98,7 @@ const handleLogin = async () => {
         class="bg-[#D0D4F7] text-[#151A34] font-semibold w-full py-3 rounded-full mt-3 hover:bg-[#B0B4D7] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
       >
         <span v-if="isLoading">Signing in...</span>
-        <span v-else>Sign In to Admin</span>
+        <span v-else>Sign in</span>
       </button>
     </form>
   </div>
