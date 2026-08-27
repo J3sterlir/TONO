@@ -1,12 +1,12 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: 'admin'
+})
+
 const { signOutAdmin, fetchCurrentAdmin } = useAdminAuth()
 const supabase = useSupabaseClient()
 const handleLogout = async () => {
   await signOutAdmin()
-}
-const { data: authData } = await supabase.auth.getUser()
-if (!authData.user) {
-  await navigateTo('/admin/auth')
 }
 
 // Fetch admin profile
