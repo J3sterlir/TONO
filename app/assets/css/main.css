@@ -1,12 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@200..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-StackSansHeadline: "Stack Sans Headline", sans-serif; 
+  --font-StackSansHeadline: "Stack Sans Headline", sans-serif;
+  --font-Sora: "Sora", sans-serif;
+  --font-Geist: "GEist", sans-serif;
+  --font-HankenGrotesk: "Hanken Grotesk", sans-serif;
 }
 
 body {
-  font-family: var(--font-StackSansHeadline);
+  
 }
 
 input::-ms-reveal,
