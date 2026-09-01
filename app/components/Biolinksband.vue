@@ -21,6 +21,18 @@ const emit = defineEmits<{
   back: []
 }>()
 
+import { ref } from 'vue'
+
+const showError = ref(false)
+
+const handleProceed = () => {
+  if (props.isValid) {
+    emit('proceed')
+  } else {
+    showError.value = true
+  }
+}
+
 const updateForm = (key: keyof BioFormData, value: string | string[]) => {
     emit('update:form', { ...props.form, [key]: value })
 }
@@ -98,17 +110,15 @@ const updateLink = (index: number, value: string) => {
             + Add Another Link
         </div>
 
-        <div v-if="validationMessage" class="mt-2 text-sm text-amber-300">
+        <div v-if="showError && validationMessage" class="mt-2 text-sm text-amber-300">
             {{ validationMessage }}
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">
-            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
+            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>
             <button 
-              :disabled="!isValid"
-              @click="emit('proceed')"
-              :class="{ 'bg-[#A0A4D0] cursor-pointer': isValid, 'opacity-50 cursor-not-allowed': !isValid }"
-              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Next</button>
+              @click="handleProceed"
+              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition cursor-pointer">Next</button>
         </div>
     </div>
 </template>

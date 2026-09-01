@@ -31,6 +31,16 @@ const emit = defineEmits<{
   back: []
 }>()
 
+const showError = ref(false)
+
+const handleProceed = () => {
+  if (props.selected.length > 0) {
+    emit('complete')
+  } else {
+    showError.value = true
+  }
+}
+
 const supabase = useSupabaseClient()
 const instrumentOptions = ref<string[]>([])
 
@@ -89,17 +99,15 @@ const toggleTag = (tagName: string) => {
         <div v-if="props.selected.length > 0" class="mt-4 text-sm text-[#B0B4D7]">
           Selected: {{ props.selected.length }} instrument(s)
         </div>
-        <div v-if="validationMessage" class="mt-2 text-sm text-amber-300">
+        <div v-if="showError && validationMessage" class="mt-2 text-sm text-amber-300">
           {{ validationMessage }}
         </div>
 
         <div class="flex items-center justify-between gap-2 mt-6">
-            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition">Previous</button>
+            <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>
             <button 
-              :disabled="props.selected.length === 0"
-              @click="emit('complete')"
-              :class="{ 'opacity-50 cursor-not-allowed': props.selected.length === 0 }"
-              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA]">Complete</button>
+              @click="handleProceed"
+              class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition cursor-pointer">Complete</button>
         </div>
     </div>
 </template>

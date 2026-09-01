@@ -1,9 +1,9 @@
 <script setup lang="ts">
-/*
+
 definePageMeta({
-  middleware: 'auth'
+  middleware: ['auth', 'artist']
 })
-*/
+
 
 import { ref, onMounted, onUnmounted } from 'vue'
 
@@ -13,7 +13,7 @@ const { fetchCurrentUserProfile } = useTonoAuth()
 const artistName = ref('Artist')
 const isLoading = ref(false)
 
-/*
+
 onMounted(async () => {
   try {
     const profile = await fetchCurrentUserProfile()
@@ -34,7 +34,7 @@ onMounted(async () => {
   }
 })
 
-*/
+
 
 const handleLogout = async () => {
   await supabase.auth.signOut()

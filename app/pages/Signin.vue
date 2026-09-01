@@ -83,29 +83,9 @@ const currentStep = ref<Step>('signin')
 const signupDraft = reactive<SignupDraft>(createDraft())
 
 onMounted(() => {
-  const storedDraft = localStorage.getItem(STORAGE_KEY)
-  if (storedDraft) {
-    try {
-      const parsed = JSON.parse(storedDraft) as Partial<SignupDraft>
-      if (parsed.account) Object.assign(signupDraft.account, parsed.account)
-      if (parsed.role) Object.assign(signupDraft.role, parsed.role)
-      if (parsed.artistProfile) Object.assign(signupDraft.artistProfile, parsed.artistProfile)
-      if (parsed.businessProfile) Object.assign(signupDraft.businessProfile, parsed.businessProfile)
-      if (parsed.preferences) Object.assign(signupDraft.preferences, parsed.preferences)
-    } catch {
-      localStorage.removeItem(STORAGE_KEY)
-    }
-  }
+  // Clear any previously saved draft on reload
+  localStorage.removeItem(STORAGE_KEY)
 })
-
-watch(
-  signupDraft,
-  (draft) => {
-    if (!import.meta.client) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
-  },
-  { deep: true },
-)
 
 const isSigninValid = computed<boolean>(() => {
   const { email, username, city, barangay, password, confirmPassword } = signupDraft.account
@@ -132,10 +112,10 @@ const userTypeWarning = computed<string>(() => (signupDraft.role.userType ? '' :
 const isArtistSelectValid = computed<boolean>(() => signupDraft.role.artistType !== null)
 const artistTypeWarning = computed<string>(() => (signupDraft.role.artistType ? '' : 'Please choose your artist type: Solo or Band.'))
 
-const isBioAndLinksValid = computed<boolean>(() => !!(signupDraft.artistProfile.stageName && signupDraft.artistProfile.bio))
+const isBioAndLinksValid = computed<boolean>(() => !!(signupDraft.artistProfile.stageName && signupDraft.artistProfile.specialty))
 const bioWarning = computed<string>(() => {
   if (!signupDraft.artistProfile.stageName) return 'Please enter your stage name.'
-  if (!signupDraft.artistProfile.bio) return 'Please add a short bio about yourself.'
+  if (!signupDraft.artistProfile.specialty) return 'Please select your specialty.'
   return ''
 })
 
@@ -379,7 +359,7 @@ const goBack = () => {
                   v-model:form="signupDraft.artistProfile"
                   :is-valid="isBioAndLinksValid"
                   :validation-message="bioWarning"
-                  @proceed="proceedFromBioAndLinksBand"
+                  @proceed="proceedFromBioAndLinks"
                   @back="goBack"
                 />
 
@@ -410,7 +390,7 @@ const goBack = () => {
                   v-model:form="signupDraft.artistProfile"
                   :is-valid="isBioAndLinksValid"
                   :validation-message="bioWarning"
-                  @proceed="proceedFromBioAndLinks"
+                  @proceed="proceedFromBioAndLinksBand"
                   @back="goBack"
                 />
 

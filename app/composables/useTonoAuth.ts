@@ -239,6 +239,8 @@ export const useTonoAuth = () => {
     const cleanEmail = payload.email.trim().toLowerCase()
     const cleanUsername = payload.username.trim()
 
+    await supabase.auth.signOut()
+
     const { emailTaken, usernameTaken } = await checkUserUniqueness(cleanEmail, cleanUsername)
     if (emailTaken) throw new Error('This email is already registered.')
     if (usernameTaken) throw new Error('This username is already taken.')
@@ -272,6 +274,90 @@ export const useTonoAuth = () => {
       Email: cleanEmail,
       City: payload.city || null,
       Barangay: payload.barangay || null,
+    }
+
+    const { error: accountInsertError } = await db.from('USER_ACCOUNT').upsert(accountPayload, { onConflict: 'ACCOUNT_ID' })
+    if (accountInsertError) throw accountInsertError
+
+    if (payload.userType === 'User' && payload.businessProfile?.isBusinessOwner) {
+      const { error: businessInsertError } = await db.from('BUSINESS_PROFILE').insert({
+        ACCOUNT_ID: userId,
+        Business_Name: payload.businessProfile.businessName,
+        Business_Address: payload.businessProfile.businessAddress || null,
+        Contact_Information: payload.businessProfile.cellphone ? payload.businessProfile.cellphone.toString() : null,
+        Business_Service: payload.businessProfile.businessService || null,
+      })
+      if (businessInsertError) throw businessInsertError
+    }
+
+    let artistId: string | null = null
+
+    if (payload.userType === 'Artist') {
+      const { data: artistData, error: artistError } = await db.from('ARTIST').insert({
+        ACCOUNT_ID: userId,
+        Artist_Type: payload.artistType,
+        Bio: payload.artistProfile.bio,
+        Links: {
+          facebook: payload.artistProfile.facebook,
+          instagram: payload.artistProfile.instagram,
+          youtube: payload.artistProfile.youtube,
+          additionalLinks: payload.artistProfile.additionalLinks,
+        },
+      }).select().single()
+
+      if (artistError) throw artistError
+      artistId = artistData.ARTIST_ID
+
+      if (payload.artistType === 'Solo') {
+        const { error: soloError } = await db.from('SOLO_ARTIST').insert({
+          ARTIST_ID: artistId,
+          Artist_Name: payload.artistProfile.stageName,
+          Specialty: payload.artistProfile.specialty,
+        })
+        if (soloError) throw soloError
+      } else if (payload.artistType === 'Band') {
+        const { error: bandError } = await db.from('BAND').insert({
+          ARTIST_ID: artistId,
+          Band_Name: payload.artistProfile.stageName,
+        })
+        if (bandError) throw bandError
+      }
+    }
+
+    // Resolve Genres
+    let genreIds: string[] = []
+    if (payload.genres && payload.genres.length > 0) {
+      const { data: genreData } = await db.from('TAG_GENRE').select('Genre_ID').in('Name', payload.genres)
+      if (genreData) genreIds = genreData.map((g: any) => g.Genre_ID)
+    }
+
+    // Resolve Instruments
+    let instrumentIds: string[] = []
+    if (payload.instruments && payload.instruments.length > 0) {
+      const { data: instData } = await db.from('TAG_INSTRUMENT').select('Instrument_ID').in('Name', payload.instruments)
+      if (instData) instrumentIds = instData.map((i: any) => i.Instrument_ID)
+    }
+
+    if (payload.userType === 'User') {
+      if (genreIds.length > 0) {
+        await db.from('ACCOUNT_PREF_GENRE').insert(genreIds.map((id: string) => ({ ACCOUNT_ID: userId, Genre_ID: id })))
+      }
+      if (instrumentIds.length > 0) {
+        await db.from('ACCOUNT_PREF_INSTRUMENTS').insert(instrumentIds.map((id: string) => ({ ACCOUNT_ID: userId, Instrument_ID: id })))
+      }
+    } else if (payload.userType === 'Artist' && artistId) {
+      if (payload.artistType === 'Solo') {
+        if (genreIds.length > 0) {
+          await db.from('SOLO_GENRES').insert(genreIds.map((id: string) => ({ ARTIST_ID: artistId, Genre_ID: id })))
+        }
+        if (instrumentIds.length > 0) {
+          await db.from('SOLO_INSTRUMENTS').insert(instrumentIds.map((id: string) => ({ ARTIST_ID: artistId, Instrument_ID: id })))
+        }
+      } else if (payload.artistType === 'Band') {
+        if (genreIds.length > 0) {
+          await db.from('BAND_GENRES').insert(genreIds.map((id: string) => ({ ARTIST_ID: artistId, Genre_ID: id })))
+        }
+      }
     }
 
     return {

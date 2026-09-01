@@ -34,6 +34,7 @@ const emit = defineEmits<{
 
 const showPassword = ref(false)
 const passwordMismatch = ref(false)
+const showError = ref(false)
 
 // Dropdown state
 const isCityOpen = ref(false)
@@ -83,7 +84,11 @@ const selectBarangay = (brgyObj: BarangayOption) => {
 }
 
 const handleContinue = () => {
-  if (props.isValid) emit('continue')
+  if (props.isValid) {
+    emit('continue')
+  } else {
+    showError.value = true
+  }
 }
 
 const updateForm = (key: keyof SigninFormData, value: string) => {
@@ -199,13 +204,12 @@ const checkPasswordMatch = () => {
     </div>
 
     <div v-if="passwordMismatch" class="text-red-400 text-sm mt-1">Passwords do not match</div>
-    <div v-if="validationMessage" class="mt-1 text-sm text-amber-300">{{ validationMessage }}</div>
+    <div v-if="showError && validationMessage" class="mt-1 text-sm text-amber-300">{{ validationMessage }}</div>
     
     <div class="flex items-center justify-center mt-3 sm:mt-4">
-      <button :disabled="!isValid"
-        :class="{ 'bg-[#A0A4D0] cursor-pointer': isValid, 'opacity-50 cursor-not-allowed': !isValid }"
+      <button 
         @click="handleContinue"
-        class="bg-[#D0D4F7] text-[#151A34] w-full p-2.5 px-4 rounded-full hover:bg-[#B0B4D7] disabled:hover:bg-[#D0D4F7]">
+        class="bg-[#D0D4F7] text-[#151A34] w-full p-2.5 px-4 rounded-full hover:bg-[#B0B4D7] transition cursor-pointer">
         Continue
       </button>
     </div>

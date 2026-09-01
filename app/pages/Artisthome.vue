@@ -1,9 +1,7 @@
 <script setup lang="ts">
-/*
 definePageMeta({
-  middleware: 'auth'
+  middleware: ['auth', 'artist']
 })
-*/
 
 import { ref, onMounted, onUnmounted } from 'vue'
 

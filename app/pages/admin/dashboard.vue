@@ -32,39 +32,39 @@ const adminProfile = await fetchCurrentAdmin()
               <h2 class="text-xl font-light text-[#D0D4F7]">ADMIN PANEL</h2>
             </div>
           </div>
-          <ul class="space-y-2 font-medium">
+          <ul class="space-y-2">
             <li>
-              <a href="#"
-                class="flex items-center px-2 py-1.5 text-body rounded-base hover:bg-neutral-tertiary hover:text-fg-brand group">
-                <Icon name="ic:outline-dashboard" class="text-2xl text-[#C7C5CE]" />
-                <span class="ms-3">Dashboard</span>
+              <a @click="navigateTo('/admin/dashboard')"
+                class="flex cursor-pointer items-center px-2 py-1.5 text-body bg-[#B4B8DA] rounded">
+                <Icon name="ic:sharp-dashboard" class="text-2xl text-[#444865]" />
+                <span class="ms-3 text-[#444865] font-bold ">Dashboard</span>
               </a>
             </li>
             <li>
-              <a href="#"
-                class="flex items-center px-2 py-1.5 text-body rounded-base hover:bg-neutral-tertiary hover:text-fg-brand group">
-                <Icon name="ic:baseline-label" class="text-2xl text-[#C7C5CE]" />
+              <a @click="navigateTo('/admin/tags')"
+                class="flex cursor-pointer items-center px-2 py-1.5 text-body hover:bg-[#B4B8DA]/20 hover:rounded">
+                <Icon name="ic:outline-label" class="text-2xl text-[#C7C5CE]" />
                 <span class="flex-1 ms-3 whitespace-nowrap">Tags</span>
               </a>
             </li>
             <li>
-              <a href="#"
-                class="flex items-center px-2 py-1.5 text-body rounded-base hover:bg-neutral-tertiary hover:text-fg-brand group">
+              <a @click="navigateTo('/admin/reports')"
+                class="flex cursor-pointer items-center px-2 py-1.5 text-body hover:bg-[#B4B8DA]/20 hover:rounded">
                 <Icon name="ic:baseline-outlined-flag" class="text-2xl text-[#C7C5CE]" />
                 <span class="flex-1 ms-3 whitespace-nowrap">Reports</span>
               </a>
             </li>
             <li>
-              <a href="#"
-                class="flex items-center px-2 py-1.5 text-body rounded-base hover:bg-neutral-tertiary hover:text-fg-brand group">
-                <Icon name="ic:outline-supervisor-account" class="text-2xl text-[#C7C5CE]" />
+              <a @click="navigateTo('/admin/users')"
+                class="flex cursor-pointer items-center px-2 py-1.5 text-body hover:bg-[#B4B8DA]/20 hover:rounded">
+                <Icon name="ic:outline-supervisor-account" class="text-2xl" />
                 <span class="flex-1 ms-3 whitespace-nowrap">Users</span>
               </a>
             </li>
           </ul>
         </div>
         <div>
-          <button @click="handleLogout" class="flex items-center gap-2 px-2 py-1.5 text-body rounded-base hover:bg-neutral-tertiary hover:text-fg-brand group w-full text-left">
+          <button @click="handleLogout" class="flex items-center gap-2 px-2 py-1.5 text-body hover:bg-neutral-tertiary hover:text-fg-brand group w-full text-left">
             <Icon name="ic:baseline-logout" class="text-2xl text-[#C7C5CE]" />
             <span class="flex-1 ms-3 whitespace-nowrap">Logout</span>
           </button>
@@ -73,7 +73,7 @@ const adminProfile = await fetchCurrentAdmin()
     </aside>
 
     <div>
-      <nav class="flex items-center px-16 h-20 border-be border-default border-[#46464D]">
+      <nav class="flex items-center px-16 h-20 border-be border-default border-[#46464D] top-0 sticky backdrop-blur-3xl z-10">
         <h1 class="text-[#D0D4F7] text-[24px] font-medium">Welcome Back Admin!</h1>
       </nav>
       <main class="p-16">

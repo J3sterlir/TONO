@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { ref } from 'vue'
+
+const props = defineProps<{
   userType: 'Artist' | 'User' | null
   validationMessage?: string
 }>()
@@ -9,6 +11,16 @@ const emit = defineEmits<{
   proceed: []
   back: []
 }>()
+
+const showError = ref(false)
+
+const handleProceed = () => {
+  if (props.userType) {
+    emit('proceed')
+  } else {
+    showError.value = true
+  }
+}
 </script>
 
 <template>
@@ -50,16 +62,14 @@ const emit = defineEmits<{
                     </div>
                 </div>
             </div>
-            <div v-if="validationMessage" class="mt-3 text-sm text-amber-300">
+            <div v-if="showError && validationMessage" class="mt-3 text-sm text-amber-300">
                 {{ validationMessage }}
             </div>
             <div class="flex items-center justify-between gap-2 mt-6">
                     <button @click="emit('back')" class="bg-[#B4B8DA]/40 text-white p-2 w-[50%] rounded-lg hover:bg-[#B4B8DA]/60 transition cursor-pointer">Previous</button>
                     <button 
-                      :disabled="!userType"
-                      @click="emit('proceed')"
-                      :class="{ 'bg-[#A0A4D0] cursor-pointer': userType, 'opacity-50 cursor-not-allowed': !userType }"
-                      class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition disabled:hover:bg-[#B4B8DA] cursor-pointer">Next</button>
+                      @click="handleProceed"
+                      class="bg-[#B4B8DA] text-[#444865] p-2 w-[50%] rounded-lg hover:bg-[#A0A4D0] transition cursor-pointer">Next</button>
                 </div>
         </div>
     </div>
