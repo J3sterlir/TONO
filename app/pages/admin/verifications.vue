@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-definePageMeta({ layout: 'admin' })
+definePageMeta({
+  layout: 'admin',
+  middleware: 'admin'
+})
 
 interface ArtistVerification {
-    id: number
+    id: string
     name: string
     stageName: string
     email: string
     avatar: string
     role: string
     artistType: 'Solo' | 'Band'
-    status: 'Pending' | 'Active' | 'Banned' | 'Rejected'
+    status: string
+    isVerified: boolean
     joinDate: string
     appliedDate: string
     city: string
@@ -27,102 +31,100 @@ interface ArtistVerification {
         spotify?: string
     }
 }
+import type { Database } from '~~/types/supabase'
 
-const users = ref<ArtistVerification[]>([
-    {
-        id: 1,
-        name: 'Elena Vance',
-        stageName: 'Elena Vance',
-        email: 'elena.vance@tono.music',
-        avatar: 'https://placehold.co/100x100/332244/FFF?text=EV',
-        role: 'Artist',
-        artistType: 'Solo',
-        status: 'Pending',
-        joinDate: 'Oct 12, 2023',
-        appliedDate: 'Oct 15, 2023',
-        city: 'Cebu City',
-        barangay: 'Mabolo',
-        specialty: 'Lead Vocalist & Acoustic Guitarist',
-        bio: 'Indie-folk singer-songwriter inspired by ambient storytelling and acoustic melodies. Actively producing original indie acoustics.',
-        genres: ['Indie Folk', 'Acoustic', 'Dream Pop'],
-        instruments: ['Vocals', 'Acoustic Guitar', 'Piano'],
-        socialLinks: {
-            spotify: 'https://spotify.com',
-            instagram: 'https://instagram.com',
-            youtube: 'https://youtube.com',
-            facebook: 'https://facebook.com'
-        }
-    },
-    {
-        id: 2,
-        name: 'Marcus Thorne',
-        stageName: 'The Velvet Echo',
-        email: 'm.thorne@sonicpulse.com',
-        avatar: 'https://placehold.co/100x100/443322/FFF?text=MT',
-        role: 'Artist',
-        artistType: 'Band',
-        status: 'Pending',
-        joinDate: 'Nov 05, 2023',
-        appliedDate: 'Nov 08, 2023',
-        city: 'Quezon City',
-        barangay: 'Diliman',
-        specialty: 'Alternative Rock Ensemble',
-        bio: '4-piece alternative rock band blending 90s shoegaze textures with modern post-punk energy.',
-        genres: ['Alternative Rock', 'Post-Punk', 'Shoegaze'],
-        instruments: ['Electric Guitar', 'Bass', 'Drums', 'Synthesizer'],
-        socialLinks: {
-            spotify: 'https://spotify.com',
-            instagram: 'https://instagram.com',
-            youtube: 'https://youtube.com'
-        }
-    },
-    {
-        id: 3,
-        name: 'Julian Chen',
-        stageName: 'Julian Chen',
-        email: 'julian.chen@gmail.com',
-        avatar: 'https://placehold.co/100x100/223344/FFF?text=JC',
-        role: 'Artist',
-        artistType: 'Solo',
-        status: 'Banned',
-        joinDate: 'Dec 20, 2023',
-        appliedDate: 'Dec 22, 2023',
-        city: 'Davao City',
-        barangay: 'Poblacion',
-        specialty: 'Neo-Soul & Keyboardist',
-        bio: 'Session keyboardist and producer creating chill neo-soul beats and smooth jazz rhythms.',
-        genres: ['Neo-Soul', 'Jazz', 'R&B'],
-        instruments: ['Keyboard', 'Piano', 'Synthesizer'],
-        socialLinks: {
-            instagram: 'https://instagram.com',
-            youtube: 'https://youtube.com'
-        }
-    },
-    {
-        id: 4,
-        name: 'Sarah Jenkins',
-        stageName: 'Sarah J',
-        email: 'sarah.j@starlight.io',
-        avatar: 'https://placehold.co/100x100/222/FFF?text=SJ',
-        role: 'Artist',
-        artistType: 'Solo',
-        status: 'Active',
-        joinDate: 'Jan 15, 2024',
-        appliedDate: 'Jan 16, 2024',
-        city: 'Makati City',
-        barangay: 'Poblacion',
-        specialty: 'Electronic Producer & Vocalist',
-        bio: 'Electronic pop producer combining deep basslines with airy atmospheric vocal hooks.',
-        genres: ['Electronic', 'Synthwave', 'Indie Pop'],
-        instruments: ['Vocals', 'Synthesizer', 'Launchpad'],
-        socialLinks: {
-            spotify: 'https://spotify.com',
-            instagram: 'https://instagram.com'
-        }
-    }
-])
-
+const supabase = useSupabaseClient<Database>()
+const users = ref<ArtistVerification[]>([])
 const selectedArtist = ref<ArtistVerification | null>(null)
+const isLoading = ref(true)
+
+const fetchPendingArtists = async () => {
+    isLoading.value = true
+    try {
+        const { data: artistsData, error } = await supabase
+            .from('ARTIST')
+            .select(`
+                ARTIST_ID,
+                Artist_Type,
+                Bio,
+                Links,
+                Status,
+                Is_Verified,
+                Created_at,
+                USER_ACCOUNT (
+                    Username, Email, City, Barangay, Profile_Picture, Created_at
+                ),
+                SOLO_ARTIST ( 
+                    Artist_Name, Specialty, 
+                    SOLO_GENRES ( TAG_GENRE ( Name ) ), 
+                    SOLO_INSTRUMENTS ( TAG_INSTRUMENT ( Name ) ) 
+                ),
+                BAND ( 
+                    Band_Name, Formation_Date, 
+                    BAND_GENRES ( TAG_GENRE ( Name ) ) 
+                )
+            `)
+
+        if (error) throw error
+
+        if (artistsData) {
+            users.value = artistsData.map((row: any) => {
+                const userAcc = row.USER_ACCOUNT
+                const isSolo = row.Artist_Type === 'Solo'
+                const soloData = isSolo && row.SOLO_ARTIST ? row.SOLO_ARTIST[0] || row.SOLO_ARTIST : null
+                const bandData = !isSolo && row.BAND ? row.BAND[0] || row.BAND : null
+                
+                const stageName = isSolo ? soloData?.Artist_Name : bandData?.Band_Name
+                const specialty = isSolo ? soloData?.Specialty : 'Band'
+
+                let genres: string[] = []
+                let instruments: string[] = []
+
+                if (isSolo && soloData) {
+                    genres = (soloData.SOLO_GENRES || []).map((g: any) => g.TAG_GENRE?.Name)
+                    instruments = (soloData.SOLO_INSTRUMENTS || []).map((i: any) => i.TAG_INSTRUMENT?.Name)
+                } else if (!isSolo && bandData) {
+                    genres = (bandData.BAND_GENRES || []).map((g: any) => g.TAG_GENRE?.Name)
+                }
+
+                // Format dates safely
+                const formatDate = (dateStr: string) => {
+                    if (!dateStr) return 'Unknown'
+                    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                }
+
+                return {
+                    id: row.ARTIST_ID,
+                    name: userAcc?.Username || 'Unknown',
+                    stageName: stageName || 'Unknown',
+                    email: userAcc?.Email || 'Unknown',
+                    avatar: userAcc?.Profile_Picture || `https://placehold.co/100x100/332244/FFF?text=${(stageName || 'U').charAt(0)}`,
+                    role: 'Artist',
+                    artistType: row.Artist_Type,
+                    status: row.Status || 'Unknown',
+                    isVerified: !!row.Is_Verified,
+                    joinDate: formatDate(userAcc?.Created_at),
+                    appliedDate: formatDate(row.Created_at),
+                    city: userAcc?.City || '',
+                    barangay: userAcc?.Barangay || '',
+                    bio: row.Bio || '',
+                    specialty: specialty || '',
+                    genres: genres.filter(Boolean),
+                    instruments: instruments.filter(Boolean),
+                    socialLinks: row.Links || {}
+                }
+            })
+        }
+    } catch (error) {
+        console.error('Error fetching pending artists:', error)
+    } finally {
+        isLoading.value = false
+    }
+}
+
+onMounted(() => {
+    fetchPendingArtists()
+})
 
 const selectForReview = (artist: ArtistVerification) => {
     if (selectedArtist.value?.id === artist.id) {
@@ -136,23 +138,51 @@ const closeReview = () => {
     selectedArtist.value = null
 }
 
-const approveArtist = (id: number) => {
-    const user = users.value.find(u => u.id === id)
-    if (user) {
-        user.status = 'Active'
-        if (selectedArtist.value?.id === id) {
-            selectedArtist.value = { ...user }
+const approveArtist = async (id: string) => {
+    try {
+        const { error } = await supabase
+            .from('ARTIST')
+            .update({ Is_Verified: true, Status: 'Active' })
+            .eq('ARTIST_ID', id)
+
+        if (error) throw error
+
+        // Update local state instead of removing
+        const user = users.value.find(u => u.id === id)
+        if (user) {
+            user.status = 'Active'
+            user.isVerified = true
         }
+        
+        if (selectedArtist.value?.id === id) {
+            selectedArtist.value = null
+        }
+    } catch (error) {
+        console.error('Error approving artist:', error)
     }
 }
 
-const rejectArtist = (id: number) => {
-    const user = users.value.find(u => u.id === id)
-    if (user) {
-        user.status = 'Rejected'
-        if (selectedArtist.value?.id === id) {
-            selectedArtist.value = { ...user }
+const rejectArtist = async (id: string) => {
+    try {
+        const { error } = await supabase
+            .from('ARTIST')
+            .update({ Status: 'Rejected', Is_Verified: false })
+            .eq('ARTIST_ID', id)
+
+        if (error) throw error
+
+        // Update local state instead of removing
+        const user = users.value.find(u => u.id === id)
+        if (user) {
+            user.status = 'Rejected'
+            user.isVerified = false
         }
+        
+        if (selectedArtist.value?.id === id) {
+            selectedArtist.value = null
+        }
+    } catch (error) {
+        console.error('Error rejecting artist:', error)
     }
 }
 </script>
@@ -228,21 +258,28 @@ const rejectArtist = (id: number) => {
 
                                         <!-- Account Status -->
                                         <td class="px-6 py-4">
-                                            <div class="flex items-center gap-2 text-sm font-medium"
-                                                :class="{
-                                                    'text-amber-400': user.status === 'Pending',
-                                                    'text-emerald-400': user.status === 'Active',
-                                                    'text-rose-400': user.status === 'Banned' || user.status === 'Rejected'
-                                                }">
-                                                <!-- Status Dot -->
-                                                <span class="w-2 h-2 rounded-full"
+                                            <div class="flex flex-col gap-1.5">
+                                                <div class="flex items-center gap-2 text-sm font-medium"
                                                     :class="{
-                                                        'bg-amber-400': user.status === 'Pending',
-                                                        'bg-emerald-400': user.status === 'Active',
-                                                        'bg-rose-400': user.status === 'Banned' || user.status === 'Rejected'
+                                                        'text-amber-400': user.status === 'Pending',
+                                                        'text-emerald-400': user.status === 'Active',
+                                                        'text-rose-400': user.status === 'Banned' || user.status === 'Rejected',
+                                                        'text-zinc-400': !['Pending', 'Active', 'Banned', 'Rejected'].includes(user.status)
                                                     }">
+                                                    <!-- Status Dot -->
+                                                    <span class="w-2 h-2 rounded-full"
+                                                        :class="{
+                                                            'bg-amber-400': user.status === 'Pending',
+                                                            'bg-emerald-400': user.status === 'Active',
+                                                            'bg-rose-400': user.status === 'Banned' || user.status === 'Rejected',
+                                                            'bg-zinc-400': !['Pending', 'Active', 'Banned', 'Rejected'].includes(user.status)
+                                                        }">
+                                                    </span>
+                                                    {{ user.status }}
+                                                </div>
+                                                <span class="text-[11px] font-medium tracking-wide uppercase" :class="user.isVerified ? 'text-emerald-500' : 'text-amber-500'">
+                                                    {{ user.isVerified ? 'Verified' : 'Not Verified' }}
                                                 </span>
-                                                {{ user.status }}
                                             </div>
                                         </td>
 
@@ -311,7 +348,7 @@ const rejectArtist = (id: number) => {
                 <Transition name="slide-card">
                     <aside 
                         v-if="selectedArtist" 
-                        class="w-full xl:w-[420px] 2xl:w-[460px] shrink-0 bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl p-6 shadow-2xl sticky top-24 flex flex-col gap-5 text-zinc-200">
+                        class="w-full xl:w-105 2xl:w-115 shrink-0 bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl p-6 shadow-2xl sticky top-24 flex flex-col gap-5 text-zinc-200">
                         
                         <!-- Header -->
                         <div class="flex items-center justify-between pb-3 border-b border-zinc-800">

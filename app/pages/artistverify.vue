@@ -1,13 +1,28 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+
+definePageMeta({
+    middleware: 'auth'
+})
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile } = useTonoAuth()
 
+const isRejected = ref(false)
+
 const checkVerification = async () => {
     const profile = await fetchCurrentUserProfile()
-    if (profile?.artistProfile?.Is_Verified) {
+    if (!profile) {
+        navigateTo('/Login')
+        return
+    }
+
+    if (profile?.artistProfile?.Is_Verified || profile?.artistProfile?.Status === 'Active') {
         navigateTo('/Artisthome')
+    } else if (profile?.artistProfile?.Status === 'Rejected') {
+        isRejected.value = true
+    } else {
+        isRejected.value = false
     }
 }
 
@@ -23,7 +38,33 @@ onMounted(() => {
 
 <template>
     <div class="min-h-screen bg-[#121214] flex flex-col items-center justify-center p-6 text-center">
-        <div class="max-w-md w-full bg-[#1E1E20] border border-[#3A3A3C] p-8 rounded-xl shadow-2xl flex flex-col items-center gap-6">
+        <!-- Rejected Modal -->
+        <div v-if="isRejected" class="max-w-md w-full bg-[#1E1E20] border border-red-500/30 p-8 rounded-xl shadow-2xl flex flex-col items-center gap-6">
+            <div class="flex justify-center items-center bg-red-500/20 p-4 rounded-full">
+                <Icon name="material-symbols:cancel" class="text-5xl text-red-500" />
+            </div>
+            
+            <h1 class="text-3xl font-bold text-white">Account Rejected</h1>
+            
+            <p class="text-[#A0A0A5] leading-relaxed">
+                Unfortunately, your artist profile application has been rejected by our administrative team.
+            </p>
+
+            <p class="text-[#A0A0A5] leading-relaxed">
+                If you believe this is a mistake, please contact support or try applying again at a later date.
+            </p>
+
+            <div class="flex gap-4 w-full mt-4">
+                <button 
+                    @click="handleLogout"
+                    class="flex-1 cursor-pointer border border-[#3A3A3C] text-white font-semibold py-3 rounded-lg hover:bg-[#2A2A2C] transition">
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Pending Modal -->
+        <div v-else class="max-w-md w-full bg-[#1E1E20] border border-[#3A3A3C] p-8 rounded-xl shadow-2xl flex flex-col items-center gap-6">
             <div class="flex justify-center items-center bg-amber-500/20 p-4 rounded-full">
                 <Icon name="material-symbols:pending-actions" class="text-5xl text-amber-500" />
             </div>

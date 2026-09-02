@@ -14,8 +14,8 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
         return navigateTo('/userhome')
     }
 
-    // Check if the artist is verified
-    if (!profile.artistProfile.Is_Verified) {
+    // Check if the artist is verified (Active)
+    if (profile.artistProfile.Status !== 'Active') {
         return navigateTo('/artistverify')
     }
 })

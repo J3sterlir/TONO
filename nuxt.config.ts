@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   modules: ['motion-v/nuxt', "@nuxt/icon", "@nuxtjs/supabase"],
   supabase: {
     redirect: false,
+    types: '~~/types/supabase.ts'
   },
   icon: {
     serverBundle: {

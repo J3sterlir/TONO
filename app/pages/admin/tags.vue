@@ -9,34 +9,114 @@ const handleLogout = async () => {
 
 // Admin profile
 const adminProfile = await fetchCurrentAdmin()
-definePageMeta({ layout: 'admin' })
+definePageMeta({
+  layout: 'admin',
+  middleware: 'admin'
+})
+
+interface TagItem {
+    id: number
+    name: string
+    active: boolean
+    type: 'Genre' | 'Instrument'
+}
+
+let nextTagId = 1
+const generateId = () => nextTagId++
 
 // Active Genres & Instruments
-const activeGenres = ref<string[]>([
-    'Indie Folk',
-    'Alternative Rock',
-    'Neo-Soul',
-    'Electronic',
-    'Synthwave',
-    'Pop',
-    'Jazz',
-    'Shoegaze',
-    'R&B',
-    'Post-Punk'
-])
+const genres = ref<TagItem[]>([
+    'Indie Folk', 'Alternative Rock', 'Neo-Soul', 'Electronic', 'Synthwave', 
+    'Pop', 'Jazz', 'Shoegaze', 'R&B', 'Post-Punk'
+].map(name => ({ id: generateId(), name, active: true, type: 'Genre' })))
 
-const activeInstruments = ref<string[]>([
-    'Vocals',
-    'Acoustic Guitar',
-    'Electric Guitar',
-    'Bass Guitar',
-    'Drums',
-    'Piano',
-    'Synthesizer',
-    'Keyboard',
-    'Launchpad',
-    'Saxophone'
-])
+const instruments = ref<TagItem[]>([
+    'Vocals', 'Acoustic Guitar', 'Electric Guitar', 'Bass Guitar', 'Drums', 
+    'Piano', 'Synthesizer', 'Keyboard', 'Launchpad', 'Saxophone'
+].map(name => ({ id: generateId(), name, active: true, type: 'Instrument' })))
+
+// Modal State
+const showModal = ref(false)
+const modalType = ref<'add' | 'edit' | 'delete'>('add')
+const targetTagType = ref<'Genre' | 'Instrument'>('Genre')
+const editingTag = ref<TagItem | null>(null)
+
+// Form State
+const formTagName = ref('')
+const formTagActive = ref(true)
+
+// Search State
+const genreSearch = ref('')
+const instrumentSearch = ref('')
+
+const filteredGenres = computed(() => {
+    if (!genreSearch.value) return genres.value
+    const lower = genreSearch.value.toLowerCase()
+    return genres.value.filter(g => g.name.toLowerCase().includes(lower))
+})
+
+const filteredInstruments = computed(() => {
+    if (!instrumentSearch.value) return instruments.value
+    const lower = instrumentSearch.value.toLowerCase()
+    return instruments.value.filter(i => i.name.toLowerCase().includes(lower))
+})
+
+// Computed Counts
+const activeGenresCount = computed(() => genres.value.filter(g => g.active).length)
+const inactiveGenresCount = computed(() => genres.value.filter(g => !g.active).length)
+const activeInstrumentsCount = computed(() => instruments.value.filter(i => i.active).length)
+const inactiveInstrumentsCount = computed(() => instruments.value.filter(i => !i.active).length)
+
+// Modal Actions
+const openAddModal = (type: 'Genre' | 'Instrument') => {
+    targetTagType.value = type
+    modalType.value = 'add'
+    formTagName.value = ''
+    formTagActive.value = true
+    showModal.value = true
+}
+
+const openEditModal = (tag: TagItem) => {
+    editingTag.value = tag
+    targetTagType.value = tag.type
+    modalType.value = 'edit'
+    formTagName.value = tag.name
+    formTagActive.value = tag.active
+    showModal.value = true
+}
+
+const openDeleteModal = (tag: TagItem) => {
+    editingTag.value = tag
+    modalType.value = 'delete'
+    showModal.value = true
+}
+
+const closeModal = () => {
+    showModal.value = false
+    editingTag.value = null
+}
+
+const saveModal = () => {
+    if (modalType.value === 'add') {
+        const list = targetTagType.value === 'Genre' ? genres : instruments
+        list.value.push({
+            id: generateId(),
+            name: formTagName.value,
+            active: formTagActive.value,
+            type: targetTagType.value
+        })
+    } else if (modalType.value === 'edit' && editingTag.value) {
+        editingTag.value.name = formTagName.value
+        editingTag.value.active = formTagActive.value
+    } else if (modalType.value === 'delete' && editingTag.value) {
+        if (editingTag.value.type === 'Genre') {
+            genres.value = genres.value.filter(g => g.id !== editingTag.value!.id)
+        } else {
+            instruments.value = instruments.value.filter(i => i.id !== editingTag.value!.id)
+        }
+    }
+    closeModal()
+}
 
 interface SuggestedTag {
     id: number
@@ -151,10 +231,10 @@ const acceptTag = (id: number) => {
     if (item) {
         item.status = 'Accepted'
         selectedIds.value = selectedIds.value.filter(selectedId => selectedId !== id)
-        if (item.type === 'Genre' && !activeGenres.value.includes(item.tag)) {
-            activeGenres.value.push(item.tag)
-        } else if (item.type === 'Instrument' && !activeInstruments.value.includes(item.tag)) {
-            activeInstruments.value.push(item.tag)
+        if (item.type === 'Genre' && !genres.value.find(g => g.name === item.tag)) {
+            genres.value.push({ id: generateId(), name: item.tag, active: true, type: 'Genre' })
+        } else if (item.type === 'Instrument' && !instruments.value.find(i => i.name === item.tag)) {
+            instruments.value.push({ id: generateId(), name: item.tag, active: true, type: 'Instrument' })
         }
     }
 }
@@ -189,12 +269,51 @@ const rejectSelected = () => {
                 <div
                     class="flex justify-between border rounded-xl border-[#2A2A2E]/50 w-[282.66px] h-36.5 px-6 bg-[#1C1C1F]/60">
                     <div class="flex flex-col justify-center">
-                        <h1 class="text-base text-zinc-300">Active Genres</h1>
-                        <h1 class="text-[36px] font-bold text-[#D0D4F7]">{{ activeGenres.length }}</h1>
+                        <h1 class="text-base text-zinc-300">Active Genre Tags</h1>
+                        <h1 class="text-[36px] font-bold text-[#D0D4F7]">{{ activeGenresCount }}</h1>
                     </div>
                     <div class="flex justify-center items-center">
                         <div class="flex p-2.5 rounded-lg bg-[#D0D4F7]/20">
                             <Icon name="ic:baseline-label" class="text-[32px] text-[#D0D4F7]" />
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="flex justify-between border rounded-xl border-[#2A2A2E]/50 w-[282.66px] h-36.5 px-6 bg-[#1C1C1F]/60">
+                    <div class="flex flex-col justify-center">
+                        <h1 class="text-base text-zinc-300">Inactive Genre Tags</h1>
+                        <h1 class="text-[36px] font-bold text-zinc-400">{{ inactiveGenresCount }}</h1>
+                    </div>
+                    <div class="flex justify-center items-center">
+                        <div class="flex p-2.5 rounded-lg bg-zinc-800">
+                            <Icon name="ic:baseline-label-off" class="text-[32px] text-zinc-400" />
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="flex justify-between border rounded-xl border-[#2A2A2E]/50 w-[282.66px] h-36.5 px-6 bg-[#1C1C1F]/60">
+                    <div class="flex flex-col justify-center">
+                        <h1 class="text-base text-zinc-300">Active Instrument Tags</h1>
+                        <h1 class="text-[36px] font-bold text-[#D0D4F7]">{{ activeInstrumentsCount }}</h1>
+                    </div>
+                    <div class="flex justify-center items-center">
+                        <div class="flex p-2.5 rounded-lg bg-[#D0D4F7]/20">
+                            <Icon name="ic:baseline-label" class="text-[32px] text-[#D0D4F7]" />
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="flex justify-between border rounded-xl border-[#2A2A2E]/50 w-[282.66px] h-36.5 px-6 bg-[#1C1C1F]/60">
+                    <div class="flex flex-col justify-center">
+                        <h1 class="text-base text-zinc-300">Inactive Instrument Tags</h1>
+                        <h1 class="text-[36px] font-bold text-zinc-400">{{ inactiveInstrumentsCount }}</h1>
+                    </div>
+                    <div class="flex justify-center items-center">
+                        <div class="flex p-2.5 rounded-lg bg-zinc-800">
+                            <Icon name="ic:baseline-label-off" class="text-[32px] text-zinc-400" />
                         </div>
                     </div>
                 </div>
@@ -223,18 +342,45 @@ const rejectSelected = () => {
                             <h1 class="text-[#D3D4E9] font-bold text-lg">Genre Tags</h1>
                             <h2 class="text-zinc-400 text-sm font-light">Music Genre Classifications</h2>
                         </div>
-                        <button class="flex items-center justify-center w-9 h-9 bg-[#D0D4F7] hover:bg-[#B0B4D7] rounded-full transition cursor-pointer shadow">
+                        <button @click="openAddModal('Genre')" class="flex items-center justify-center w-9 h-9 bg-[#D0D4F7] hover:bg-[#B0B4D7] rounded-full transition cursor-pointer shadow">
                             <Icon name="ic:baseline-plus" class="text-2xl text-[#2A2F4A]" />
                         </button>
                     </div>
 
-                    <div class="flex flex-wrap gap-2 pt-2">
-                        <span 
-                            v-for="genre in activeGenres" 
-                            :key="genre"
-                            class="inline-flex items-center px-3 py-1.5 bg-[#242428] border border-zinc-700/60 hover:border-[#D0D4F7]/50 text-zinc-200 rounded-lg text-xs font-medium transition">
-                            {{ genre }}
-                        </span>
+                    <div class="relative">
+                        <Icon name="ic:baseline-search" class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-lg" />
+                        <input 
+                            v-model="genreSearch"
+                            type="text" 
+                            placeholder="Search genres..." 
+                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg pl-10 pr-4 py-2 text-sm text-zinc-100 focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
+                        />
+                    </div>
+
+                    <div class="flex flex-col gap-2 pt-2 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                        <div 
+                            v-for="genre in filteredGenres" 
+                            :key="genre.id"
+                            class="flex items-center justify-between p-3 bg-[#242428] border border-zinc-700/60 rounded-lg group transition-colors hover:border-zinc-500/50">
+                            
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm font-medium text-zinc-200">{{ genre.name }}</span>
+                                <span 
+                                    class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full"
+                                    :class="genre.active ? 'bg-[#D0D4F7] text-[#2A2F4A]' : 'bg-zinc-800 text-zinc-400'">
+                                    {{ genre.active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                <button @click="openEditModal(genre)" class="p-1.5 text-zinc-400 hover:text-[#D0D4F7] hover:bg-[#D0D4F7]/10 rounded-md transition cursor-pointer">
+                                    <Icon name="ic:baseline-edit" class="text-lg" />
+                                </button>
+                                <button @click="openDeleteModal(genre)" class="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition cursor-pointer">
+                                    <Icon name="ic:baseline-delete" class="text-lg" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -245,18 +391,45 @@ const rejectSelected = () => {
                             <h1 class="text-[#D3D4E9] font-bold text-lg">Instrument Tags</h1>
                             <h2 class="text-zinc-400 text-sm font-light">Music Instrument Classifications</h2>
                         </div>
-                        <button class="flex items-center justify-center w-9 h-9 bg-[#D0D4F7] hover:bg-[#B0B4D7] rounded-full transition cursor-pointer shadow">
+                        <button @click="openAddModal('Instrument')" class="flex items-center justify-center w-9 h-9 bg-[#D0D4F7] hover:bg-[#B0B4D7] rounded-full transition cursor-pointer shadow">
                             <Icon name="ic:baseline-plus" class="text-2xl text-[#2A2F4A]" />
                         </button>
                     </div>
 
-                    <div class="flex flex-wrap gap-2 pt-2">
-                        <span 
-                            v-for="instrument in activeInstruments" 
-                            :key="instrument"
-                            class="inline-flex items-center px-3 py-1.5 bg-[#242428] border border-zinc-700/60 hover:border-[#D0D4F7]/50 text-zinc-200 rounded-lg text-xs font-medium transition">
-                            {{ instrument }}
-                        </span>
+                    <div class="relative">
+                        <Icon name="ic:baseline-search" class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-lg" />
+                        <input 
+                            v-model="instrumentSearch"
+                            type="text" 
+                            placeholder="Search instruments..." 
+                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg pl-10 pr-4 py-2 text-sm text-zinc-100 focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
+                        />
+                    </div>
+
+                    <div class="flex flex-col gap-2 pt-2 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                        <div 
+                            v-for="instrument in filteredInstruments" 
+                            :key="instrument.id"
+                            class="flex items-center justify-between p-3 bg-[#242428] border border-zinc-700/60 rounded-lg group transition-colors hover:border-zinc-500/50">
+                            
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm font-medium text-zinc-200">{{ instrument.name }}</span>
+                                <span 
+                                    class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full"
+                                    :class="instrument.active ? 'bg-[#D0D4F7] text-[#2A2F4A]' : 'bg-zinc-800 text-zinc-400'">
+                                    {{ instrument.active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                <button @click="openEditModal(instrument)" class="p-1.5 text-zinc-400 hover:text-[#D0D4F7] hover:bg-[#D0D4F7]/10 rounded-md transition cursor-pointer">
+                                    <Icon name="ic:baseline-edit" class="text-lg" />
+                                </button>
+                                <button @click="openDeleteModal(instrument)" class="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition cursor-pointer">
+                                    <Icon name="ic:baseline-delete" class="text-lg" />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -421,5 +594,79 @@ const rejectSelected = () => {
                 </div>
             </div>
         </main>
+
+        <!-- Modal Overlay -->
+        <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div class="bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+                
+                <!-- Header -->
+                <div class="px-6 py-4 border-b border-[#2A2A2E] flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-zinc-100">
+                        {{ modalType === 'add' ? `Add New ${targetTagType}` : (modalType === 'edit' ? `Edit ${targetTagType}` : `Delete ${targetTagType}`) }}
+                    </h2>
+                    <button @click="closeModal" class="text-zinc-400 hover:text-white transition cursor-pointer">
+                        <Icon name="ic:baseline-close" class="text-xl" />
+                    </button>
+                </div>
+
+                <!-- Body Add/Edit -->
+                <div v-if="modalType === 'add' || modalType === 'edit'" class="p-6 flex flex-col gap-5">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-sm font-medium text-zinc-300">Tag Name</label>
+                        <input 
+                            v-model="formTagName"
+                            type="text" 
+                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
+                            placeholder="e.g. Dream Pop"
+                        />
+                    </div>
+                    
+                    <div class="flex items-center justify-between mt-2">
+                        <div class="flex flex-col">
+                            <label class="text-sm font-medium text-zinc-300">Status</label>
+                            <span class="text-xs text-zinc-500">Set whether this tag is actively used</span>
+                        </div>
+                        <button 
+                            @click="formTagActive = !formTagActive"
+                            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer"
+                            :class="formTagActive ? 'bg-[#D0D4F7]' : 'bg-zinc-700'">
+                            <span 
+                                class="inline-block h-4 w-4 transform rounded-full bg-[#1C1C1F] transition-transform"
+                                :class="formTagActive ? 'translate-x-6' : 'translate-x-1'">
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Body Delete -->
+                <div v-if="modalType === 'delete'" class="p-6">
+                    <p class="text-zinc-300 text-sm">
+                        Are you sure you want to delete the tag <span class="font-bold text-white">"{{ editingTag?.name }}"</span>? This action cannot be undone.
+                    </p>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-6 py-4 bg-[#141416]/50 border-t border-[#2A2A2E] flex justify-end gap-3">
+                    <button 
+                        @click="closeModal"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer">
+                        Cancel
+                    </button>
+                    <button 
+                        v-if="modalType !== 'delete'"
+                        @click="saveModal"
+                        :disabled="!formTagName.trim()"
+                        class="px-4 py-2 bg-[#D0D4F7] text-[#2A2F4A] hover:bg-[#B0B4D7] rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+                        Save Tag
+                    </button>
+                    <button 
+                        v-if="modalType === 'delete'"
+                        @click="saveModal"
+                        class="px-4 py-2 bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 rounded-lg text-sm font-semibold transition-colors cursor-pointer">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>

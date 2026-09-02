@@ -27,6 +27,7 @@ export type TonoArtistProfile = {
   Bio: string | null
   Links: Record<string, unknown> | null
   Is_Verified: boolean
+  Status: string
   Created_at?: string | null
 }
 

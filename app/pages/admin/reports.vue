@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/*
-definePageMeta({
-  middleware: 'admin'
-})
-*/
+
 const { signOutAdmin, fetchCurrentAdmin } = useAdminAuth()
 /*
 const supabase = useSupabaseClient()
@@ -14,7 +10,10 @@ const handleLogout = async () => {
 
 // the admin profile
 const adminProfile = await fetchCurrentAdmin()
-definePageMeta({ layout: 'admin' })
+definePageMeta({
+  layout: 'admin',
+  middleware: 'admin'
+})
 </script>
 
 <template>

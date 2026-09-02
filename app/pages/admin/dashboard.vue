@@ -1,10 +1,8 @@
 <script setup lang="ts">
-/*
 definePageMeta({
+  layout: 'admin',
   middleware: 'admin'
 })
-*/
-definePageMeta({ layout: 'admin' })
 
 const { signOutAdmin, fetchCurrentAdmin } = useAdminAuth()
 /*
