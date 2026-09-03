@@ -9,6 +9,12 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
         return navigateTo('/Login')
     }
 
+  if (profile && profile.account?.Is_Banned) {
+      if (to.path !== '/banned') {
+          return navigateTo('/banned')
+      }
+  }
+
     // Check if the user is an artist
     if (!profile.artistProfile) {
         return navigateTo('/userhome')

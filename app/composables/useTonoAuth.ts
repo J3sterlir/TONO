@@ -8,6 +8,7 @@ export type TonoUserAccount = {
   City: string | null
   Barangay: string | null
   Created_at?: string | null
+  Is_Banned?: boolean | null
 }
 
 export type TonoBusinessProfile = {
