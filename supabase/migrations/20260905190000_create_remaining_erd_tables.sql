@@ -1,8 +1,3 @@
--- =============================================================================
--- Migration: 20260905190000_create_remaining_erd_tables.sql
--- Description: Creates 15 tables from the TONO ERD without modifying prior migrations
--- =============================================================================
-
 -- 1. BAND_MEMBERS
 CREATE TABLE IF NOT EXISTS public."BAND_MEMBERS" (
     "Band_ID" UUID NOT NULL REFERENCES public."BAND"("ARTIST_ID") ON DELETE CASCADE,
@@ -21,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public."PORTFOLIO" (
     "PORTFOLIO_ID" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "ARTIST_ID" UUID UNIQUE NOT NULL REFERENCES public."ARTIST"("ARTIST_ID") ON DELETE CASCADE,
     "Links" JSONB DEFAULT '[]'::jsonb,
-    "Media_ID" UUID, -- Optional featured spotlight media (FK added below)
+    "Media_ID" UUID,
     "Last_Updated" TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_portfolio_artist ON public."PORTFOLIO"("ARTIST_ID");
