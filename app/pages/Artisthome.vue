@@ -7,21 +7,44 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile } = useTonoAuth()
+const {
+  highMatches,
+  mediumMatches,
+  lowMatches,
+  unmatchedArtists,
+  isLoading: isMatchingLoading,
+  isLocationFilterActive,
+  fetchRecommendations,
+  toggleLocationFilter,
+  getTierBadgeClass,
+  getTierAvatarRing,
+  formatScorePercent,
+  getLocationLabel,
+  getArtistAvatarUrl,
+  getArtistCoverUrl,
+} = useTonoMatching()
 
 const artistName = ref('Artist')
-const isLoading = ref(false)
+const userCity = ref<string | null>(null)
+const userBarangay = ref<string | null>(null)
+const feedMode = ref<'discovery' | 'recruitment'>('discovery')
 
-const artistsScrollRef = ref<HTMLElement | null>(null)
+// Scroll refs
+const highScrollRef = ref<HTMLElement | null>(null)
+const mediumScrollRef = ref<HTMLElement | null>(null)
+const lowScrollRef = ref<HTMLElement | null>(null)
 const discoverScrollRef = ref<HTMLElement | null>(null)
 const servicesScrollRef = ref<HTMLElement | null>(null)
 
 const scrollStates = ref({
-  artists: { canScrollLeft: false, canScrollRight: false },
+  high: { canScrollLeft: false, canScrollRight: false },
+  medium: { canScrollLeft: false, canScrollRight: false },
+  low: { canScrollLeft: false, canScrollRight: false },
   discover: { canScrollLeft: false, canScrollRight: false },
   services: { canScrollLeft: false, canScrollRight: false }
 })
 
-const checkScroll = (element: HTMLElement | null, key: 'artists' | 'discover' | 'services') => {
+const checkScroll = (element: HTMLElement | null, key: 'high' | 'medium' | 'low' | 'discover' | 'services') => {
   if (element) {
     const { scrollLeft, scrollWidth, clientWidth } = element
     scrollStates.value[key].canScrollLeft = scrollLeft > 0
@@ -36,19 +59,44 @@ const scroll = (element: HTMLElement | null, direction: 'left' | 'right') => {
   }
 }
 
-const handleResize = () => {
-  checkScroll(artistsScrollRef.value, 'artists')
+const updateAllScrolls = () => {
+  checkScroll(highScrollRef.value, 'high')
+  checkScroll(mediumScrollRef.value, 'medium')
+  checkScroll(lowScrollRef.value, 'low')
   checkScroll(discoverScrollRef.value, 'discover')
   checkScroll(servicesScrollRef.value, 'services')
 }
 
-onMounted(() => {
-  // Give DOM a tick to render
+const handleResize = () => {
+  updateAllScrolls()
+}
+
+const loggedInUserId = ref<string | null>(null)
+
+onMounted(async () => {
+  try {
+    const profile = await fetchCurrentUserProfile()
+    if (profile?.artistProfile?.StageName) {
+      artistName.value = profile.artistProfile.StageName
+    } else if (profile?.account?.Username) {
+      artistName.value = profile.account.Username
+    }
+
+    if (profile?.account) {
+      loggedInUserId.value = profile.account.ACCOUNT_ID
+      userCity.value = profile.account.City
+      userBarangay.value = profile.account.Barangay
+    }
+  } catch (error) {
+    console.error('Error fetching artist profile:', error)
+  }
+
+  await fetchRecommendations({ context: feedMode.value, userId: loggedInUserId.value || undefined })
+
   setTimeout(() => {
-    checkScroll(artistsScrollRef.value, 'artists')
-    checkScroll(discoverScrollRef.value, 'discover')
-    checkScroll(servicesScrollRef.value, 'services')
-  }, 100)
+    updateAllScrolls()
+  }, 200)
+
   window.addEventListener('resize', handleResize)
 })
 
@@ -56,65 +104,20 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
 })
 
-/*
-onMounted(async () => {
-  try {
-    const profile = await fetchCurrentUserProfile()
-    
-    // For artist, prefer stageName but fallback to Username
-    if (profile?.artistProfile?.StageName) {
-      artistName.value = profile.artistProfile.StageName
-    } else if (profile?.account?.Username) {
-      artistName.value = profile.account.Username
-    } else {
-      await navigateTo('/Login')
-    }
-  } catch (error) {
-    console.error('Error fetching profile:', error)
-    await navigateTo('/Login')
-  } finally {
-    isLoading.value = false
-  }
-})
+const switchFeedMode = async (mode: 'discovery' | 'recruitment') => {
+  feedMode.value = mode
+  await fetchRecommendations({ context: mode, userId: loggedInUserId.value || undefined })
+  setTimeout(() => {
+    updateAllScrolls()
+  }, 200)
+}
 
-*/
-
-const artists = [
-  { name: 'Elena R.', image: 'https://placehold.co/150x150/222/FFF?text=ER' },
-  { name: 'Marcus J.', image: 'https://placehold.co/150x150/222/FFF?text=MJ' },
-  { name: 'BOxin', image: 'https://placehold.co/150x150/222/FFF?text=BX' },
-  { name: 'Aria V.', image: 'https://placehold.co/150x150/222/FFF?text=AV' },
-  { name: 'Onyx', image: 'https://placehold.co/150x150/222/FFF?text=OX' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'Elena R.', image: 'https://placehold.co/150x150/222/FFF?text=ER' },
-  { name: 'Marcus J.', image: 'https://placehold.co/150x150/222/FFF?text=MJ' },
-  { name: 'BOxin', image: 'https://placehold.co/150x150/222/FFF?text=BX' },
-  { name: 'Aria V.', image: 'https://placehold.co/150x150/222/FFF?text=AV' },
-  { name: 'Onyx', image: 'https://placehold.co/150x150/222/FFF?text=OX' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-  { name: 'BeatBox', image: 'https://placehold.co/150x150/222/FFF?text=BB' },
-]
-
-const newartist = [
-  { name: 'Luna Shift', genre: 'Neo-Classical', image: 'https://placehold.co/800x600/111/FFF?text=Luna+Shift' },
-  { name: 'Cordova', genre: 'Alt-rock', image: 'https://placehold.co/800x600/331111/FFF?text=Cordova' },
-  { name: 'DJ Vertex', genre: 'Electronic', image: 'https://placehold.co/800x600/111133/FFF?text=DJ+Vertex' },
-  { name: 'Luna Shift', genre: 'Neo-Classical', image: 'https://placehold.co/800x600/111/FFF?text=Luna+Shift' },
-  { name: 'Cordova', genre: 'Alt-rock', image: 'https://placehold.co/800x600/331111/FFF?text=Cordova' },
-  { name: 'DJ Vertex', genre: 'Electronic', image: 'https://placehold.co/800x600/111133/FFF?text=DJ+Vertex' },
-  { name: 'Luna Shift', genre: 'Neo-Classical', image: 'https://placehold.co/800x600/111/FFF?text=Luna+Shift' },
-  { name: 'Cordova', genre: 'Alt-rock', image: 'https://placehold.co/800x600/331111/FFF?text=Cordova' },
-  { name: 'DJ Vertex', genre: 'Electronic', image: 'https://placehold.co/800x600/111133/FFF?text=DJ+Vertex' },
-]
+const handleLocationToggle = async () => {
+  await toggleLocationFilter({ context: feedMode.value, userId: loggedInUserId.value || undefined })
+  setTimeout(() => {
+    updateAllScrolls()
+  }, 200)
+}
 
 const services = [
   { name: 'Tunes Studio', category: 'Music Studio', image: 'https://placehold.co/150x150/222/FFF?text=TS' },
@@ -130,7 +133,8 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="h-full bg-[#0E0E10] text-white flex flex-col">
+  <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen">
+    <!-- Navbar -->
     <nav
       class="flex items-center justify-between px-10 py-4 bg-[#131315]/80 sticky top-0 backdrop-blur-sm border-b border-[#46464D]/75 z-50">
       <div class="flex gap-5">
@@ -149,8 +153,8 @@ const handleLogout = async () => {
               class="w-fit py-2 pl-12 pr-5 bg-[#49494d] placeholder:text-[#C7C5CE] rounded-full" />
           </form>
         </div>
-
       </div>
+
       <div class="absolute left-1/2 -translate-x-1/2 flex text-white items-center gap-10">
         <button class="text-white hover:text-[#D0D4F7] cursor-pointer border-b-2 border-[#D0D4F7]">Discover</button>
         <button class="text-white hover:text-[#D0D4F7] cursor-pointer">Artists</button>
@@ -160,137 +164,481 @@ const handleLogout = async () => {
       <div class="flex items-center gap-1">
         <Icon name="ic:baseline-notifications-none" class="text-2xl text-[#C7C5CE]" />
         <button @click="navigateTo('/Artistprofile')"
-        class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
+          class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
           <Icon name="ic:outline-account-circle" class="text-2xl text-[#C7C5CE]" />
         </button>
         
         <button 
-        @click="handleLogout"
-        class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
-        <Icon name="ic:outline-vpn-key-off" class="text-2xl text-[#C7C5CE] hover:text-[#ff3c3c]" />
-      </button>
-
+          @click="handleLogout"
+          class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
+          <Icon name="ic:outline-vpn-key-off" class="text-2xl text-[#C7C5CE] hover:text-[#ff3c3c]" />
+        </button>
       </div>
     </nav>
 
-    <div class="p-10">
-      <div class="flex flex-col gap-10">
-        <h1 class="text-[1.5rem] relative z-10 pointer-events-none">Artist You May Like</h1>
-        <div class="relative group -mt-6">
+    <!-- Main Content -->
+    <div class="px-11.75 py-16 flex flex-col gap-12 mx-auto w-full">
+      <!-- Artist Welcome & Context Tabs -->
+
+      <!-- Location Filter Control Bar -->
+      <div class="flex flex-row gap-2 justify-between">
+
+        <div class="flex flex-col gap-4">
+        <div>
+          <!--<span class="text-xs font-semibold tracking-wider uppercase text-[#D0D4F7]/80">Artist Dashboard</span>-->
+          <!--<h1 class="text-2xl md:text-3xl font-bold text-white mt-1">
+            Welcome back, <span class="text-[#D0D4F7]">{{ artistName }}</span>
+          </h1>-->
+          <!--<p class="text-xs text-gray-400 mt-1">
+            Browse peer artists in your scene or discover instrumentalists to invite to your band.
+          </p>-->
+        </div>
+
+        <!-- Mode Switcher Tabs 0.8 Genre / 0.2 Inst to 0.3 Genre / 0.7 Inst-->
+        <div class="flex items-center p-1 rounded-2xl bg-[#0E0E10] border border-[#3A3A3C] shrink-0">
+          <button
+            @click="switchFeedMode('discovery')"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer"
+            :class="feedMode === 'discovery' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
+            <Icon name="ic:outline-music-note" class="text-base" />
+            <span>Discovery Feed (Genres over Instruments)</span>
+          </button>
+          <button
+            @click="switchFeedMode('recruitment')"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer"
+            :class="feedMode === 'recruitment' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
+            <Icon name="ic:outline-group-add" class="text-base" />
+            <span>Recruitment Feed (Instruments over Genres)</span>
+          </button>
+        </div>
+      </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-10 p-4 rounded-2xl bg-[#131315]/80 border border-[#3A3A3C] shadow-lg backdrop-blur-md">
+        <div class="flex items-center gap-3">
+          <div class="flex p-2.5 rounded-xl bg-[#D0D4F7]/10 text-[#D0D4F7]">
+            <Icon name="ic:baseline-location-on" class="text-xl" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-white">Location Filter Gateway</span>
+              <span class="text-xs px-2 py-0.5 rounded-full"
+                :class="isLocationFilterActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'">
+                {{ isLocationFilterActive ? 'Active' : 'Inactive' }}
+              </span>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">
+              {{ isLocationFilterActive 
+                  ? `Filtering by ${userCity || 'your city'}${userBarangay ? ' • ' + userBarangay : ''}`
+                  : 'Showing matches across all cities and regions' }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Toggle Switch -->
+        <button
+          @click="handleLocationToggle"
+          :disabled="isMatchingLoading"
+          class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-300 border"
+          :class="isLocationFilterActive 
+            ? 'bg-[#1E1E24] hover:bg-[#282830] text-gray-200 border-[#3A3A3C]' 
+            : 'bg-[#D0D4F7] text-[#0E0E10] border-[#D0D4F7] hover:bg-white shadow-md shadow-[#D0D4F7]/20'">
+          <Icon :name="isLocationFilterActive ? 'ic:outline-public' : 'ic:baseline-location-searching'" class="text-base" />
+          <span>{{ isLocationFilterActive ? 'Disable Location Filter (Show Everywhere)' : 'Re-enable Near Me' }}</span>
+        </button>
+        
+      </div>
+      </div>
+
+      <!-- 1. HIGH COMPATIBILITY (70% - 100%) -->
+      <section class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold tracking-wide">
+              {{ feedMode === 'recruitment' ? 'Top Member Candidates' : 'High Compatibility Artists' }}
+            </h2>
+            <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              70% - 100% Match
+            </span>-->
+          </div>
+          <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
+            {{ highMatches.length }} {{ highMatches.length === 1 ? 'candidate' : 'candidates' }}
+          </span>
+        </div>
+
+        <div class="relative group">
           <!-- Left Arrow -->
-          <div v-show="scrollStates.artists.canScrollLeft"
-            class="absolute left-0 top-0 bottom-0 w-32 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
-            <button @click="scroll(artistsScrollRef, 'left')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+          <div v-show="scrollStates.high.canScrollLeft"
+            class="absolute left-0 top-0 bottom-0 w-24 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(highScrollRef, 'left')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-left" class="text-2xl" />
             </button>
           </div>
 
-          <div ref="artistsScrollRef" @scroll="checkScroll(artistsScrollRef, 'artists')"
-            class="flex overflow-x-auto gap-6 p-2 pt-8 scrollbar-hide scroll-smooth">
-            <!-- Individual artist item -->
-            <div v-for="artist in artists" :key="artist.name"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105">
-              <!-- Circular Avatar -->
-              <img :src="artist.image" :alt="artist.name" class="w-40 h-40 rounded-full object-cover shadow-md mb-3" />
+          <!-- Loading Skeletons -->
+          <div v-if="isMatchingLoading" class="flex gap-6 p-2 overflow-hidden">
+            <div v-for="i in 5" :key="'high-skel-' + i" class="flex flex-col items-center shrink-0 animate-pulse">
+              <div class="w-36 h-36 rounded-full bg-[#1E1E24] mb-3"></div>
+              <div class="w-24 h-3 bg-[#2A2A32] rounded-md mb-2"></div>
+              <div class="w-16 h-2 bg-[#2A2A32] rounded-md"></div>
+            </div>
+          </div>
 
-              <!-- Artist Name -->
-              <span class="text-gray-200 text-sm font-medium tracking-wide">
-                {{ artist.name }}
+          <!-- Empty State -->
+          <div v-else-if="highMatches.length === 0"
+            class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl mb-1">
+              <Icon name="ic:outline-music-note" />
+            </div>
+            <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
+            <!--<p class="text-xs text-gray-500 max-w-md">
+              {{ feedMode === 'recruitment' 
+                  ? 'No musicians with strong instrument and genre overlap found in your area yet.' 
+                  : 'New artists matching your preferred genres and instruments will appear here.' }}
+            </p>-->
+          </div>
+
+          <!-- Artists List -->
+          <div v-else ref="highScrollRef" @scroll="checkScroll(highScrollRef, 'high')"
+            class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
+            <div v-for="artist in highMatches" :key="artist.artist_id"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
+              <div class="relative mb-3">
+                <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
+                  class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
+                  :class="getTierAvatarRing(artist.match_tier)" />
+                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
+                  :class="getTierBadgeClass(artist.match_tier)">
+                  {{ formatScorePercent(artist.total_score) }}% Match
+                </span>
+              </div>
+
+              <span class="text-gray-100 text-sm font-semibold tracking-wide mt-2 text-center max-w-35 truncate">
+                {{ artist.display_name }}
+              </span>
+              <span class="text-gray-400 text-xs font-light text-center max-w-35 truncate">
+                {{ artist.specialty || getLocationLabel(artist) }}
+              </span>
+
+              <!-- In recruitment mode, highlight matched instruments -->
+              <div v-if="feedMode === 'recruitment' && artist.shared_instruments.length" class="flex flex-wrap justify-center gap-1 mt-1 max-w-35">
+                <span v-for="inst in artist.shared_instruments.slice(0, 2)" :key="inst"
+                  class="text-[10px] px-1.5 py-0.2 rounded bg-[#D0D4F7]/15 text-[#D0D4F7] truncate">
+                  {{ inst }}
+                </span>
+              </div>
+              <div v-else-if="artist.shared_genres.length" class="flex flex-wrap justify-center gap-1 mt-1 max-w-35">
+                <span v-for="g in artist.shared_genres.slice(0, 2)" :key="g"
+                  class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 truncate">
+                  {{ g }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Arrow -->
+          <div v-show="scrollStates.high.canScrollRight"
+            class="absolute right-0 top-0 bottom-0 w-24 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(highScrollRef, 'right')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
+              <Icon name="ic:baseline-chevron-right" class="text-2xl" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. MEDIUM COMPATIBILITY (30% - 69%) -->
+      <section class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold tracking-wide">
+              {{ feedMode === 'recruitment' ? 'Potential Band Members' : 'Good Compatibility Matches' }}
+            </h2>
+            <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              30% - 69% Match
+            </span>-->
+          </div>
+          <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
+            {{ mediumMatches.length }} {{ mediumMatches.length === 1 ? 'candidate' : 'candidates' }}
+          </span>
+        </div>
+
+        <div class="relative group">
+          <!-- Left Arrow -->
+          <div v-show="scrollStates.medium.canScrollLeft"
+            class="absolute left-0 top-0 bottom-0 w-24 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(mediumScrollRef, 'left')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
+              <Icon name="ic:baseline-chevron-left" class="text-2xl" />
+            </button>
+          </div>
+
+          <!-- Loading Skeletons -->
+          <div v-if="isMatchingLoading" class="flex gap-6 p-2 overflow-hidden">
+            <div v-for="i in 5" :key="'med-skel-' + i" class="flex flex-col items-center shrink-0 animate-pulse">
+              <div class="w-36 h-36 rounded-full bg-[#1E1E24] mb-3"></div>
+              <div class="w-24 h-3 bg-[#2A2A32] rounded-md mb-2"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="mediumMatches.length === 0"
+            class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl mb-1">
+              <Icon name="ic:outline-queue-music" />
+            </div>
+            <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
+            <!--<p class="text-xs text-gray-500 max-w-md">
+              Candidates sharing common musical elements will appear here.
+            </p>-->
+          </div>
+
+          <!-- Artists List -->
+          <div v-else ref="mediumScrollRef" @scroll="checkScroll(mediumScrollRef, 'medium')"
+            class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
+            <div v-for="artist in mediumMatches" :key="artist.artist_id"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
+              <div class="relative mb-3">
+                <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
+                  class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
+                  :class="getTierAvatarRing(artist.match_tier)" />
+                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
+                  :class="getTierBadgeClass(artist.match_tier)">
+                  {{ formatScorePercent(artist.total_score) }}% Match
+                </span>
+              </div>
+
+              <span class="text-gray-100 text-sm font-semibold tracking-wide mt-2 text-center max-w-35 truncate">
+                {{ artist.display_name }}
+              </span>
+              <span class="text-gray-400 text-xs font-light text-center max-w-35 truncate">
+                {{ artist.specialty || getLocationLabel(artist) }}
               </span>
             </div>
           </div>
 
           <!-- Right Arrow -->
-          <div v-show="scrollStates.artists.canScrollRight"
-            class="absolute right-0 top-0 bottom-0 w-32 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
-            <button @click="scroll(artistsScrollRef, 'right')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+          <div v-show="scrollStates.medium.canScrollRight"
+            class="absolute right-0 top-0 bottom-0 w-24 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(mediumScrollRef, 'right')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-right" class="text-2xl" />
             </button>
           </div>
         </div>
+      </section>
 
-        <h1 class="text-[1.5rem] relative z-10 pointer-events-none">Discover New Artists</h1>
+      <!-- 3. LOW COMPATIBILITY (1% - 29%) -->
+      <section class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold tracking-wide">Emerging & Different Tastes</h2>
+            <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+              1% - 29% Match
+            </span>-->
+          </div>
+          <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
+            {{ lowMatches.length }} {{ lowMatches.length === 1 ? 'candidate' : 'candidates' }}
+          </span>
+        </div>
+
         <div class="relative group">
           <!-- Left Arrow -->
-          <div v-show="scrollStates.discover.canScrollLeft"
-            class="absolute left-0 top-0 bottom-0 w-64 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
-            <button @click="scroll(discoverScrollRef, 'left')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+          <div v-show="scrollStates.low.canScrollLeft"
+            class="absolute left-0 top-0 bottom-0 w-24 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(lowScrollRef, 'left')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-left" class="text-2xl" />
             </button>
           </div>
 
-          <div ref="discoverScrollRef" @scroll="checkScroll(discoverScrollRef, 'discover')"
-            class="flex h-75 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
-            <div v-for="(artist, index) in newartist" :key="artist.name" :class="[
-              'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10',
-              index === newartist.length - 1 && newartist.length > 1 ? 'hover:-ml-50' : ''
-            ]">
-              <img :src="artist.image" :alt="artist.name"
+          <!-- Loading Skeletons -->
+          <div v-if="isMatchingLoading" class="flex gap-6 p-2 overflow-hidden">
+            <div v-for="i in 5" :key="'low-skel-' + i" class="flex flex-col items-center shrink-0 animate-pulse">
+              <div class="w-36 h-36 rounded-full bg-[#1E1E24] mb-3"></div>
+              <div class="w-24 h-3 bg-[#2A2A32] rounded-md mb-2"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="lowMatches.length === 0"
+            class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-12 h-12 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center text-xl mb-1">
+              <Icon name="ic:outline-explore" />
+            </div>
+            <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
+            <!--<p class="text-xs text-gray-500 max-w-md">
+              Candidates with single tag matches will appear here.
+            </p>-->
+          </div>
+
+          <!-- Artists List -->
+          <div v-else ref="lowScrollRef" @scroll="checkScroll(lowScrollRef, 'low')"
+            class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
+            <div v-for="artist in lowMatches" :key="artist.artist_id"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
+              <div class="relative mb-3">
+                <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
+                  class="w-36 h-36 rounded-full object-cover shadow-md transition-all ring-1 ring-zinc-700" />
+                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md bg-zinc-800 text-zinc-400 border border-zinc-700">
+                  {{ formatScorePercent(artist.total_score) }}% Match
+                </span>
+              </div>
+
+              <span class="text-gray-200 text-sm font-medium tracking-wide mt-2 text-center max-w-35 truncate">
+                {{ artist.display_name }}
+              </span>
+              <span class="text-gray-400 text-xs font-light text-center max-w-35 truncate">
+                {{ artist.specialty || getLocationLabel(artist) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Right Arrow -->
+          <div v-show="scrollStates.low.canScrollRight"
+            class="absolute right-0 top-0 bottom-0 w-24 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(lowScrollRef, 'right')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
+              <Icon name="ic:baseline-chevron-right" class="text-2xl" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. DISCOVER NEW ARTISTS (FALLBACK & ZERO-MATCH SHOWCASE) -->
+      <section class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold tracking-wide">Discover New Artists & Peer Collaborators</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Explore musicians across other genres and scenes</p>
+          </div>
+          <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
+            {{ unmatchedArtists.length }} {{ unmatchedArtists.length === 1 ? 'artist' : 'artists' }}
+          </span>
+        </div>
+
+        <div class="relative group">
+          <!-- Left Arrow -->
+          <div v-show="scrollStates.discover.canScrollLeft"
+            class="absolute left-0 top-0 bottom-0 w-32 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
+            <button @click="scroll(discoverScrollRef, 'left')"
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
+              <Icon name="ic:baseline-chevron-left" class="text-2xl" />
+            </button>
+          </div>
+
+          <!-- Loading Skeletons -->
+          <div v-if="isMatchingLoading" class="flex gap-4 h-72 overflow-hidden">
+            <div v-for="i in 3" :key="'disc-skel-' + i" class="flex-1 min-w-50 rounded-2xl bg-[#1E1E24] animate-pulse"></div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="unmatchedArtists.length === 0"
+            class="p-10 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-14 h-14 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-2xl mb-1">
+              <Icon name="ic:outline-album" />
+            </div>
+            <p class="text-base font-semibold text-gray-200">No Artists Can be Found In This Category</p>
+            <p class="text-xs text-gray-400 max-w-md">
+              As new musicians and bands join the TONO community, they will appear here.
+            </p>
+          </div>
+
+          <!-- Large Expandable Cards Carousel -->
+          <div v-else ref="discoverScrollRef" @scroll="checkScroll(discoverScrollRef, 'discover')"
+            class="flex h-72 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
+            <div v-for="(artist, index) in unmatchedArtists" :key="artist.artist_id"
+              :class="[
+                'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-[320px] hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10',
+                index === unmatchedArtists.length - 1 && unmatchedArtists.length > 1 ? 'hover:-ml-12' : ''
+              ]">
+              <img :src="getArtistCoverUrl(artist)" :alt="artist.display_name"
                 class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-105" />
 
-              <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent"></div>
+              <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent"></div>
+              <div class="absolute inset-0 bg-black/30 transition-opacity duration-500 group-hover/card:bg-transparent"></div>
 
-              <div class="absolute inset-0 bg-black/40 transition-opacity duration-500 group-hover/card:bg-transparent">
+              <div class="absolute top-4 right-4">
+                <span class="text-[11px] px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-gray-300 border border-white/10">
+                  {{ artist.artist_type }}
+                </span>
               </div>
 
               <div class="absolute bottom-0 left-0 p-6 flex flex-col justify-end whitespace-nowrap">
-                <h3 class="text-2xl font-semibold text-white tracking-tight">{{ artist.name }}</h3>
-                <p class="text-sm font-medium text-gray-300 mt-1">{{ artist.genre }}</p>
+                <h3 class="text-xl font-bold text-white tracking-tight">{{ artist.display_name }}</h3>
+                <p class="text-xs font-medium text-gray-300 mt-1">
+                  {{ artist.genres.length ? artist.genres.join(', ') : 'Genre Open' }}
+                </p>
+                <p class="text-[11px] font-light text-gray-400 mt-0.5">
+                  {{ getLocationLabel(artist) }}
+                </p>
               </div>
             </div>
           </div>
 
           <!-- Right Arrow -->
           <div v-show="scrollStates.discover.canScrollRight"
-            class="absolute right-0 top-0 bottom-0 w-64 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
+            class="absolute right-0 top-0 bottom-0 w-32 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
             <button @click="scroll(discoverScrollRef, 'right')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-right" class="text-2xl" />
             </button>
           </div>
         </div>
+      </section>
 
-        <h1 class="text-[1.5rem] relative z-10 pointer-events-none">Local Music Industry</h1>
-        <div class="relative group -mt-6">
+      <!-- 5. LOCAL MUSIC INDUSTRY (SERVICES) -->
+      <section class="flex flex-col gap-4">
+        <h2 class="text-xl font-bold tracking-wide">Local Music Industry</h2>
+        <div class="relative group -mt-2">
           <!-- Left Arrow -->
           <div v-show="scrollStates.services.canScrollLeft"
-            class="absolute left-0 top-0 bottom-0 w-32 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
+            class="absolute left-0 top-0 bottom-0 w-32 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
             <button @click="scroll(servicesScrollRef, 'left')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-left" class="text-2xl" />
             </button>
           </div>
 
           <div ref="servicesScrollRef" @scroll="checkScroll(servicesScrollRef, 'services')"
-            class="flex overflow-x-auto gap-6 p-2 pt-8 scrollbar-hide scroll-smooth">
-            <!-- Individual artist item -->
+            class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
             <div v-for="service in services" :key="service.name"
               class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105">
-              <!-- Circular Avatar -->
               <img :src="service.image" :alt="service.name"
-                class="w-30 h-30 rounded-full object-cover shadow-md mb-3" />
-
-              <!-- Artist Name -->
+                class="w-28 h-28 rounded-full object-cover shadow-md mb-3 border border-[#3A3A3C]" />
               <span class="text-gray-200 text-sm font-medium tracking-wide">
                 {{ service.name }}
+              </span>
+              <span class="text-gray-400 text-xs font-light">
+                {{ service.category }}
               </span>
             </div>
           </div>
 
           <!-- Right Arrow -->
           <div v-show="scrollStates.services.canScrollRight"
-            class="absolute right-0 top-0 bottom-0 w-32 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent transition-opacity duration-300 pointer-events-none">
+            class="absolute right-0 top-0 bottom-0 w-32 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
             <button @click="scroll(servicesScrollRef, 'right')"
-              class="flex bg-[#131315]/80 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto opacity-0 group-hover:opacity-100 duration-300">
+              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
               <Icon name="ic:baseline-chevron-right" class="text-2xl" />
             </button>
           </div>
         </div>
-        <h1 class="text-[1.5rem] relative z-10 pointer-events-none">Job Listings</h1>
-      </div>
+      </section>
+
+      <!-- 6. JOB LISTINGS SECTION -->
+      <section class="flex flex-col gap-4">
+        <h2 class="text-xl font-bold tracking-wide">Job Listings & Opportunities</h2>
+        <div class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+          <div class="w-12 h-12 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-xl mb-1">
+            <Icon name="ic:outline-work-outline" />
+          </div>
+          <p class="text-sm font-medium text-gray-300">No Open Job Listings Currently</p>
+          <p class="text-xs text-gray-500 max-w-md">
+            Venue and business job listings in your area will appear here when posted.
+          </p>
+        </div>
+      </section>
     </div>
   </div>
 </template>
