@@ -8,7 +8,29 @@ definePageMeta({
 import { ref, onMounted, onUnmounted } from 'vue'
 
 const supabase = useSupabaseClient()
-const { fetchCurrentUserProfile } = useTonoAuth()
+const { fetchCurrentUserProfile } = useTonoAuth() 
+
+// test button for create job listing
+
+const { createJobListing } = useJobListings()
+
+  const testCreateJob = async () => {
+    try {
+      const result = await createJobListing({
+        Event_Title: 'Test Gig',
+        Date: '2026-10-15',
+        Time: '7:00 PM',
+        Location: 'Naga City',
+        Description: 'Test job listing'
+      })
+
+      console.log('JOB LISTING CREATED:', result)
+      alert('Job listing created successfully!')
+    } catch (error: any) {
+      console.error('JOB LISTING ERROR:', error)
+      alert(`Failed: ${error?.data?.statusMessage || error?.message || 'Unknown error'}`)
+    }
+  }
 
 const artistsScrollRef = ref<HTMLElement | null>(null)
 const discoverScrollRef = ref<HTMLElement | null>(null)
@@ -105,6 +127,19 @@ const handleLogout = async () => {
 </script>
 
 <template>
+  // test button for create job listing
+    <div class="p-10">
+      <button
+        @click="testCreateJob"
+        class="mb-6 px-4 py-2 bg-[#D0D4F7] text-black rounded-lg font-semibold"
+      >
+        Test Create Job Listing
+      </button>
+
+      <div class="flex flex-col gap-10">
+      </div>
+    </div>  
+
   <div class="h-full bg-[#0E0E10] text-white flex flex-col">
     <nav
       class="flex items-center justify-between px-10 py-4 bg-[#131315]/80 sticky top-0 backdrop-blur-sm border-b border-[#46464D]/75 z-50">
