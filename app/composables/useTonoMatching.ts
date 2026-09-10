@@ -98,8 +98,8 @@ export const useTonoMatching = () => {
         display_name: row.display_name || 'Artist',
         specialty: row.specialty || (row.artist_type === 'Band' ? 'Band' : 'Musician'),
         artist_type: row.artist_type || 'Solo',
-        profile_picture: row.profile_picture || null,
-        cover_picture: row.cover_picture || null,
+        profile_picture: row.profile_picture || row.Profile_Picture || null,
+        cover_picture: row.cover_picture || row.Cover_Picture || null,
         city: row.city || null,
         barangay: row.barangay || null,
         matched_location_level: row.matched_location_level || 'Global',
@@ -183,8 +183,19 @@ export const useTonoMatching = () => {
   }
 
   const getArtistCoverUrl = (artist: MatchRecommendation) => {
-    if (artist.cover_picture) return artist.cover_picture
-    if (artist.profile_picture) return artist.profile_picture
+    const coverPic = artist.cover_picture || (artist as any).Cover_Picture
+    if (coverPic) {
+      if (coverPic.startsWith('http://') || coverPic.startsWith('https://') || coverPic.startsWith('/')) {
+        return coverPic
+      }
+      try {
+        const { data } = supabase.storage.from('covers').getPublicUrl(coverPic)
+        if (data?.publicUrl) return data.publicUrl
+      } catch {}
+      return coverPic
+    }
+    const profilePic = artist.profile_picture || (artist as any).Profile_Picture
+    if (profilePic) return profilePic
     const text = encodeURIComponent(artist.display_name || 'Artist')
     return `https://placehold.co/800x600/18181B/D0D4F7?text=${text}`
   }

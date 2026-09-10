@@ -62,7 +62,7 @@ const updateLink = (index: number, value: string) => {
                 class="placeholder:text-sm w-full pl-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
         </div>
 
-        <p class="font-light mt-5">Bio *</p>
+        <p class="font-light mt-5">Bio (optional)</p>
         <div class="relative">
             <Icon name="material-symbols:edit-note-outline"
                 class="absolute left-3 top-[1.2rem] text-2xl text-[#7A7A7D]" />

@@ -112,10 +112,16 @@ const userTypeWarning = computed<string>(() => (signupDraft.role.userType ? '' :
 const isArtistSelectValid = computed<boolean>(() => signupDraft.role.artistType !== null)
 const artistTypeWarning = computed<string>(() => (signupDraft.role.artistType ? '' : 'Please choose your artist type: Solo or Band.'))
 
-const isBioAndLinksValid = computed<boolean>(() => !!(signupDraft.artistProfile.stageName && signupDraft.artistProfile.specialty))
-const bioWarning = computed<string>(() => {
-  if (!signupDraft.artistProfile.stageName) return 'Please enter your stage name.'
-  if (!signupDraft.artistProfile.specialty) return 'Please select your specialty.'
+const isBioAndLinksSoloValid = computed<boolean>(() => !!(signupDraft.artistProfile.stageName?.trim() && signupDraft.artistProfile.specialty?.trim()))
+const bioSoloWarning = computed<string>(() => {
+  if (!signupDraft.artistProfile.stageName?.trim()) return 'Please enter your stage name.'
+  if (!signupDraft.artistProfile.specialty?.trim()) return 'Please select your specialty.'
+  return ''
+})
+
+const isBioAndLinksBandValid = computed<boolean>(() => !!signupDraft.artistProfile.stageName?.trim())
+const bioBandWarning = computed<string>(() => {
+  if (!signupDraft.artistProfile.stageName?.trim()) return 'Please enter your band name.'
   return ''
 })
 
@@ -153,8 +159,12 @@ const goToUserPath = () => {
 
 const proceedFromArtistSelect = () => {
   if (signupDraft.role.artistType === 'Solo') {
+    if (signupDraft.artistProfile.specialty === 'Band') {
+      signupDraft.artistProfile.specialty = ''
+    }
     setStep('bioAndLinks')
   } else if (signupDraft.role.artistType === 'Band') {
+    signupDraft.artistProfile.specialty = 'Band'
     setStep('Biolinksband')
   }
 }
@@ -189,13 +199,24 @@ const handleSignup = async () => {
     return
   }
 
-  if (signupDraft.role.userType === 'Artist' && !isBioAndLinksValid.value) {
-    submitError.value = 'Stage name and bio are required for your artist profile.'
+  if (signupDraft.role.userType === 'Artist') {
+    if (signupDraft.role.artistType === 'Solo' && !isBioAndLinksSoloValid.value) {
+      submitError.value = 'Stage name and specialty are required for your artist profile.'
+      return
+    }
+    if (signupDraft.role.artistType === 'Band' && !isBioAndLinksBandValid.value) {
+      submitError.value = 'Band name is required for your band profile.'
+      return
+    }
+  }
+
+  if (signupDraft.preferences.genres.length === 0) {
+    submitError.value = 'Please select at least one genre.'
     return
   }
 
-  if (signupDraft.preferences.genres.length === 0 || signupDraft.preferences.instruments.length === 0) {
-    submitError.value = 'Please select at least one genre and one instrument.'
+  if (signupDraft.role.artistType !== 'Band' && signupDraft.preferences.instruments.length === 0) {
+    submitError.value = 'Please select at least one instrument.'
     return
   }
 
@@ -287,7 +308,7 @@ const goBack = () => {
       setStep('artistGenre')
       break
     case 'Biolinksband':
-      setStep('bandGenre')
+      setStep('artistSelect')
       break
     case 'bandGenre':
       setStep('Biolinksband')
@@ -357,8 +378,8 @@ const goBack = () => {
                 <Bioandlinks 
                   v-if="currentStep === 'bioAndLinks'"
                   v-model:form="signupDraft.artistProfile"
-                  :is-valid="isBioAndLinksValid"
-                  :validation-message="bioWarning"
+                  :is-valid="isBioAndLinksSoloValid"
+                  :validation-message="bioSoloWarning"
                   @proceed="proceedFromBioAndLinks"
                   @back="goBack"
                 />
@@ -388,8 +409,8 @@ const goBack = () => {
                 <Biolinksband
                   v-if="currentStep === 'Biolinksband'"
                   v-model:form="signupDraft.artistProfile"
-                  :is-valid="isBioAndLinksValid"
-                  :validation-message="bioWarning"
+                  :is-valid="isBioAndLinksBandValid"
+                  :validation-message="bioBandWarning"
                   @proceed="proceedFromBioAndLinksBand"
                   @back="goBack"
                 />

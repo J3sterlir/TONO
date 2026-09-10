@@ -3,7 +3,7 @@ definePageMeta({
   middleware: ['auth', 'artist']
 })
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile } = useTonoAuth()
@@ -24,6 +24,10 @@ const {
   getArtistCoverUrl,
 } = useTonoMatching()
 
+const discoverArtists = computed(() => {
+  return [...lowMatches.value, ...unmatchedArtists.value]
+})
+
 const artistName = ref('Artist')
 const userCity = ref<string | null>(null)
 const userBarangay = ref<string | null>(null)
@@ -32,19 +36,17 @@ const feedMode = ref<'discovery' | 'recruitment'>('discovery')
 // Scroll refs
 const highScrollRef = ref<HTMLElement | null>(null)
 const mediumScrollRef = ref<HTMLElement | null>(null)
-const lowScrollRef = ref<HTMLElement | null>(null)
 const discoverScrollRef = ref<HTMLElement | null>(null)
 const servicesScrollRef = ref<HTMLElement | null>(null)
 
 const scrollStates = ref({
   high: { canScrollLeft: false, canScrollRight: false },
   medium: { canScrollLeft: false, canScrollRight: false },
-  low: { canScrollLeft: false, canScrollRight: false },
   discover: { canScrollLeft: false, canScrollRight: false },
   services: { canScrollLeft: false, canScrollRight: false }
 })
 
-const checkScroll = (element: HTMLElement | null, key: 'high' | 'medium' | 'low' | 'discover' | 'services') => {
+const checkScroll = (element: HTMLElement | null, key: 'high' | 'medium' | 'discover' | 'services') => {
   if (element) {
     const { scrollLeft, scrollWidth, clientWidth } = element
     scrollStates.value[key].canScrollLeft = scrollLeft > 0
@@ -62,7 +64,6 @@ const scroll = (element: HTMLElement | null, direction: 'left' | 'right') => {
 const updateAllScrolls = () => {
   checkScroll(highScrollRef.value, 'high')
   checkScroll(mediumScrollRef.value, 'medium')
-  checkScroll(lowScrollRef.value, 'low')
   checkScroll(discoverScrollRef.value, 'discover')
   checkScroll(servicesScrollRef.value, 'services')
 }
@@ -91,7 +92,10 @@ onMounted(async () => {
     console.error('Error fetching artist profile:', error)
   }
 
-  await fetchRecommendations({ context: feedMode.value, userId: loggedInUserId.value || undefined })
+  await Promise.all([
+    fetchRecommendations({ context: feedMode.value, userId: loggedInUserId.value || undefined }),
+    fetchBusinessProfiles()
+  ])
 
   setTimeout(() => {
     updateAllScrolls()
@@ -119,12 +123,46 @@ const handleLocationToggle = async () => {
   }, 200)
 }
 
-const services = [
-  { name: 'Tunes Studio', category: 'Music Studio', image: 'https://placehold.co/150x150/222/FFF?text=TS' },
-  { name: 'Apollo Music Shop', category: 'Music Shop', image: 'https://placehold.co/150x150/222/FFF?text=AMS' },
-  { name: 'Stephen Johnston', category: 'Luthier', image: 'https://placehold.co/150x150/222/FFF?text=SJ' },
-  { name: 'CD Shop', category: 'Music Shop', image: 'https://placehold.co/150x150/222/FFF?text=CS' },
-]
+interface BusinessProfileItem {
+  BUSINESS_ID: string
+  Business_Name: string
+  Business_Service: string | null
+  Profile_Picture: string | null
+  Business_Address?: string | null
+  Contact_Information?: string | null
+}
+
+const businessProfiles = ref<BusinessProfileItem[]>([])
+const isBusinessesLoading = ref(false)
+
+const getBusinessAvatarUrl = (business: BusinessProfileItem) => {
+  if (business?.Profile_Picture) return business.Profile_Picture
+  const name = encodeURIComponent(business?.Business_Name || 'Business')
+  return `https://ui-avatars.com/api/?name=${name}&background=1E1E24&color=D0D4F7&bold=true&size=150`
+}
+
+const fetchBusinessProfiles = async () => {
+  isBusinessesLoading.value = true
+  try {
+    const { data, error } = await supabase
+      .from('BUSINESS_PROFILE')
+      .select('BUSINESS_ID, Business_Name, Business_Service, Profile_Picture, Business_Address, Contact_Information')
+      .order('Business_Name', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching business profiles:', error)
+      return
+    }
+    businessProfiles.value = data || []
+  } catch (err) {
+    console.error('Error in fetchBusinessProfiles:', err)
+  } finally {
+    isBusinessesLoading.value = false
+    setTimeout(() => {
+      checkScroll(servicesScrollRef.value, 'services')
+    }, 100)
+  }
+}
 
 const handleLogout = async () => {
   await supabase.auth.signOut()
@@ -141,17 +179,6 @@ const handleLogout = async () => {
         <div class="flex items-center">
           <img src="/TONO_LOGO.svg" alt="Logo" class="h-8 w-8 rounded-full" />
           <h1 class="text-[1.5rem] ml-2 font-bold">TONO</h1>
-        </div>
-
-        <div class="w-fit flex items-center justify-center">
-          <form action="/search" method="GET" class="relative group">
-            <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400">
-              <Icon name="ic:outline-search" class="absolute text-2xl text-[#C7C5CE]" />
-            </div>
-
-            <input type="search" name="q" placeholder="Search ..."
-              class="w-fit py-2 pl-12 pr-5 bg-[#49494d] placeholder:text-[#C7C5CE] rounded-full" />
-          </form>
         </div>
       </div>
 
@@ -428,84 +455,7 @@ const handleLogout = async () => {
         </div>
       </section>
 
-      <!-- 3. LOW COMPATIBILITY (1% - 29%) -->
-      <section class="flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <h2 class="text-xl font-bold tracking-wide">Emerging & Different Tastes</h2>
-            <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
-              1% - 29% Match
-            </span>-->
-          </div>
-          <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
-            {{ lowMatches.length }} {{ lowMatches.length === 1 ? 'candidate' : 'candidates' }}
-          </span>
-        </div>
-
-        <div class="relative group">
-          <!-- Left Arrow -->
-          <div v-show="scrollStates.low.canScrollLeft"
-            class="absolute left-0 top-0 bottom-0 w-24 z-20 flex items-center justify-start pl-2 bg-linear-to-r from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
-            <button @click="scroll(lowScrollRef, 'left')"
-              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
-              <Icon name="ic:baseline-chevron-left" class="text-2xl" />
-            </button>
-          </div>
-
-          <!-- Loading Skeletons -->
-          <div v-if="isMatchingLoading" class="flex gap-6 p-2 overflow-hidden">
-            <div v-for="i in 5" :key="'low-skel-' + i" class="flex flex-col items-center shrink-0 animate-pulse">
-              <div class="w-36 h-36 rounded-full bg-[#1E1E24] mb-3"></div>
-              <div class="w-24 h-3 bg-[#2A2A32] rounded-md mb-2"></div>
-            </div>
-          </div>
-
-          <!-- Empty State -->
-          <div v-else-if="lowMatches.length === 0"
-            class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-            <div class="w-12 h-12 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center text-xl mb-1">
-              <Icon name="ic:outline-explore" />
-            </div>
-            <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
-            <!--<p class="text-xs text-gray-500 max-w-md">
-              Candidates with single tag matches will appear here.
-            </p>-->
-          </div>
-
-          <!-- Artists List -->
-          <div v-else ref="lowScrollRef" @scroll="checkScroll(lowScrollRef, 'low')"
-            class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
-            <div v-for="artist in lowMatches" :key="artist.artist_id"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
-              <div class="relative mb-3">
-                <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
-                  class="w-36 h-36 rounded-full object-cover shadow-md transition-all ring-1 ring-zinc-700" />
-                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md bg-zinc-800 text-zinc-400 border border-zinc-700">
-                  {{ formatScorePercent(artist.total_score) }}% Match
-                </span>
-              </div>
-
-              <span class="text-gray-200 text-sm font-medium tracking-wide mt-2 text-center max-w-35 truncate">
-                {{ artist.display_name }}
-              </span>
-              <span class="text-gray-400 text-xs font-light text-center max-w-35 truncate">
-                {{ artist.specialty || getLocationLabel(artist) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Right Arrow -->
-          <div v-show="scrollStates.low.canScrollRight"
-            class="absolute right-0 top-0 bottom-0 w-24 z-20 flex items-center justify-end pr-2 bg-linear-to-l from-[#0E0E10] via-[#0E0E10]/80 to-transparent pointer-events-none">
-            <button @click="scroll(lowScrollRef, 'right')"
-              class="flex bg-[#131315]/90 hover:bg-[#D0D4F7] hover:text-[#131315] text-white rounded-full p-2 transition-all shadow-lg backdrop-blur-md pointer-events-auto cursor-pointer">
-              <Icon name="ic:baseline-chevron-right" class="text-2xl" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- 4. DISCOVER NEW ARTISTS (FALLBACK & ZERO-MATCH SHOWCASE) -->
+      <!-- 3. DISCOVER NEW ARTISTS (FALLBACK & ZERO-MATCH SHOWCASE) -->
       <section class="flex flex-col gap-4">
         <div class="flex items-center justify-between">
           <div>
@@ -513,7 +463,7 @@ const handleLogout = async () => {
             <p class="text-xs text-gray-400 mt-0.5">Explore musicians across other genres and scenes</p>
           </div>
           <span v-if="!isMatchingLoading" class="text-xs text-gray-400 font-medium">
-            {{ unmatchedArtists.length }} {{ unmatchedArtists.length === 1 ? 'artist' : 'artists' }}
+            {{ discoverArtists.length }} {{ discoverArtists.length === 1 ? 'artist' : 'artists' }}
           </span>
         </div>
 
@@ -528,12 +478,12 @@ const handleLogout = async () => {
           </div>
 
           <!-- Loading Skeletons -->
-          <div v-if="isMatchingLoading" class="flex gap-4 h-72 overflow-hidden">
+          <div v-if="isMatchingLoading" class="flex gap-4 h-75 overflow-hidden">
             <div v-for="i in 3" :key="'disc-skel-' + i" class="flex-1 min-w-50 rounded-2xl bg-[#1E1E24] animate-pulse"></div>
           </div>
 
           <!-- Empty State -->
-          <div v-else-if="unmatchedArtists.length === 0"
+          <div v-else-if="discoverArtists.length === 0"
             class="p-10 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
             <div class="w-14 h-14 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-2xl mb-1">
               <Icon name="ic:outline-album" />
@@ -546,31 +496,29 @@ const handleLogout = async () => {
 
           <!-- Large Expandable Cards Carousel -->
           <div v-else ref="discoverScrollRef" @scroll="checkScroll(discoverScrollRef, 'discover')"
-            class="flex h-72 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
-            <div v-for="(artist, index) in unmatchedArtists" :key="artist.artist_id"
+            class="flex h-75 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
+            <div v-for="(artist, index) in discoverArtists" :key="artist.artist_id"
               :class="[
-                'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-[320px] hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10',
-                index === unmatchedArtists.length - 1 && unmatchedArtists.length > 1 ? 'hover:-ml-12' : ''
+                'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10',
+                index === discoverArtists.length - 1 && discoverArtists.length > 1 ? 'hover:-ml-12' : ''
               ]">
               <img :src="getArtistCoverUrl(artist)" :alt="artist.display_name"
                 class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-105" />
 
-              <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent"></div>
-              <div class="absolute inset-0 bg-black/30 transition-opacity duration-500 group-hover/card:bg-transparent"></div>
+              <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent"></div>
+              <div class="absolute inset-0 bg-black/40 transition-opacity duration-500 group-hover/card:bg-transparent"></div>
 
               <div class="absolute top-4 right-4">
-                <span class="text-[11px] px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-gray-300 border border-white/10">
-                  {{ artist.artist_type }}
+                <span class="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap shadow-md backdrop-blur-md"
+                  :class="getTierBadgeClass(artist.match_tier)">
+                  {{ formatScorePercent(artist.total_score) }}% Match
                 </span>
               </div>
 
               <div class="absolute bottom-0 left-0 p-6 flex flex-col justify-end whitespace-nowrap">
-                <h3 class="text-xl font-bold text-white tracking-tight">{{ artist.display_name }}</h3>
-                <p class="text-xs font-medium text-gray-300 mt-1">
-                  {{ artist.genres.length ? artist.genres.join(', ') : 'Genre Open' }}
-                </p>
-                <p class="text-[11px] font-light text-gray-400 mt-0.5">
-                  {{ getLocationLabel(artist) }}
+                <h3 class="text-2xl font-semibold text-white tracking-tight">{{ artist.display_name }}</h3>
+                <p class="text-sm font-medium text-gray-300 mt-1">
+                  {{ artist.genres?.length ? artist.genres.join(', ') : (artist.specialty || 'Genre Open') }}
                 </p>
               </div>
             </div>
@@ -589,7 +537,13 @@ const handleLogout = async () => {
 
       <!-- 5. LOCAL MUSIC INDUSTRY (SERVICES) -->
       <section class="flex flex-col gap-4">
-        <h2 class="text-xl font-bold tracking-wide">Local Music Industry</h2>
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold tracking-wide">Local Music Industry</h2>
+          <span v-if="businessProfiles.length > 0" class="text-xs text-gray-500 font-medium">
+            {{ businessProfiles.length }} {{ businessProfiles.length === 1 ? 'business' : 'businesses' }}
+          </span>
+        </div>
+
         <div class="relative group -mt-2">
           <!-- Left Arrow -->
           <div v-show="scrollStates.services.canScrollLeft"
@@ -600,17 +554,39 @@ const handleLogout = async () => {
             </button>
           </div>
 
-          <div ref="servicesScrollRef" @scroll="checkScroll(servicesScrollRef, 'services')"
+          <!-- Skeleton Loading -->
+          <div v-if="isBusinessesLoading" class="flex gap-6 p-2 pt-4 overflow-hidden">
+            <div v-for="i in 5" :key="'biz-skel-' + i" class="flex flex-col items-center shrink-0 w-32">
+              <div class="w-28 h-28 rounded-full bg-[#1E1E24] animate-pulse mb-3"></div>
+              <div class="w-20 h-4 rounded bg-[#1E1E24] animate-pulse mb-1"></div>
+              <div class="w-14 h-3 rounded bg-[#1E1E24] animate-pulse"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="businessProfiles.length === 0"
+            class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-12 h-12 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-xl mb-1">
+              <Icon name="ic:outline-storefront" />
+            </div>
+            <p class="text-sm font-medium text-gray-300">No Local Businesses Listed Yet</p>
+            <p class="text-xs text-gray-500 max-w-md">
+              Local music studios, repair shops, luthiers, and stores will appear here.
+            </p>
+          </div>
+
+          <!-- Business Carousel -->
+          <div v-else ref="servicesScrollRef" @scroll="checkScroll(servicesScrollRef, 'services')"
             class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
-            <div v-for="service in services" :key="service.name"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105">
-              <img :src="service.image" :alt="service.name"
+            <div v-for="business in businessProfiles" :key="business.BUSINESS_ID"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 w-32 text-center">
+              <img :src="getBusinessAvatarUrl(business)" :alt="business.Business_Name"
                 class="w-28 h-28 rounded-full object-cover shadow-md mb-3 border border-[#3A3A3C]" />
-              <span class="text-gray-200 text-sm font-medium tracking-wide">
-                {{ service.name }}
+              <span class="text-gray-200 text-sm font-medium tracking-wide truncate max-w-full" :title="business.Business_Name">
+                {{ business.Business_Name }}
               </span>
-              <span class="text-gray-400 text-xs font-light">
-                {{ service.category }}
+              <span class="text-gray-400 text-xs font-light truncate max-w-full" :title="business.Business_Service || 'Music Service'">
+                {{ business.Business_Service || 'Music Service' }}
               </span>
             </div>
           </div>

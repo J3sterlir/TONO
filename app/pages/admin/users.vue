@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import AdminPagination from '~/components/admin/AdminPagination.vue'
 
 const { signOutAdmin, fetchCurrentAdmin } = useAdminAuth()
 const supabase = useSupabaseClient()
@@ -197,6 +198,19 @@ const filteredUsers = computed(() => {
     )
 })
 
+// Pagination State
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const paginatedUsers = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value
+    return filteredUsers.value.slice(start, start + pageSize.value)
+})
+
+watch([searchQuery, pageSize], () => {
+    currentPage.value = 1
+})
+
 // Preview State & Actions
 const togglePreviewUser = (user: any) => {
     if (previewUser.value?.id === user.id) {
@@ -365,7 +379,6 @@ const confirmDeleteUser = async () => {
                                             <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase text-right">Actions</th>
                                         </tr>
                                     </thead>
-
                                     <!-- Table Body -->
                                     <tbody class="bg-[#18181b]">
                                         <tr v-if="isLoading" class="border-t border-zinc-800">
@@ -374,7 +387,7 @@ const confirmDeleteUser = async () => {
                                         <tr v-else-if="filteredUsers.length === 0" class="border-t border-zinc-800">
                                             <td colspan="5" class="px-6 py-8 text-center text-zinc-400">No users found.</td>
                                         </tr>
-                                        <tr v-for="user in filteredUsers" :key="user.id"
+                                        <tr v-for="user in paginatedUsers" :key="user.id"
                                             class="border-t border-zinc-800 transition-colors"
                                             :class="previewUser?.id === user.id ? 'bg-[#222228] border-l-4 border-l-[#D0D4F7]' : 'hover:bg-[#1f1f23]'">
                                             <!-- profile cell -->
@@ -450,6 +463,14 @@ const confirmDeleteUser = async () => {
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- Pagination Footer -->
+                            <AdminPagination 
+                                v-model:currentPage="currentPage" 
+                                v-model:pageSize="pageSize" 
+                                :totalItems="filteredUsers.length" 
+                                itemLabel="users" 
+                            />
                         </div>
                     </div>
 

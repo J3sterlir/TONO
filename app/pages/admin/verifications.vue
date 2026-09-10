@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
+import AdminPagination from '~/components/admin/AdminPagination.vue'
 
 definePageMeta({
   layout: 'admin',
@@ -185,6 +186,19 @@ const rejectArtist = async (id: string) => {
         console.error('Error rejecting artist:', error)
     }
 }
+
+// Pagination State
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const paginatedArtists = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value
+    return users.value.slice(start, start + pageSize.value)
+})
+
+watch(pageSize, () => {
+    currentPage.value = 1
+})
 </script>
 
 <template>
@@ -227,7 +241,7 @@ const rejectArtist = async (id: string) => {
 
                                 <!-- Table Body -->
                                 <tbody class="bg-[#18181b]">
-                                    <tr v-for="user in users" :key="user.id"
+                                    <tr v-for="user in paginatedArtists" :key="user.id"
                                         class="border-t border-zinc-800 transition-colors"
                                         :class="selectedArtist?.id === user.id ? 'bg-[#222228] border-l-4 border-l-[#D0D4F7]' : 'hover:bg-[#1f1f23]'">
 
@@ -306,41 +320,12 @@ const rejectArtist = async (id: string) => {
                             </table>
                         </div>
 
-                        <div class="flex items-center justify-between px-6 py-4 border-t border-zinc-800 bg-[#18181b]">
-                            <!-- Showing Results Text -->
-                            <span class="text-sm text-zinc-300">
-                                Showing 1 to {{ users.length }} of {{ users.length }} requests
-                            </span>
-
-                            <!-- Pagination Controls -->
-                            <div class="flex items-center gap-2">
-
-                                <!-- Previous Button (Disabled state) -->
-                                <button
-                                    class="flex items-center justify-center w-8 h-8 rounded-md border border-zinc-800 text-zinc-600 cursor-not-allowed">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M15 19l-7-7 7-7"></path>
-                                    </svg>
-                                </button>
-
-                                <!-- Active Page -->
-                                <button
-                                    class="flex items-center justify-center w-8 h-8 rounded-md bg-[#e2dcfc] text-zinc-900 font-semibold text-sm transition-colors hover:bg-indigo-200">
-                                    1
-                                </button>
-
-                                <!-- Next Button (Disabled) -->
-                                <button
-                                    class="flex items-center justify-center w-8 h-8 rounded-md border border-zinc-800 text-zinc-600 cursor-not-allowed">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
-                                        </path>
-                                    </svg>
-                                </button>
-
-                            </div>
-                        </div>
+                        <AdminPagination 
+                            v-model:currentPage="currentPage" 
+                            v-model:pageSize="pageSize" 
+                            :totalItems="users.length" 
+                            itemLabel="requests" 
+                        />
                     </div>
                 </div>
 
