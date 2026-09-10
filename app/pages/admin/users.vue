@@ -258,6 +258,8 @@ const rejectArtist = async (artistId: string) => {
 const isEditModalOpen = ref(false)
 const isBanModalOpen = ref(false)
 const isDeleteModalOpen = ref(false)
+const isDeleting = ref(false)
+const deleteErrorMessage = ref<string | null>(null)
 const selectedUser = ref<any>(null)
 const editFormData = ref({ name: '', email: '', isBanned: false })
 
@@ -275,6 +277,7 @@ const openBanModal = (user: any) => {
 
 const openDeleteModal = (user: any) => {
     selectedUser.value = user
+    deleteErrorMessage.value = null
     isDeleteModalOpen.value = true
 }
 
@@ -282,6 +285,8 @@ const closeModals = () => {
     isEditModalOpen.value = false
     isBanModalOpen.value = false
     isDeleteModalOpen.value = false
+    isDeleting.value = false
+    deleteErrorMessage.value = null
     selectedUser.value = null
 }
 
@@ -319,19 +324,52 @@ const toggleBanUser = async () => {
 }
 
 const confirmDeleteUser = async () => {
-    if (!selectedUser.value) return
+    if (!selectedUser.value || isDeleting.value) return
+    isDeleting.value = true
+    deleteErrorMessage.value = null
+
     try {
-        const response = await $fetch('/api/admin/delete-user', {
+        // 1. Attempt deletion via server API route
+        await $fetch('/api/admin/delete-user', {
             method: 'POST',
             body: { userId: selectedUser.value.id }
         })
+
         if (previewUser.value && previewUser.value.id === selectedUser.value.id) {
             previewUser.value = null
         }
         await fetchUsers()
         closeModals()
-    } catch (error) {
-        console.error('Error deleting user:', error)
+    } catch (serverError: any) {
+        console.warn('Server API delete failed, checking RPC fallback:', serverError)
+
+        // 2. Fallback: Check if database RPC function 'delete_user_by_admin' is configured
+        try {
+            const { error: rpcError } = await (supabase as any).rpc('delete_user_by_admin', {
+                target_user_id: selectedUser.value.id
+            })
+
+            if (!rpcError) {
+                if (previewUser.value && previewUser.value.id === selectedUser.value.id) {
+                    previewUser.value = null
+                }
+                await fetchUsers()
+                closeModals()
+                return
+            }
+        } catch (rpcErr) {
+            console.warn('RPC deletion invocation failed:', rpcErr)
+        }
+
+        // Show friendly user-facing error message
+        deleteErrorMessage.value = 
+            serverError?.data?.statusMessage || 
+            serverError?.statusMessage || 
+            serverError?.message || 
+            'Failed to delete user. Please check your Supabase admin configuration.'
+        console.error('Error deleting user:', serverError)
+    } finally {
+        isDeleting.value = false
     }
 }
 
@@ -811,14 +849,31 @@ const confirmDeleteUser = async () => {
             <div class="bg-[#1E1E20] border border-rose-500/50 rounded-2xl p-6 w-full max-w-md shadow-2xl text-center">
                 <Icon name="material-symbols:delete-forever" class="text-5xl text-rose-500 mb-4" />
                 <h2 class="text-2xl font-bold text-white mb-2">Hard Delete User?</h2>
-                <p class="text-zinc-400 mb-6">
+                <p class="text-zinc-400 mb-4">
                     This action is <strong>irreversible</strong>. You are about to permanently delete <strong>{{ selectedUser?.name }}</strong> from the database, including all their associated data, files, and profile details.
                 </p>
+
+                <!-- Error notice if deletion fails -->
+                <div v-if="deleteErrorMessage" class="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs text-left leading-relaxed">
+                    <p class="font-semibold mb-0.5 flex items-center gap-1.5 text-rose-300">
+                        <Icon name="material-symbols:error-outline" class="text-base" />
+                        Deletion Failed
+                    </p>
+                    <p class="text-[11px] break-words">{{ deleteErrorMessage }}</p>
+                </div>
+
                 <div class="flex flex-col gap-3">
-                    <button @click="confirmDeleteUser" class="cursor-pointer w-full py-3 font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition">
-                        Yes, I understand. Delete permanently.
+                    <button 
+                        @click="confirmDeleteUser" 
+                        :disabled="isDeleting"
+                        class="cursor-pointer w-full py-3 font-bold bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded-lg transition flex items-center justify-center gap-2">
+                        <Icon v-if="isDeleting" name="line-md:loading-loop" class="text-lg" />
+                        <span>{{ isDeleting ? 'Deleting User...' : 'Yes, I understand. Delete permanently.' }}</span>
                     </button>
-                    <button @click="closeModals" class="cursor-pointer w-full py-3 font-medium text-zinc-400 hover:text-white transition border rounded">
+                    <button 
+                        @click="closeModals" 
+                        :disabled="isDeleting"
+                        class="cursor-pointer w-full py-3 font-medium text-zinc-400 hover:text-white transition border border-zinc-700 rounded-lg">
                         Cancel
                     </button>
                 </div>

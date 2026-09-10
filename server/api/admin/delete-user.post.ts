@@ -1,5 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
+function isAnonKey(token: string): boolean {
+    try {
+        const parts = token.split('.')
+        const payloadPart = parts[1]
+        if (!payloadPart) return false
+        const payload = JSON.parse(Buffer.from(payloadPart, 'base64').toString('utf8'))
+        return payload?.role === 'anon'
+    } catch {
+        return false
+    }
+}
+
 export default defineEventHandler(async (event) => {
     try {
         const body = await readBody(event)
@@ -12,19 +24,36 @@ export default defineEventHandler(async (event) => {
             })
         }
 
-        // The user mentioned their SUPABASE_KEY acts as the service role key for them
         const supabaseUrl = process.env.SUPABASE_URL
-        const supabaseKey = process.env.SUPABASE_KEY
+        // Supabase Auth admin operations (like deleteUser) strictly require the service_role key
+        const serviceKey = 
+            process.env.SUPABASE_SERVICE_ROLE_KEY || 
+            process.env.SUPABASE_SERVICE_KEY || 
+            process.env.NUXT_SUPABASE_SECRET_KEY
 
-        if (!supabaseUrl || !supabaseKey) {
+        if (!supabaseUrl) {
             throw createError({
                 statusCode: 500,
-                statusMessage: 'Supabase credentials missing'
+                statusMessage: 'SUPABASE_URL is missing in environment variables'
+            })
+        }
+
+        if (!serviceKey) {
+            throw createError({
+                statusCode: 500,
+                statusMessage: 'Missing SUPABASE_SERVICE_ROLE_KEY in .env. Deleting users via Supabase Auth requires the service_role secret key from Supabase Dashboard (Project Settings > API).'
+            })
+        }
+
+        if (isAnonKey(serviceKey)) {
+            throw createError({
+                statusCode: 500,
+                statusMessage: "Invalid key: The key provided in SUPABASE_SERVICE_ROLE_KEY is an 'anon' public key. You must provide the 'service_role' secret key."
             })
         }
 
         // Create a Supabase client with the admin API
-        const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+        const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
             auth: {
                 autoRefreshToken: false,
                 persistSession: false
@@ -44,9 +73,9 @@ export default defineEventHandler(async (event) => {
         return { success: true, message: 'User permanently deleted', data }
 
     } catch (error: any) {
-        return createError({
+        throw createError({
             statusCode: error.statusCode || 500,
-            statusMessage: error.message || 'Internal Server Error'
+            statusMessage: error.statusMessage || error.message || 'Internal Server Error'
         })
     }
 })
