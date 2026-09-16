@@ -18,11 +18,12 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo('/banned')
   }
 
-  if (!profile.artistProfile) {
-    return navigateTo('/userhome')
-  }
-
-  if (profile.artistProfile.Status !== 'Active') {
-    return navigateTo('/artistverify')
+  // If the user has an artist profile, redirect them away from user-only routes
+  if (profile.artistProfile) {
+    if (profile.artistProfile.Status === 'Active') {
+      return navigateTo('/Artisthome')
+    } else {
+      return navigateTo('/artistverify')
+    }
   }
 })

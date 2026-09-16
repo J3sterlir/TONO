@@ -1,0 +1,99 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const supabase = useSupabaseClient()
+const { fetchCurrentUserProfile } = useTonoAuth()
+const route = useRoute()
+
+const isDiscoverActive = computed(() => route.path === '/userhome' || route.path === '/')
+const isArtistsActive = computed(() => route.path.startsWith('/UserNavArtists'))
+const isEventsActive = computed(() => route.path.startsWith('/UserNavEvents'))
+const isProfileActive = computed(() => route.path === '/userprofile')
+
+const handleLogout = async () => {
+  await supabase.auth.signOut()
+  await navigateTo('/Login')
+}
+</script>
+
+<template>
+  <nav
+    class="flex items-center justify-between px-10 py-4 bg-[#131315]/80 sticky top-0 backdrop-blur-sm border-b border-[#46464D]/75 z-50">
+    <!-- Brand / Logo -->
+    <div
+      @click="navigateTo('/userhome')"
+      class="flex items-center gap-3 cursor-pointer group">
+      <img
+        src="/TONO_LOGO.svg"
+        alt="Logo"
+        class="h-8 w-8 rounded-full" />
+      <h1 class="text-[1.5rem] font-bold tracking-wide">
+        TONO
+      </h1>
+    </div>
+
+    <!-- Centered Nav Links -->
+    <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-10">
+      <button
+        @click="navigateTo('/userhome')"
+        class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer "
+        :class="isDiscoverActive
+          ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
+          : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7] hover:border-[#D0D4F7]/60 hover:-translate-y-0.5'">
+        Discover
+      </button>
+
+      <button
+        @click="navigateTo('/UserNavArtists')"
+        class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"
+        :class="isArtistsActive
+          ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
+          : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7] hover:border-[#D0D4F7]/60 hover:-translate-y-0.5'">
+        Artists
+      </button>
+
+      <button
+        @click="navigateTo('/UserNavEvents')"
+        class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"
+        :class="isEventsActive
+          ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
+          : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7] hover:border-[#D0D4F7]/60 hover:-translate-y-0.5'">
+        Events
+      </button>
+    </div>
+
+    <!-- Right Actions -->
+    <div class="flex items-center gap-2">
+      <!-- Notification Icon -->
+      <button
+        class="flex items-center justify-center p-2.5 rounded-full transition-all duration-300 cursor-pointer"
+        title="Notifications">
+        <Icon
+          name="ic:baseline-notifications-none"
+          class="text-2xl text-[#C7C5CE] transition-all duration-300 hover:text-[#D0D4F7]" />
+      </button>
+
+      <!-- Profile Button -->
+      <button
+        @click="navigateTo('/userprofile')"
+        class="flex items-center justify-center p-2.5 rounded-full transition-all duration-300 cursor-pointer group hover:bg-[#D0D4F7]/10 hover:shadow-[0_0_12px_rgba(208,212,247,0.18)]"
+        :class="isProfileActive ? 'bg-[#D0D4F7]/10 shadow-[0_0_12px_rgba(208,212,247,0.18)] ring-1 ring-[#D0D4F7]/40' : ''"
+        title="User Profile">
+        <Icon
+          name="ic:outline-account-circle"
+          class="text-2xl transition-all duration-300"
+          :class="isProfileActive ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] group-hover:text-[#D0D4F7]'" />
+      </button>
+
+      <!-- Logout Button -->
+      <button
+        @click="handleLogout"
+        class="flex items-center justify-center p-2.5 rounded-full transition-all duration-300 cursor-pointer"
+        title="Log Out">
+        <Icon
+          name="ic:outline-vpn-key-off"
+          class="text-2xl text-[#C7C5CE] transition-all duration-300 hover:text-[#ff3c3c]" />
+      </button>
+    </div>
+  </nav>
+</template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 definePageMeta({
+  layout: 'artist',
   middleware: ['auth', 'artist']
 })
 
@@ -172,37 +173,6 @@ const handleLogout = async () => {
 
 <template>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen">
-    <!-- Navbar -->
-    <nav
-      class="flex items-center justify-between px-10 py-4 bg-[#131315]/80 sticky top-0 backdrop-blur-sm border-b border-[#46464D]/75 z-50">
-      <div class="flex gap-5">
-        <div class="flex items-center">
-          <img src="/TONO_LOGO.svg" alt="Logo" class="h-8 w-8 rounded-full" />
-          <h1 class="text-[1.5rem] ml-2 font-bold">TONO</h1>
-        </div>
-      </div>
-
-      <div class="absolute left-1/2 -translate-x-1/2 flex text-white items-center gap-10">
-        <button class="text-white hover:text-[#D0D4F7] cursor-pointer border-b-2 border-[#D0D4F7]">Discover</button>
-        <button class="text-white hover:text-[#D0D4F7] cursor-pointer">Artists</button>
-        <button class="text-white hover:text-[#D0D4F7] cursor-pointer">Events</button>
-      </div>
-
-      <div class="flex items-center gap-1">
-        <Icon name="ic:baseline-notifications-none" class="text-2xl text-[#C7C5CE]" />
-        <button @click="navigateTo('/Artistprofile')"
-          class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
-          <Icon name="ic:outline-account-circle" class="text-2xl text-[#C7C5CE]" />
-        </button>
-        
-        <button 
-          @click="handleLogout"
-          class="flex items-center justify-center text-[#151A34] p-3 rounded-full font-semibold transition-colors cursor-pointer">
-          <Icon name="ic:outline-vpn-key-off" class="text-2xl text-[#C7C5CE] hover:text-[#ff3c3c]" />
-        </button>
-      </div>
-    </nav>
-
     <!-- Main Content -->
     <div class="px-11.75 py-16 flex flex-col gap-12 mx-auto w-full">
       <!-- Artist Welcome & Context Tabs -->

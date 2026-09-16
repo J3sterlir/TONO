@@ -40,6 +40,18 @@ export type TonoProfile = {
   instruments: string[]
 }
 
+export const resolveUserType = (profile: TonoProfile | null): string => {
+  if (!profile) return 'User'
+  if (profile.artistProfile) {
+    const artistType = profile.artistProfile.Artist_Type?.toLowerCase() === 'band' ? 'Band' : 'Solo'
+    return `Artist / ${artistType}`
+  }
+  if (profile.businessProfile) {
+    return 'Business'
+  }
+  return 'User'
+}
+
 export const useTonoAuth = () => {
   const supabase = useSupabaseClient()
   const db = supabase as any
@@ -124,6 +136,16 @@ export const useTonoAuth = () => {
       const artistId = artistProfile.ARTIST_ID
 
       if (artistProfile.Artist_Type === 'Solo') {
+        const { data: soloData } = await db
+          .from('SOLO_ARTIST')
+          .select('Artist_Name')
+          .eq('ARTIST_ID', artistId)
+          .maybeSingle()
+
+        if (soloData?.Artist_Name) {
+          artistProfile.StageName = soloData.Artist_Name
+        }
+
         const { data: soloGenreRows } = await db
           .from('SOLO_GENRES')
           .select('Genre_ID')
@@ -155,6 +177,16 @@ export const useTonoAuth = () => {
       }
 
       if (artistProfile.Artist_Type === 'Band') {
+        const { data: bandData } = await db
+          .from('BAND')
+          .select('Band_Name')
+          .eq('ARTIST_ID', artistId)
+          .maybeSingle()
+
+        if (bandData?.Band_Name) {
+          artistProfile.StageName = bandData.Band_Name
+        }
+
         const { data: bandGenreRows } = await db
           .from('BAND_GENRES')
           .select('Genre_ID')
@@ -392,5 +424,6 @@ export const useTonoAuth = () => {
     fetchCurrentUserProfile,
     signUpWithTonoAccount,
     signInWithTonoAccount,
+    resolveUserType,
   }
 }

@@ -1,14 +1,15 @@
 export default defineNuxtRouteMiddleware(async (to, from) => {
-  if (import.meta.server) return
+  const supabase = useSupabaseClient()
+  const { data: authData } = await supabase.auth.getUser()
+  const user = authData?.user
 
-  const user = useSupabaseUser()
-  const { fetchCurrentUserProfile } = useTonoAuth()
-  
-  if (!user.value) {
+  if (!user) {
     return navigateTo('/Login')
   }
 
-  const profile = await fetchCurrentUserProfile()
+  const { fetchCurrentUserProfile } = useTonoAuth()
+  const profile = await fetchCurrentUserProfile(user.id)
+
   if (profile && profile.account?.Is_Banned) {
     if (to.path !== '/banned') {
       return navigateTo('/banned')
@@ -19,3 +20,4 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     }
   }
 })
+
