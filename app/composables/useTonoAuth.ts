@@ -9,6 +9,8 @@ export type TonoUserAccount = {
   Barangay: string | null
   Created_at?: string | null
   Is_Banned?: boolean | null
+  Profile_Picture?: string | null
+  Cover_Picture?: string | null
 }
 
 export type TonoBusinessProfile = {

@@ -42,8 +42,8 @@ const handleLogin = async () => {
 
 <template>
   <title>Login</title>
-  <div class="flex flex-row h-screen">
-    <div class="basis-[40%] flex justify-center items-center bg-[#131315] w-screen">
+  <div class="flex flex-col h-screen sm:flex-row">
+    <div class="basis-full flex justify-center items-center bg-[#131315] w-screen sm:basis-[40%]">
       <div class="text-white w-[65%] flex flex-col gap-2">
         <button class="text-white cursor-pointer text-start w-fit hover:text-[#B0B4D7]" @click="navigateTo('/')">&larr;
           Back</button>
@@ -97,7 +97,7 @@ const handleLogin = async () => {
     </div>
 
     <div
-      class="basis-[60%] flex justify-center items-center w-screen bg-blend-multiply bg-cover bg-center bg-[linear-gradient(0deg,rgba(18,18,20,0.95)_0%,rgba(93,93,94,0)_51%,rgba(255,255,255,0.1)_100%),url(https://images.unsplash.com/photo-1761474926416-ba16c9b39ea0)]">
+      class="basis-[60%] justify-center items-center w-screen bg-blend-multiply bg-cover bg-center bg-[linear-gradient(0deg,rgba(18,18,20,0.95)_0%,rgba(93,93,94,0)_51%,rgba(255,255,255,0.1)_100%),url(https://images.unsplash.com/photo-1761474926416-ba16c9b39ea0)] hidden sm:flex sm:visible">
       <div class="text-[#E5E1E4]">
         <div class="font-bold text-[4.5rem] backdrop-blur-[0.2rem]">
           <h1>EXPLORE THE</h1>

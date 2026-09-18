@@ -10,11 +10,9 @@
   --font-Geist: "GEist", sans-serif;
   --font-HankenGrotesk: "Hanken Grotesk", sans-serif;
 }
-/*
-body {
-  
+html {
+  scroll-behavior: smooth;
 }
-*/
 
 input::-ms-reveal,
 input::-ms-clear{

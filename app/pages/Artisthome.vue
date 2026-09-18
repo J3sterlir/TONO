@@ -178,7 +178,7 @@ const handleLogout = async () => {
       <!-- Artist Welcome & Context Tabs -->
 
       <!-- Location Filter Control Bar -->
-      <div class="flex flex-row gap-2 justify-between">
+      <div class="flex flex-col gap-5 justify-between sm:flex-row sm:gap-2">
 
         <div class="flex flex-col gap-4">
         <div>
@@ -192,17 +192,17 @@ const handleLogout = async () => {
         </div>
 
         <!-- Mode Switcher Tabs 0.8 Genre / 0.2 Inst to 0.3 Genre / 0.7 Inst-->
-        <div class="flex items-center p-1 rounded-2xl bg-[#0E0E10] border border-[#3A3A3C] shrink-0">
+        <div class="flex flex-col items-center p-1 rounded-2xl bg-[#0E0E10] border border-[#3A3A3C] shrink-0 sm:flex-row">
           <button
             @click="switchFeedMode('discovery')"
-            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer w-full sm:w-fit"
             :class="feedMode === 'discovery' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
             <Icon name="ic:outline-music-note" class="text-base" />
             <span>Discovery Feed (Genres over Instruments)</span>
           </button>
           <button
             @click="switchFeedMode('recruitment')"
-            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer w-full sm:w-fit"
             :class="feedMode === 'recruitment' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
             <Icon name="ic:outline-group-add" class="text-base" />
             <span>Recruitment Feed (Instruments over Genres)</span>

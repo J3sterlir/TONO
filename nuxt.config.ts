@@ -23,4 +23,16 @@ export default defineNuxtConfig({
       tailwindcss(),
     ],
   },
+  app: {
+    head: {
+      link: [
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@200..700&family=Sora:wght@100..800&family=Geist:wght@100..900&family=Hanken+Grotesk:wght@100..900&display=swap'
+        }
+      ]
+    }
+  }
 });
