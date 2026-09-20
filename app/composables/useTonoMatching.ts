@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 export interface MatchRecommendation {
   user_id: string
   artist_id: string
+  username: string
   display_name: string
   specialty: string
   artist_type: string
@@ -95,6 +96,7 @@ export const useTonoMatching = () => {
       const results: MatchRecommendation[] = (data ?? []).map((row: any) => ({
         user_id: row.user_id,
         artist_id: row.artist_id,
+        username: row.username || '',
         display_name: row.display_name || 'Artist',
         specialty: row.specialty || (row.artist_type === 'Band' ? 'Band' : 'Musician'),
         artist_type: row.artist_type || 'Solo',

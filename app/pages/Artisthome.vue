@@ -298,8 +298,9 @@ const handleLogout = async () => {
           <!-- Artists List -->
           <div v-else ref="highScrollRef" @scroll="checkScroll(highScrollRef, 'high')"
             class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
-            <div v-for="artist in highMatches" :key="artist.artist_id"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
+            <NuxtLink v-for="artist in highMatches" :key="artist.artist_id"
+              :to="artist.username ? `/artist/${artist.username}` : '#'"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item no-underline text-inherit">
               <div class="relative mb-3">
                 <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
                   class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
@@ -330,7 +331,7 @@ const handleLogout = async () => {
                   {{ g }}
                 </span>
               </div>
-            </div>
+            </NuxtLink>
           </div>
 
           <!-- Right Arrow -->
@@ -393,8 +394,9 @@ const handleLogout = async () => {
           <!-- Artists List -->
           <div v-else ref="mediumScrollRef" @scroll="checkScroll(mediumScrollRef, 'medium')"
             class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
-            <div v-for="artist in mediumMatches" :key="artist.artist_id"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item">
+            <NuxtLink v-for="artist in mediumMatches" :key="artist.artist_id"
+              :to="artist.username ? `/artist/${artist.username}` : '#'"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 group/item no-underline text-inherit">
               <div class="relative mb-3">
                 <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
                   class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
@@ -411,7 +413,7 @@ const handleLogout = async () => {
               <span class="text-gray-400 text-xs font-light text-center max-w-35 truncate">
                 {{ artist.specialty || getLocationLabel(artist) }}
               </span>
-            </div>
+            </NuxtLink>
           </div>
 
           <!-- Right Arrow -->
@@ -467,9 +469,10 @@ const handleLogout = async () => {
           <!-- Large Expandable Cards Carousel -->
           <div v-else ref="discoverScrollRef" @scroll="checkScroll(discoverScrollRef, 'discover')"
             class="flex h-75 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
-            <div v-for="(artist, index) in discoverArtists" :key="artist.artist_id"
+            <NuxtLink v-for="(artist, index) in discoverArtists" :key="artist.artist_id"
+              :to="artist.username ? `/artist/${artist.username}` : '#'"
               :class="[
-                'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10',
+                'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10 no-underline text-inherit',
                 index === discoverArtists.length - 1 && discoverArtists.length > 1 ? 'hover:-ml-12' : ''
               ]">
               <img :src="getArtistCoverUrl(artist)" :alt="artist.display_name"
@@ -491,7 +494,7 @@ const handleLogout = async () => {
                   {{ artist.genres?.length ? artist.genres.join(', ') : (artist.specialty || 'Genre Open') }}
                 </p>
               </div>
-            </div>
+            </NuxtLink>
           </div>
 
           <!-- Right Arrow -->
