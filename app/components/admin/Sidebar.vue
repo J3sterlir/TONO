@@ -76,10 +76,10 @@ const handleLogout = async () => {
       </div>
 
       <!-- Logout -->
-      <div>
+      <div class="hover:bg-red-300/40 rounded-sm transition-all cursor-pointer">
         <button
           @click="handleLogout"
-          class="flex items-center gap-2 px-2 py-1.5 text-[#C7C5CE] hover:text-white hover:bg-neutral-tertiary w-full text-left rounded transition-colors"
+          class="flex items-center gap-2 px-2 py-1.5 text-[#C7C5CE] hover:text-white hover:bg-neutral-tertiary w-full text-left rounded transition-colors cursor-pointer"
         >
           <Icon name="ic:baseline-logout" class="text-2xl" />
           <span class="ms-3">Logout</span>

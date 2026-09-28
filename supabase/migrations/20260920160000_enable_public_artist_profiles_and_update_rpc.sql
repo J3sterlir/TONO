@@ -198,8 +198,20 @@ DECLARE
     v_brgy_count INT := 0;
     v_city_count INT := 0;
 BEGIN
-    -- 1. Resolve User ID (prefer argument, fallback to auth.uid())
-    v_user_id := COALESCE(p_user_id, auth.uid());
+    -- 1. Resolve User ID (enforce caller authorization)
+    IF auth.uid() IS NOT NULL THEN
+        IF p_user_id IS NOT NULL AND p_user_id != auth.uid() THEN
+            IF NOT EXISTS (SELECT 1 FROM public."ADMIN" WHERE "ADMIN_ID" = auth.uid()) THEN
+                RAISE EXCEPTION 'Unauthorized: Cannot query recommendations for another user account.';
+            END IF;
+            v_user_id := p_user_id;
+        ELSE
+            v_user_id := auth.uid();
+        END IF;
+    ELSE
+        -- Anonymous callers receive unpersonalized / global recommendations only
+        v_user_id := NULL;
+    END IF;
 
     -- 2. Determine Context Weights
     IF p_context = 'recruitment' THEN

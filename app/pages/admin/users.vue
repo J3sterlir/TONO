@@ -293,12 +293,19 @@ const closeModals = () => {
 const saveEdit = async () => {
     if (!selectedUser.value) return
     try {
-        const { error } = await supabase
-            .from('USER_ACCOUNT')
-            .update({ Username: editFormData.value.name, Email: editFormData.value.email })
-            .eq('ACCOUNT_ID', selectedUser.value.id)
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
 
-        if (error) throw error
+        await $fetch('/api/admin/update-user', {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: {
+                userId: selectedUser.value.id,
+                username: editFormData.value.name,
+                email: editFormData.value.email
+            }
+        })
+
         await fetchUsers()
         closeModals()
     } catch (error) {
@@ -329,9 +336,13 @@ const confirmDeleteUser = async () => {
     deleteErrorMessage.value = null
 
     try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+
         // 1. Attempt deletion via server API route
         await $fetch('/api/admin/delete-user', {
             method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: { userId: selectedUser.value.id }
         })
 
@@ -859,7 +870,7 @@ const confirmDeleteUser = async () => {
                         <Icon name="material-symbols:error-outline" class="text-base" />
                         Deletion Failed
                     </p>
-                    <p class="text-[11px] break-words">{{ deleteErrorMessage }}</p>
+                    <p class="text-[11px] wrap-break-word">{{ deleteErrorMessage }}</p>
                 </div>
 
                 <div class="flex flex-col gap-3">

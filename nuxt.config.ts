@@ -11,13 +11,13 @@ export default defineNuxtConfig({
   },
   icon: {
     serverBundle: {
-      collections: ['ic']
+      collections: ['ic', 'mdi' , 'lucide']
     },
     clientBundle: {
       scan: true,
     },
   },
-  css: ['../app/assets/css/main.css'],
+  css: ['~/assets/css/main.css'],
   vite: {
     plugins: [
       tailwindcss(),

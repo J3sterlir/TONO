@@ -49,7 +49,7 @@ const handleFileSelect = (event: Event) => {
   const file = target.files?.[0]
   if (!file) return
 
-  const validation = validateImageFile(file, 15)
+  const validation = validateImageFile(file, 10)
   if (!validation.valid) {
     errorMessage.value = validation.error || 'Invalid image file.'
     return
