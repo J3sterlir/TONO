@@ -11,8 +11,8 @@ const avatarUrl = useState<string | null>('tono_user_avatar', () => null)
 const imageLoadError = ref(false)
 
 const isDiscoverActive = computed(() => route.path === '/Artisthome')
-const isArtistsActive = computed(() => route.path.startsWith('/UserNavArtists'))
-const isEventsActive = computed(() => route.path.startsWith('/UserNavEvents'))
+const isArtistsActive = computed(() => route.path.startsWith('/ArtistNavArtists') || route.path.startsWith('/UserNavArtists'))
+const isEventsActive = computed(() => route.path.startsWith('/ArtistNavEvents') || route.path.startsWith('/UserNavEvents'))
 const isProfileActive = computed(() => route.path.toLowerCase() === '/artistprofile')
 
 const loadAvatar = async () => {
@@ -86,7 +86,7 @@ const handleLogout = async () => {
         </button>
 
         <button
-          @click="navigateTo('/UserNavArtists')"
+          @click="navigateTo('/ArtistNavArtists')"
           class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"
           :class="isArtistsActive
             ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
@@ -95,7 +95,7 @@ const handleLogout = async () => {
         </button>
 
         <button
-          @click="navigateTo('/UserNavEvents')"
+          @click="navigateTo('/ArtistNavEvents')"
           class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"
           :class="isEventsActive
             ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
@@ -158,7 +158,7 @@ const handleLogout = async () => {
       </button>
 
       <button
-        @click="navigateTo('/UserNavArtists')"
+        @click="navigateTo('/ArtistNavArtists')"
         class="py-1 px-3 text-xs font-medium transition-all duration-300 cursor-pointer"
         :class="isArtistsActive
           ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
@@ -167,7 +167,7 @@ const handleLogout = async () => {
       </button>
 
       <button
-        @click="navigateTo('/UserNavEvents')"
+        @click="navigateTo('/ArtistNavEvents')"
         class="py-1 px-3 text-xs font-medium transition-all duration-300 cursor-pointer"
         :class="isEventsActive
           ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'

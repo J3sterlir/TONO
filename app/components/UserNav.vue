@@ -6,20 +6,24 @@ const db = supabase as any
 const user = useSupabaseUser()
 const route = useRoute()
 
-// Shared cross-component avatar state across TONO
+// Shared cross-component avatar & business profile state across TONO
 const avatarUrl = useState<string | null>('tono_user_avatar', () => null)
+const hasBusinessProfile = useState<boolean>('tono_user_has_business', () => false)
 const imageLoadError = ref(false)
+
+const { fetchCurrentUserProfile } = useTonoAuth()
 
 const isDiscoverActive = computed(() => route.path === '/userhome' || route.path === '/')
 const isArtistsActive = computed(() => route.path.startsWith('/UserNavArtists'))
 const isEventsActive = computed(() => route.path.startsWith('/UserNavEvents'))
 const isProfileActive = computed(() => route.path.toLowerCase() === '/userprofile')
 
-const loadAvatar = async () => {
+const loadUserData = async () => {
   try {
     const userId = user.value?.id || (await supabase.auth.getUser()).data.user?.id
     if (!userId) return
 
+    // 1. Load User Avatar
     const { data, error } = await db
       .from('USER_ACCOUNT')
       .select('Profile_Picture')
@@ -30,28 +34,34 @@ const loadAvatar = async () => {
       avatarUrl.value = data.Profile_Picture
       imageLoadError.value = false
     }
+
+    // 2. Check if user has an associated Business Profile
+    const profile = await fetchCurrentUserProfile(userId)
+    hasBusinessProfile.value = !!profile?.businessProfile
   } catch (e) {
     // Non-blocking
   }
 }
 
 onMounted(() => {
-  loadAvatar()
+  loadUserData()
 })
 
 watch(
   () => user.value?.id,
   (newId) => {
     if (newId) {
-      loadAvatar()
+      loadUserData()
     } else {
       avatarUrl.value = null
+      hasBusinessProfile.value = false
     }
   }
 )
 
 const handleLogout = async () => {
   avatarUrl.value = null
+  hasBusinessProfile.value = false
   await supabase.auth.signOut()
   await navigateTo('/Login')
 }
@@ -106,6 +116,16 @@ const handleLogout = async () => {
 
       <!-- Right Actions -->
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+        <!-- Switch to Business Suite (Only shown if user has a business in their profile) -->
+        <button
+          v-if="hasBusinessProfile"
+          @click="navigateTo('/BusinessDash')"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1E1E24] hover:bg-[#D0D4F7]/15 border border-[#3A3A3C] hover:border-[#D0D4F7]/60 text-xs font-semibold text-[#D0D4F7] transition-all duration-300 cursor-pointer shadow-sm group shrink-0"
+          title="Switch to Business Suite">
+          <Icon name="ic:baseline-storefront" class="text-base text-[#D0D4F7] group-hover:scale-110 transition-transform shrink-0" />
+          <span class="hidden md:inline font-Sora">Business Suite</span>
+        </button>
+
         <!-- Notification Icon -->
         <button
           class="flex items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-white/5"
@@ -173,6 +193,15 @@ const handleLogout = async () => {
           ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
           : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7]'">
         Events
+      </button>
+
+      <!-- Mobile Business Suite Switcher -->
+      <button
+        v-if="hasBusinessProfile"
+        @click="navigateTo('/BusinessDash')"
+        class="py-1 px-2.5 text-xs font-semibold transition-all duration-300 cursor-pointer text-[#D0D4F7] flex items-center gap-1 bg-[#1E1E24] border border-[#3A3A3C] rounded-lg">
+        <Icon name="ic:baseline-storefront" class="text-sm" />
+        <span>Business</span>
       </button>
     </div>
   </nav>

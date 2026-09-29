@@ -19,6 +19,17 @@ const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 // Share Toast notification state
 const isCopied = ref(false)
 
+// Direct Booking Modal & Toast State
+const isBookingModalOpen = ref(false)
+const bookingSuccessToast = ref('')
+
+const handleBookingSubmit = (payload: any) => {
+  bookingSuccessToast.value = `Booking contract offer ${payload?.Contract_Code || ''} sent to ${displayName.value}!`
+  setTimeout(() => {
+    bookingSuccessToast.value = ''
+  }, 5000)
+}
+
 // ---------------------------------------------------------------------------
 // 1. SSR Public Data Fetching via useAsyncData
 // ---------------------------------------------------------------------------
@@ -497,9 +508,11 @@ const handleShareProfile = async () => {
               <span>{{ artistCity }}{{ artistBarangay ? ' • ' + artistBarangay : '' }}</span>
             </div>
 
-            <div class="flex items-center px-6 py-2.5 bg-[#B4B8DA] text-[#151A34] gap-2 rounded-full mt-3 font-Geist cursor-pointer ">
-              <Icon name="ic:baseline-calendar-today" class="text-sm" />
-              <button class="font-medium">BOOK</button>
+            <div
+              @click="isBookingModalOpen = true"
+              class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full mt-3 font-Geist cursor-pointer transition-colors shadow-md group">
+              <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
+              <button class="font-medium cursor-pointer">BOOK</button>
             </div>
           </div>
 
@@ -654,7 +667,12 @@ const handleShareProfile = async () => {
 
         <!-- 2. Calendar Tab Content Container -->
         <div v-else-if="activeTab === 'calendar'" class="w-full">
+          <ArtistGigCalendar
+            v-if="artistRecord?.ARTIST_ID"
+            :artist-id="artistRecord.ARTIST_ID"
+            :is-owner="isOwner" />
           <div
+            v-else
             class="w-full min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
             <div
               class="w-14 h-14 rounded-full bg-[#1E1E24] border border-[#46464D]/50 flex items-center justify-center mb-4">
@@ -662,7 +680,7 @@ const handleShareProfile = async () => {
             </div>
             <h3 class="font-Sora text-lg font-semibold text-white mb-2">Gig & Performance Schedule</h3>
             <p class="text-sm text-gray-400 max-w-md">
-              Upcoming tour dates, club sets, and festival appearances for {{ displayName }} will be displayed here.
+              Gig schedule is currently unavailable.
             </p>
           </div>
         </div>
@@ -863,6 +881,36 @@ const handleShareProfile = async () => {
           </div>
         </div>
       </main>
+
+      <!-- Direct Booking Modal Component -->
+      <DirectBookingModal
+        :is-open="isBookingModalOpen"
+        :artist-id="artistRecord?.ARTIST_ID"
+        :artist-name="displayName"
+        :artist-avatar="profilePicture"
+        :artist-type="artistTypeLabel"
+        @close="isBookingModalOpen = false"
+        @submit="handleBookingSubmit" />
+
+      <!-- Booking Success Toast Notification -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition duration-300 ease-out"
+          enter-from-class="transform translate-y-4 opacity-0"
+          enter-to-class="transform translate-y-0 opacity-100"
+          leave-active-class="transition duration-200 ease-in"
+          leave-from-class="transform translate-y-0 opacity-100"
+          leave-to-class="transform translate-y-4 opacity-0">
+          <div
+            v-if="bookingSuccessToast"
+            class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 bg-[#161619] border border-emerald-500/50 rounded-2xl shadow-2xl text-emerald-300 font-Sora text-sm">
+            <div class="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <Icon name="ic:round-check" class="text-lg text-emerald-400" />
+            </div>
+            <p class="font-medium">{{ bookingSuccessToast }}</p>
+          </div>
+        </Transition>
+      </Teleport>
     </div>
   </div>
 </template>

@@ -156,7 +156,7 @@ const checkPasswordMatch = () => {
         <div class="relative" :class="{'cursor-pointer': props.form.city, 'cursor-not-allowed opacity-50': !props.form.city}" 
              @click="props.form.city ? (isBarangayOpen = !isBarangayOpen, isCityOpen = false) : null">
           <Icon name="ic:round-home" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D] pointer-events-none" />
-          <div class="placeholder:text-sm w-full pl-12 p-2 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] flex items-center justify-between">
+          <div class="placeholder:text-sm w-full pl-12 p-2 rounded-md bg-[#1E1E20] truncate text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] flex items-center justify-between">
             <span :class="{'text-gray-400': !props.form.barangay}">{{ props.form.barangay || (props.form.city ? 'Select Barangay' : 'Select a City') }}</span>
             <Icon name="ic:baseline-keyboard-arrow-down" class="text-[#7A7A7D] text-xl" />
           </div>
