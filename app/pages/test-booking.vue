@@ -123,7 +123,7 @@
                             <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">BUSINESS
                                 ACCOUNT</span>
                             <p class="text-base sm:text-[18px] font-medium text-[#E5E1E4]">{{ contract1Form.businessName
-                                }}</p>
+                            }}</p>
                         </div>
                         <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                             <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">REQUESTER
@@ -135,7 +135,7 @@
                             <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">ARTIST
                                 ACCOUNT</span>
                             <p class="text-base sm:text-[18px] font-medium text-[#E5E1E4]">{{ contract1Form.artistName
-                                }}</p>
+                            }}</p>
                         </div>
                         <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                             <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">JOB ID</span>
@@ -173,7 +173,8 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 font-Sora">
                         <div class="grid grid-cols-2 gap-3">
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
-                                <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START DATE</span>
+                                <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START
+                                    DATE</span>
                                 <div class="relative flex items-center">
                                     <input type="date" v-model="contract1Form.startDate"
                                         class="bg-transparent border-0 outline-none text-[#E5E1E4] block w-full text-base font-medium cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
@@ -199,8 +200,10 @@
                         <div class="grid grid-cols-2 gap-3 sm:gap-4">
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
-                                    <span v-if="contract1Form.startTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(contract1Form.startTime) }}</span>
+                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START
+                                        TIME</span>
+                                    <span v-if="contract1Form.startTime" class="text-xs text-[#D0D4F7] font-medium">{{
+                                        formatTime12(contract1Form.startTime) }}</span>
                                 </div>
                                 <div class="relative flex items-center">
                                     <input type="time" v-model="contract1Form.startTime"
@@ -214,8 +217,10 @@
 
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END TIME</span>
-                                    <span v-if="contract1Form.endTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(contract1Form.endTime) }}</span>
+                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END
+                                        TIME</span>
+                                    <span v-if="contract1Form.endTime" class="text-xs text-[#D0D4F7] font-medium">{{
+                                        formatTime12(contract1Form.endTime) }}</span>
                                 </div>
                                 <div class="relative flex items-center">
                                     <input type="time" v-model="contract1Form.endTime"
@@ -257,7 +262,7 @@
                                     LINEUP</span>
                                 <span v-if="contract1SongLineupList.length" class="text-[11px] font-mono text-gray-400">
                                     {{ contract1SongLineupList.length }} {{ contract1SongLineupList.length === 1 ?
-                                    'song' : 'songs' }}
+                                        'song' : 'songs' }}
                                 </span>
                             </div>
 
@@ -445,8 +450,12 @@
                             <div class="grid grid-cols-2 gap-3 sm:gap-4">
                                 <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
-                                        <span v-if="artistContractForm.startTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(artistContractForm.startTime) }}</span>
+                                        <span
+                                            class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START
+                                            TIME</span>
+                                        <span v-if="artistContractForm.startTime"
+                                            class="text-xs text-[#D0D4F7] font-medium">{{
+                                            formatTime12(artistContractForm.startTime) }}</span>
                                     </div>
                                     <div class="relative flex items-center">
                                         <input type="time" v-model="artistContractForm.startTime"
@@ -460,8 +469,11 @@
 
                                 <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END TIME</span>
-                                        <span v-if="artistContractForm.endTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(artistContractForm.endTime) }}</span>
+                                        <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END
+                                            TIME</span>
+                                        <span v-if="artistContractForm.endTime"
+                                            class="text-xs text-[#D0D4F7] font-medium">{{
+                                            formatTime12(artistContractForm.endTime) }}</span>
                                     </div>
                                     <div class="relative flex items-center">
                                         <input type="time" v-model="artistContractForm.endTime"
@@ -498,7 +510,7 @@
                                 LINEUP</span>
                             <span v-if="artistSongLineupList.length" class="text-[11px] font-mono text-gray-400">
                                 {{ artistSongLineupList.length }} {{ artistSongLineupList.length === 1 ? 'song' :
-                                'songs' }}
+                                    'songs' }}
                             </span>
                         </div>
 
@@ -691,9 +703,10 @@
                     <!-- Row 2: Timing & Schedule -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 font-Sora">
                         <!-- Gig Date -->
-<div class="grid grid-cols-2 gap-3">
+                        <div class="grid grid-cols-2 gap-3">
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
-                                <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START DATE</span>
+                                <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START
+                                    DATE</span>
                                 <div class="relative flex items-center">
                                     <input type="date" v-model="contract1Form.startDate"
                                         class="bg-transparent border-0 outline-none text-[#E5E1E4] block w-full text-base font-medium cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
@@ -721,8 +734,10 @@
                         <div class="grid grid-cols-2 gap-3 sm:gap-4">
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
-                                    <span v-if="jobListingForm.startTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(jobListingForm.startTime) }}</span>
+                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">START
+                                        TIME</span>
+                                    <span v-if="jobListingForm.startTime" class="text-xs text-[#D0D4F7] font-medium">{{
+                                        formatTime12(jobListingForm.startTime) }}</span>
                                 </div>
                                 <div class="relative flex items-center">
                                     <input type="time" v-model="jobListingForm.startTime"
@@ -736,8 +751,10 @@
 
                             <div class="flex flex-col gap-1 p-4 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END TIME</span>
-                                    <span v-if="jobListingForm.endTime" class="text-xs text-[#D0D4F7] font-medium">{{ formatTime12(jobListingForm.endTime) }}</span>
+                                    <span class="text-[11px] font-mono tracking-wider text-[#C7C5CE] uppercase">END
+                                        TIME</span>
+                                    <span v-if="jobListingForm.endTime" class="text-xs text-[#D0D4F7] font-medium">{{
+                                        formatTime12(jobListingForm.endTime) }}</span>
                                 </div>
                                 <div class="relative flex items-center">
                                     <input type="time" v-model="jobListingForm.endTime"
@@ -785,6 +802,315 @@
                 <pre
                     class="bg-black/60 p-3 rounded-xl text-xs font-mono text-[#D0D4F7] overflow-x-auto">{{ JSON.stringify(lastSubmittedJobListing, null, 2) }}</pre>
             </div>
+
+            
+            <!-- ==================================================== -->
+            <!-- Notifications Panel Sandbox Component                -->
+            <!-- ==================================================== -->
+            <div class="w-full max-w-105 bg-[#1C1C1F] border border-[#2A2A2E] rounded-3xl shadow-2xl overflow-hidden font-Sora flex flex-col transition-all">
+                <!-- Panel Header -->
+                <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-[#2A2A2E]/60">
+                    <div class="flex items-center gap-2.5">
+                        <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                            Notifications
+                        </h2>
+                        <span v-if="unreadCount > 0" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-[#D0D4F7]/15 text-[#D0D4F7] border border-[#D0D4F7]/30">
+                            {{ unreadCount }} new
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        @click="markAllAsRead"
+                        class="text-xs font-medium text-[#D0D4F7] hover:text-white hover:underline transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        :disabled="unreadCount === 0">
+                        Mark all as read
+                    </button>
+                </div>
+
+                <!-- Filter Tabs: All vs Unread -->
+                <div class="flex items-center gap-2 px-5 py-3 border-b border-[#2A2A2E]/40">
+                    <button
+                        type="button"
+                        @click="notificationFilter = 'All'"
+                        class="px-4 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5"
+                        :class="notificationFilter === 'All' 
+                            ? 'bg-[#D0D4F7]/20 border-[#D0D4F7]/50 text-[#D0D4F7] font-semibold shadow-sm' 
+                            : 'bg-transparent border-transparent text-gray-400 hover:text-white hover:bg-white/5'">
+                        <span>All</span>
+                        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-white/10">{{ notificationsList.length }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        @click="notificationFilter = 'Unread'"
+                        class="px-4 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5"
+                        :class="notificationFilter === 'Unread' 
+                            ? 'bg-[#D0D4F7]/20 border-[#D0D4F7]/50 text-[#D0D4F7] font-semibold shadow-sm' 
+                            : 'bg-transparent border-transparent text-gray-400 hover:text-white hover:bg-white/5'">
+                        <span>Unread</span>
+                        <span v-if="unreadCount > 0" class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#D0D4F7]/30 text-[#D0D4F7] font-bold">{{ unreadCount }}</span>
+                    </button>
+                </div>
+
+                <!-- Notifications Feed (Scrollable) -->
+                <div class="flex flex-col gap-4 p-4 overflow-y-auto max-h-145 scrollbar-thin scrollbar-thumb-[#2A2A2E]">
+                    <!-- Empty State -->
+                    <div v-if="filteredNotifications.length === 0" class="py-12 text-center space-y-2">
+                        <Icon name="ic:outline-notifications-off" class="text-3xl text-gray-500 mx-auto" />
+                        <p class="text-sm font-semibold text-white">No notifications found</p>
+                        <p class="text-xs text-gray-400">You're all caught up with your updates.</p>
+                    </div>
+
+                    <!-- SECTION 1: New Notifications -->
+                    <div v-if="newNotifications.length > 0" class="space-y-2.5">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-mono font-semibold uppercase tracking-wider text-gray-300">
+                                New
+                            </span>
+                            <span class="text-[11px] font-mono text-gray-400">
+                                {{ newNotifications.length }} updates
+                            </span>
+                        </div>
+
+                        <div
+                            v-for="item in newNotifications"
+                            :key="item.id"
+                            @click="item.isUnread = false"
+                            class="flex items-start gap-3.5 p-3 rounded-2xl transition-all duration-200 group relative cursor-pointer"
+                            :class="item.isUnread 
+                                ? 'bg-[#222228] border border-[#3A3A42] hover:border-[#D0D4F7]/40 shadow-sm' 
+                                : 'bg-[#18181B]/60 hover:bg-[#202024] border border-transparent hover:border-[#2A2A2E]'">
+                            <!-- Avatar with Figma Corner Badge -->
+                            <div class="w-12 h-12 shrink-0 relative">
+                                <svg viewBox="0 0 63 63" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 shrink-0">
+                                    <circle cx="31.5" cy="31.5" r="31.5" fill="#2E2E38"></circle>
+                                    <text x="31.5" y="36" text-anchor="middle" font-size="14" fill="#8E8E9A" font-family="monospace" font-weight="bold">
+                                        {{ item.avatarText || 'TONO' }}
+                                    </text>
+
+                                    <!-- Badge 1: Band Invite (Violet Gradient) -->
+                                    <template v-if="item.svgType === 'band_invite'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_band_invite)"></circle>
+                                        <mask id="mask_band_invite" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_band_invite)">
+                                            <path d="M50.375 49.9605C50.7375 49.5605 51.0156 49.1043 51.2094 48.5918C51.4031 48.0793 51.5 47.548 51.5 46.998C51.5 46.448 51.4031 45.9168 51.2094 45.4043C51.0156 44.8918 50.7375 44.4355 50.375 44.0355C51.125 44.1355 51.75 44.4668 52.25 45.0293C52.75 45.5918 53 46.248 53 46.998C53 47.748 52.75 48.4043 52.25 48.9668C51.75 49.5293 51.125 49.8605 50.375 49.9605ZM54.5 55.998V53.748C54.5 53.298 54.4 52.8699 54.2 52.4637C54 52.0574 53.7375 51.698 53.4125 51.3855C54.05 51.6105 54.6406 51.9012 55.1844 52.2574C55.7281 52.6137 56 53.1105 56 53.748V55.998H54.5ZM56 50.748V49.248H54.5V47.748H56V46.248H57.5V47.748H59V49.248H57.5V50.748H56ZM44.8813 49.1168C44.2938 48.5293 44 47.823 44 46.998C44 46.173 44.2938 45.4668 44.8813 44.8793C45.4688 44.2918 46.175 43.998 47 43.998C47.825 43.998 48.5313 44.2918 49.1188 44.8793C49.7063 45.4668 50 46.173 50 46.998C50 47.823 49.7063 48.5293 49.1188 49.1168C48.5313 49.7043 47.825 49.998 47 49.998C46.175 49.998 45.4688 49.7043 44.8813 49.1168ZM41 55.998V53.898C41 53.473 41.1094 53.0824 41.3281 52.7262C41.5469 52.3699 41.8375 52.098 42.2 51.9105C42.975 51.523 43.7625 51.2324 44.5625 51.0387C45.3625 50.8449 46.175 50.748 47 50.748C47.825 50.748 48.6375 50.8449 49.4375 51.0387C50.2375 51.2324 51.025 51.523 51.8 51.9105C52.1625 52.098 52.4531 52.3699 52.6719 52.7262C52.8906 53.0824 53 53.473 53 53.898V55.998H41ZM47 48.498C47.4125 48.498 47.7656 48.3512 48.0594 48.0574C48.3531 47.7637 48.5 47.4105 48.5 46.998C48.5 46.5855 48.3531 46.2324 48.0594 45.9387C47.7656 45.6449 47.4125 45.498 47 45.498C46.5875 45.498 46.2344 45.6449 45.9406 45.9387C45.6469 46.2324 45.5 46.5855 45.5 46.998C45.5 47.4105 45.6469 47.7637 45.9406 48.0574C46.2344 48.3512 46.5875 48.498 47 48.498ZM42.5 54.498H51.5V53.898C51.5 53.7605 51.4656 53.6355 51.3969 53.523C51.3281 53.4105 51.2375 53.323 51.125 53.2605C50.45 52.923 49.7688 52.6699 49.0813 52.5012C48.3938 52.3324 47.7 52.248 47 52.248C46.3 52.248 45.6063 52.3324 44.9188 52.5012C44.2313 52.6699 43.55 52.923 42.875 53.2605C42.7625 53.323 42.6719 53.4105 42.6031 53.523C42.5344 53.6355 42.5 53.7605 42.5 53.898V54.498Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge 2: Contract Cancelled (Red Gradient) -->
+                                    <template v-else-if="item.svgType === 'contract_cancel'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_contract_cancel)"></circle>
+                                        <mask id="mask_contract_cancel" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_contract_cancel)">
+                                            <path d="M55.25 55.5688L53.6562 57.1437L52.6063 56.0938L54.1812 54.5L52.6063 52.9062L53.6562 51.8563L55.25 53.4312L56.8438 51.8563L57.8937 52.9062L56.3188 54.5L57.8937 56.0938L56.8438 57.1437L55.25 55.5688ZM45.5 57.5C44.875 57.5 44.3438 57.2813 43.9062 56.8438C43.4687 56.4062 43.25 55.875 43.25 55.25V53H45.5V42.5H56.75V50.2812C56.5125 50.1937 56.2687 50.1281 56.0187 50.0844C55.7687 50.0406 55.5125 50.0188 55.25 50.0188V44H47V53H51.0125C50.925 53.2375 50.8594 53.4813 50.8156 53.7313C50.7719 53.9813 50.75 54.2375 50.75 54.5H44.75V55.25C44.75 55.4625 44.8219 55.6406 44.9656 55.7844C45.1094 55.9281 45.2875 56 45.5 56H51.0125C51.1125 56.2875 51.2375 56.5563 51.3875 56.8063C51.5375 57.0563 51.7125 57.2875 51.9125 57.5H45.5ZM47.75 47.75V46.25H54.5V47.75H47.75ZM47.75 50V48.5H54.5V50H47.75Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge 3: Schedule Update (Orange Gradient) -->
+                                    <template v-else-if="item.svgType === 'schedule_update'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_schedule_update)"></circle>
+                                        <mask id="mask_schedule_update" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_schedule_update)">
+                                            <path d="M44.75 57.5C44.3375 57.5 43.9844 57.3531 43.6906 57.0594C43.3969 56.7656 43.25 56.4125 43.25 56V45.5C43.25 45.0875 43.3969 44.7344 43.6906 44.4406C43.9844 44.1469 44.3375 44 44.75 44H45.5V42.5H47V44H53V42.5H54.5V44H55.25C55.6625 44 56.0156 44.1469 56.3094 44.4406C56.6031 44.7344 56.75 45.0875 56.75 45.5V49.25H55.25V48.5H44.75V56H50V57.5H44.75ZM44.75 47H55.25V45.5H44.75V47ZM51.5 57.5V55.1938L55.6437 51.0688C55.7562 50.9563 55.8812 50.875 56.0187 50.825C56.1562 50.775 56.2938 50.75 56.4313 50.75C56.5813 50.75 56.725 50.7781 56.8625 50.8344C57 50.8906 57.125 50.975 57.2375 51.0875L57.9313 51.7812C58.0313 51.8938 58.1094 52.0187 58.1656 52.1562C58.2219 52.2938 58.25 52.4313 58.25 52.5688C58.25 52.7063 58.225 52.8469 58.175 52.9906C58.125 53.1344 58.0438 53.2625 57.9313 53.375L53.8062 57.5H51.5ZM52.625 56.375H53.3375L55.6063 54.0875L55.2687 53.7313L54.9125 53.3938L52.625 55.6625V56.375ZM55.2687 53.7313L54.9125 53.3938L55.6063 54.0875L55.2687 53.7313Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge 4: Contract Offer (Violet Gradient) -->
+                                    <template v-else-if="item.svgType === 'contract_offer'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_contract_offer)"></circle>
+                                        <mask id="mask_contract_offer" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_contract_offer)">
+                                            <path d="M47.75 47.75V46.25H54.5V47.75H47.75ZM47.75 50V48.5H54.5V50H47.75ZM50 57.5H45.5C44.875 57.5 44.3438 57.2813 43.9062 56.8438C43.4687 56.4062 43.25 55.875 43.25 55.25V53H45.5V42.5H56.75V49.2688C56.5 49.2438 56.2469 49.2531 55.9906 49.2969C55.7344 49.3406 55.4875 49.4187 55.25 49.5312V44H47V53H51.5L50 54.5H44.75V55.25C44.75 55.4625 44.8219 55.6406 44.9656 55.7844C45.1094 55.9281 45.2875 56 45.5 56H50V57.5ZM51.5 57.5V55.1938L55.6437 51.0688C55.7562 50.9563 55.8812 50.875 56.0187 50.825C56.1562 50.775 56.2938 50.75 56.4313 50.75C56.5813 50.75 56.725 50.7781 56.8625 50.8344C57 50.8906 57.125 50.975 57.2375 51.0875L57.9313 51.7812C58.0313 51.8938 58.1094 52.0187 58.1656 52.1562C58.2219 52.2938 58.25 52.4313 58.25 52.5688C58.25 52.7063 58.225 52.8469 58.175 52.9906C58.125 53.1344 58.0438 53.2625 57.9313 53.375L53.8062 57.5H51.5ZM52.625 56.375H53.3375L55.6063 54.0875L55.2687 53.7313L54.9125 53.3938L52.625 55.6625V56.375ZM55.2687 53.7313L54.9125 53.3938L55.6063 54.0875L55.2687 53.7313Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge 5: Job Posted (Violet Gradient) -->
+                                    <template v-else-if="item.svgType === 'job_posted'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_job_posted)"></circle>
+                                        <mask id="mask_job_posted" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_job_posted)">
+                                            <path d="M53.75 57.5V55.25H51.5V53.75H53.75V51.5H55.25V53.75H57.5V55.25H55.25V57.5H53.75ZM44.75 56C44.3375 56 43.9844 55.8531 43.6906 55.5594C43.3969 55.2656 43.25 54.9125 43.25 54.5V45.5C43.25 45.0875 43.3969 44.7344 43.6906 44.4406C43.9844 44 44.75 44 44.75 44H45.5V42.5H47V44H51.5V42.5H53V44H53.75C54.1625 44 54.5156 44.1469 54.8094 44.4406C55.1031 44.7344 55.25 45.0875 55.25 45.5V50.075C55 50.0375 54.75 50.0188 54.5 50.0188C54.25 50.0188 54 50.0375 53.75 50.075V48.5H44.75V54.5H50C50 54.75 50.0187 55 50.0562 55.25C50.0937 55.5 50.1625 55.75 50.2625 56H44.75ZM44.75 47H53.75V45.5H44.75V47Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge 6: Booking Cancelled (Red Gradient) -->
+                                    <template v-else-if="item.svgType === 'booking_cancel'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_booking_cancel)"></circle>
+                                        <mask id="mask_booking_cancel" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_booking_cancel)">
+                                            <path d="M47.3 53.75L50 51.05L52.7 53.75L53.75 52.7L51.05 50L53.75 47.3L52.7 46.25L50 48.95L47.3 46.25L46.25 47.3L48.95 50L46.25 52.7L47.3 53.75ZM44.75 56.75C44.3375 56.75 43.9844 56.6031 43.6906 56.3094C43.3969 56.0156 43.25 55.6625 43.25 55.25V44.75C43.25 44.3375 43.3969 43.9844 43.6906 43.6906C43.9844 43.3969 44.3375 43.25 44.75 43.25H55.25C55.6625 43.25 56.0156 43.3969 56.3094 43.6906C56.6031 43.9844 56.75 44.3375 56.75 44.75V55.25C56.75 55.6625 56.6031 56.0156 56.3094 56.3094C56.0156 56.6031 55.6625 56.75 55.25 56.75H44.75ZM44.75 55.25H55.25V44.75H44.75V55.25Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Gradients Definition -->
+                                    <defs>
+                                        <linearGradient id="paint0_linear_band_invite" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#585F9C"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                        <linearGradient id="paint0_linear_contract_cancel" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#FF282C"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                        <linearGradient id="paint0_linear_schedule_update" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#FF8800"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                        <linearGradient id="paint0_linear_contract_offer" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#585F9C"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                        <linearGradient id="paint0_linear_job_posted" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#585F9C"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                        <linearGradient id="paint0_linear_booking_cancel" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                                            <stop stop-color="#FF282C"></stop>
+                                            <stop offset="1" stop-color="#D0D4F7"></stop>
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                            </div>
+
+                            <!-- Content Details -->
+                            <div class="flex-1 min-w-0 space-y-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="text-sm font-medium text-white leading-snug">
+                                        {{ item.title }}
+                                    </p>
+                                    <span v-if="item.isUnread" class="w-2 h-2 rounded-full bg-[#D0D4F7] shadow-[0_0_8px_#D0D4F7] shrink-0 mt-1"></span>
+                                </div>
+                                <p v-if="item.subtitle" class="text-xs text-gray-400 leading-relaxed line-clamp-2">
+                                    {{ item.subtitle }}
+                                </p>
+                                <span class="text-[11px] text-gray-400 font-mono block pt-0.5">
+                                    {{ item.time }}
+                                </span>
+
+                                <!-- Action Buttons (Accept / Decline, Review, etc.) -->
+                                <div v-if="item.hasActions" class="flex items-center gap-2 pt-1.5">
+                                    <button
+                                        v-if="item.actionPrimary"
+                                        type="button"
+                                        @click.stop="handleNotificationAction(item, 'primary')"
+                                        class="px-3.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7] transition-all cursor-pointer shadow-sm active:scale-95">
+                                        {{ item.actionPrimary }}
+                                    </button>
+                                    <button
+                                        v-if="item.actionSecondary"
+                                        type="button"
+                                        @click.stop="handleNotificationAction(item, 'secondary')"
+                                        class="px-3 py-1 rounded-lg text-xs font-medium bg-[#2A2A2E] hover:bg-[#38383E] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95">
+                                        {{ item.actionSecondary }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 2: Earlier Notifications -->
+                    <div v-if="earlierNotifications.length > 0" class="space-y-2.5 pt-1">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-mono font-semibold uppercase tracking-wider text-gray-400">
+                                Earlier
+                            </span>
+                            <span class="text-[11px] font-mono text-gray-400">
+                                {{ earlierNotifications.length }} items
+                            </span>
+                        </div>
+
+                        <div
+                            v-for="item in earlierNotifications"
+                            :key="item.id"
+                            @click="item.isUnread = false"
+                            class="flex items-start gap-3.5 p-3 rounded-2xl transition-all duration-200 group relative cursor-pointer"
+                            :class="item.isUnread 
+                                ? 'bg-[#222228] border border-[#3A3A42] hover:border-[#D0D4F7]/40 shadow-sm' 
+                                : 'bg-[#18181B]/60 hover:bg-[#202024] border border-transparent hover:border-[#2A2A2E]'">
+                            <!-- Avatar with Figma Corner Badge -->
+                            <div class="w-12 h-12 shrink-0 relative">
+                                <svg viewBox="0 0 63 63" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 shrink-0">
+                                    <circle cx="31.5" cy="31.5" r="31.5" fill="#2E2E38"></circle>
+                                    <text x="31.5" y="36" text-anchor="middle" font-size="14" fill="#8E8E9A" font-family="monospace" font-weight="bold">
+                                        {{ item.avatarText || 'TONO' }}
+                                    </text>
+
+                                    <!-- Badge: Schedule Update (Orange Gradient) -->
+                                    <template v-if="item.svgType === 'schedule_update'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_schedule_update)"></circle>
+                                        <mask id="mask_schedule_update_earlier" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_schedule_update_earlier)">
+                                            <path d="M44.75 57.5C44.3375 57.5 43.9844 57.3531 43.6906 57.0594C43.3969 56.7656 43.25 56.4125 43.25 56V45.5C43.25 45.0875 43.3969 44.7344 43.6906 44.4406C43.9844 44.1469 44.3375 44 44.75 44H45.5V42.5H47V44H53V42.5H54.5V44H55.25C55.6625 44 56.0156 44.1469 56.3094 44.4406C56.6031 44.7344 56.75 45.0875 56.75 45.5V49.25H55.25V48.5H44.75V56H50V57.5H44.75ZM44.75 47H55.25V45.5H44.75V47ZM51.5 57.5V55.1938L55.6437 51.0688C55.7562 50.9563 55.8812 50.875 56.0187 50.825C56.1562 50.775 56.2938 50.75 56.4313 50.75C56.5813 50.75 56.725 50.7781 56.8625 50.8344C57 50.8906 57.125 50.975 57.2375 51.0875L57.9313 51.7812C58.0313 51.8938 58.1094 52.0187 58.1656 52.1562C58.2219 52.2938 58.25 52.4313 58.25 52.5688C58.25 52.7063 58.225 52.8469 58.175 52.9906C58.125 53.1344 58.0438 53.2625 57.9313 53.375L53.8062 57.5H51.5ZM52.625 56.375H53.3375L55.6063 54.0875L55.2687 53.7313L54.9125 53.3938L52.625 55.6625V56.375ZM55.2687 53.7313L54.9125 53.3938L55.6063 54.0875L55.2687 53.7313Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge: Job Posted (Violet Gradient) -->
+                                    <template v-else-if="item.svgType === 'job_posted'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_job_posted)"></circle>
+                                        <mask id="mask_job_posted_earlier" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_job_posted_earlier)">
+                                            <path d="M53.75 57.5V55.25H51.5V53.75H53.75V51.5H55.25V53.75H57.5V55.25H55.25V57.5H53.75ZM44.75 56C44.3375 56 43.9844 55.8531 43.6906 55.5594C43.3969 55.2656 43.25 54.9125 43.25 54.5V45.5C43.25 45.0875 43.3969 44.7344 43.6906 44.4406C43.9844 44 44.75 44 44.75 44H45.5V42.5H47V44H51.5V42.5H53V44H53.75C54.1625 44 54.5156 44.1469 54.8094 44.4406C55.1031 44.7344 55.25 45.0875 55.25 45.5V50.075C55 50.0375 54.75 50.0188 54.5 50.0188C54.25 50.0188 54 50.0375 53.75 50.075V48.5H44.75V54.5H50C50 54.75 50.0187 55 50.0562 55.25C50.0937 55.5 50.1625 55.75 50.2625 56H44.75ZM44.75 47H53.75V45.5H44.75V47Z" fill="white"></path>
+                                        </g>
+                                    </template>
+
+                                    <!-- Badge: Booking Cancelled (Red Gradient) -->
+                                    <template v-else-if="item.svgType === 'booking_cancel'">
+                                        <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_booking_cancel)"></circle>
+                                        <mask id="mask_booking_cancel_earlier" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
+                                            <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
+                                        </mask>
+                                        <g mask="url(#mask_booking_cancel_earlier)">
+                                            <path d="M47.3 53.75L50 51.05L52.7 53.75L53.75 52.7L51.05 50L53.75 47.3L52.7 46.25L50 48.95L47.3 46.25L46.25 47.3L48.95 50L46.25 52.7L47.3 53.75ZM44.75 56.75C44.3375 56.75 43.9844 56.6031 43.6906 56.3094C43.3969 56.0156 43.25 55.6625 43.25 55.25V44.75C43.25 44.3375 43.3969 43.9844 43.6906 43.6906C43.9844 43.3969 44.3375 43.25 44.75 43.25H55.25C55.6625 43.25 56.0156 43.3969 56.3094 43.6906C56.6031 43.9844 56.75 44.3375 56.75 44.75V55.25C56.75 55.6625 56.6031 56.0156 56.3094 56.3094C56.0156 56.6031 55.6625 56.75 55.25 56.75H44.75ZM44.75 55.25H55.25V44.75H44.75V55.25Z" fill="white"></path>
+                                        </g>
+                                    </template>
+                                </svg>
+                            </div>
+
+                            <!-- Content Details -->
+                            <div class="flex-1 min-w-0 space-y-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="text-sm font-medium text-white leading-snug">
+                                        {{ item.title }}
+                                    </p>
+                                    <span v-if="item.isUnread" class="w-2 h-2 rounded-full bg-[#D0D4F7] shadow-[0_0_8px_#D0D4F7] shrink-0 mt-1"></span>
+                                </div>
+                                <p v-if="item.subtitle" class="text-xs text-gray-400 leading-relaxed line-clamp-2">
+                                    {{ item.subtitle }}
+                                </p>
+                                <span class="text-[11px] text-gray-400 font-mono block pt-0.5">
+                                    {{ item.time }}
+                                </span>
+
+                                <!-- Action Button -->
+                                <div v-if="item.hasActions" class="flex items-center gap-2 pt-1.5">
+                                    <button
+                                        v-if="item.actionPrimary"
+                                        type="button"
+                                        @click.stop="handleNotificationAction(item, 'primary')"
+                                        class="px-3.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7] transition-all cursor-pointer shadow-sm active:scale-95">
+                                        {{ item.actionPrimary }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -799,6 +1125,150 @@ import DirectBookingModal from '~/components/DirectBookingModal.vue'
 const showModal = ref(false)
 const activeFilter = ref('All')
 const lastSubmittedBooking = ref<any>(null)
+
+// ====================================================
+// Notification Panel Sandbox State
+// ====================================================
+const notificationFilter = ref<'All' | 'Unread'>('All')
+
+interface NotificationItem {
+    id: string
+    title: string
+    subtitle?: string
+    time: string
+    isUnread: boolean
+    category: 'new' | 'earlier'
+    type: string
+    svgType: string
+    avatarText?: string
+    hasActions?: boolean
+    actionPrimary?: string
+    actionSecondary?: string
+}
+
+const notificationsList = ref<NotificationItem[]>([
+    {
+        id: 'n1',
+        title: 'The Metro Groove invited you to join Band',
+        subtitle: 'Invited as Lead Guitarist for upcoming showcase',
+        time: '1hr ago',
+        isUnread: true,
+        category: 'new',
+        type: 'band_invite',
+        svgType: 'band_invite',
+        avatarText: 'MG',
+        hasActions: true,
+        actionPrimary: 'Accept',
+        actionSecondary: 'Decline'
+    },
+    {
+        id: 'n2',
+        title: 'Contract BK-093002-2026 was cancelled',
+        subtitle: 'Skyline Lounge cancelled gig due to venue maintenance',
+        time: '2hr ago',
+        isUnread: true,
+        category: 'new',
+        type: 'contract_cancel',
+        svgType: 'contract_cancel',
+        avatarText: 'SL'
+    },
+    {
+        id: 'n3',
+        title: 'Schedule updated for "Acoustic Weekend"',
+        subtitle: 'Performance moved to 8:30 PM by Avenue Plaza',
+        time: '3hr ago',
+        isUnread: true,
+        category: 'new',
+        type: 'schedule_update',
+        svgType: 'schedule_update',
+        avatarText: 'AP',
+        hasActions: true,
+        actionPrimary: 'View Schedule'
+    },
+    {
+        id: 'n4',
+        title: 'Contract Offer received from Avenue Plaza',
+        subtitle: 'Review contract BK-093001-2026 and customize your setlist',
+        time: '5hr ago',
+        isUnread: false,
+        category: 'new',
+        type: 'contract_offer',
+        svgType: 'contract_offer',
+        avatarText: 'AP',
+        hasActions: true,
+        actionPrimary: 'Review Contract'
+    },
+    {
+        id: 'n5',
+        title: 'New Casting Call: Calle Z Restobar',
+        subtitle: 'Open gig listing for Indie/Alternative (₱10,000 budget)',
+        time: '1d ago',
+        isUnread: false,
+        category: 'earlier',
+        type: 'job_posted',
+        svgType: 'job_posted',
+        avatarText: 'CZ',
+        hasActions: true,
+        actionPrimary: 'View Job'
+    },
+    {
+        id: 'n6',
+        title: 'Venue details updated for "Summer Jam"',
+        subtitle: 'Soundcheck time confirmed for 5:00 PM at Main Stage',
+        time: '2d ago',
+        isUnread: false,
+        category: 'earlier',
+        type: 'schedule_update',
+        svgType: 'schedule_update',
+        avatarText: 'SJ'
+    },
+    {
+        id: 'n7',
+        title: 'Direct booking request withdrawn',
+        subtitle: 'Requester withdrew request for Oct 12 performance',
+        time: '3d ago',
+        isUnread: false,
+        category: 'earlier',
+        type: 'booking_cancel',
+        svgType: 'booking_cancel',
+        avatarText: 'DB'
+    }
+])
+
+const markAllAsRead = () => {
+    notificationsList.value.forEach(item => {
+        item.isUnread = false
+    })
+}
+
+const unreadCount = computed(() => notificationsList.value.filter(n => n.isUnread).length)
+
+const filteredNotifications = computed(() => {
+    if (notificationFilter.value === 'Unread') {
+        return notificationsList.value.filter(n => n.isUnread)
+    }
+    return notificationsList.value
+})
+
+const newNotifications = computed(() => filteredNotifications.value.filter(n => n.category === 'new'))
+const earlierNotifications = computed(() => filteredNotifications.value.filter(n => n.category === 'earlier'))
+
+const handleNotificationAction = (item: NotificationItem, actionType: 'primary' | 'secondary') => {
+    item.isUnread = false
+    if (actionType === 'primary') {
+        if (item.actionPrimary === 'Accept') {
+            item.hasActions = false
+            item.subtitle = '✓ Invitation accepted! Welcome to the band.'
+        } else if (item.actionPrimary === 'Review Contract') {
+            item.subtitle = 'Opening contract review modal...'
+        }
+    } else {
+        if (item.actionSecondary === 'Decline') {
+            item.hasActions = false
+            item.subtitle = 'Invitation declined.'
+        }
+    }
+}
 
 interface SongItem {
     id: string

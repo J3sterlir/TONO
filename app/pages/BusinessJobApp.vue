@@ -4,7 +4,7 @@ definePageMeta({
   middleware: ['auth', 'business']
 })
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
@@ -205,12 +205,35 @@ const handleAcceptApplicant = async (app: any) => {
     // 4. Send Notification to Artist
     const artistAccountId = app.ARTIST?.USER_ACCOUNT?.ACCOUNT_ID
     if (artistAccountId) {
-      await db.from('NOTIFICATION').insert({
-        Account_ID: artistAccountId,
-        Type: 'Contract_Offer',
-        Content: `${businessName.value} has accepted your application for '${job.Event_Title}'! Please review the contract and customize your setlist.`,
-        Action_Link: `/Artistprofile?tab=events`
-      })
+      try {
+        await db.rpc('send_notification', {
+          p_account_id: artistAccountId,
+          p_type: 'contract_offer',
+          p_title: `Contract Offer from ${businessName.value}`,
+          p_content: `${businessName.value} accepted your application for "**${job.Event_Title}**"! Please review the contract and customize your setlist.`,
+          p_action_link: `/Artistprofile?tab=events&contractId=${contractCode}`,
+          p_svg_type: 'contract_offer',
+          p_avatar_text: (businessName.value || 'Host').substring(0, 2).toUpperCase(),
+          p_action_primary: 'Review Contract',
+          p_action_secondary: null,
+          p_entity_id: null,
+          p_entity_type: 'BOOKING_CONTRACT',
+          p_metadata: { contractCode },
+          p_sender_account_id: currentAccountId.value || null
+        })
+      } catch (notifErr) {
+        await db.from('NOTIFICATION').insert({
+          Account_ID: artistAccountId,
+          Sender_Account_ID: currentAccountId.value || null,
+          Type: 'contract_offer',
+          Title: `Contract Offer from ${businessName.value}`,
+          Content: `${businessName.value} has accepted your application for "**${job.Event_Title}**"! Please review the contract and customize your setlist.`,
+          Action_Link: `/Artistprofile?tab=events&contractId=${contractCode}`,
+          Svg_Type: 'contract_offer',
+          Avatar_Text: (businessName.value || 'Host').substring(0, 2).toUpperCase(),
+          Action_Primary: 'Review Contract'
+        })
+      }
     }
 
     const artistName = app.ARTIST?.StageName?.[0]?.Artist_Name || app.ARTIST?.BandName?.[0]?.Band_Name || 'Artist'
@@ -306,8 +329,51 @@ const getArtistDisplayName = (artist: any) => {
   return artist.StageName?.[0]?.Artist_Name || artist.BandName?.[0]?.Band_Name || artist.USER_ACCOUNT?.Username || 'Performing Artist'
 }
 
-onMounted(() => {
-  fetchApplications()
+// Deep Linking from Notifications
+const checkQueryTriggers = () => {
+  const jobId = route.query.jobId as string
+  if (jobId) {
+    selectedJobFilter.value = jobId
+  }
+}
+
+watch(() => route.query.jobId, (newJobId) => {
+  if (newJobId) selectedJobFilter.value = newJobId as string
+})
+
+// Realtime Zero-Refresh: Sync incoming applications live
+let applicationsLiveChannel: any = null
+const setupRealtimeApplications = () => {
+  if (applicationsLiveChannel) return
+
+  applicationsLiveChannel = supabase
+    .channel('business-job-apps-live')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'APPLICATION'
+      },
+      async () => {
+        // Prepend new incoming applicants and update counters live without page refresh
+        await fetchApplications()
+      }
+    )
+    .subscribe()
+}
+
+onMounted(async () => {
+  checkQueryTriggers()
+  await fetchApplications()
+  setupRealtimeApplications()
+})
+
+onBeforeUnmount(() => {
+  if (applicationsLiveChannel) {
+    supabase.removeChannel(applicationsLiveChannel)
+    applicationsLiveChannel = null
+  }
 })
 </script>
 

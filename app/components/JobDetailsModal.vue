@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const supabase = useSupabaseClient()
 const db = supabase as any
+const user = useSupabaseUser()
 
 const isApplying = ref(false)
 const isWithdrawing = ref(false)
@@ -95,12 +96,34 @@ const handleApply = async () => {
     // 2. Notify business owner
     const businessAccountId = props.job.BUSINESS_PROFILE?.ACCOUNT_ID
     if (businessAccountId) {
-      await db.from('NOTIFICATION').insert({
-        Account_ID: businessAccountId,
-        Type: 'New_Job_Application',
-        Content: `An artist has applied to your open gig '${props.job.Event_Title}'!`,
-        Action_Link: `/businessjobapp?jobId=${props.job.Job_ID}`
-      })
+      try {
+        await db.rpc('send_notification', {
+          p_account_id: businessAccountId,
+          p_type: 'contract_submission',
+          p_title: `New Application for '${props.job.Event_Title}'`,
+          p_content: `An artist has applied to your open gig "**${props.job.Event_Title}**"!`,
+          p_action_link: `/BusinessJobApp?jobId=${props.job.Job_ID}`,
+          p_svg_type: 'contract_submission',
+          p_avatar_text: 'AR',
+          p_action_primary: 'Review Application',
+          p_action_secondary: null,
+          p_entity_id: props.job.Job_ID,
+          p_entity_type: 'APPLICATION',
+          p_sender_account_id: user.value?.id || null
+        })
+      } catch (notifErr) {
+        await db.from('NOTIFICATION').insert({
+          Account_ID: businessAccountId,
+          Sender_Account_ID: user.value?.id || null,
+          Type: 'contract_submission',
+          Title: `New Application for '${props.job.Event_Title}'`,
+          Content: `An artist has applied to your open gig "**${props.job.Event_Title}**"!`,
+          Action_Link: `/BusinessJobApp?jobId=${props.job.Job_ID}`,
+          Svg_Type: 'contract_submission',
+          Avatar_Text: 'AR',
+          Action_Primary: 'Review Application'
+        })
+      }
     }
 
     applySuccess.value = true

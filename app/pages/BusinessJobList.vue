@@ -200,6 +200,60 @@ const fetchBusinessAndJobs = async () => {
 const isSubmittingJob = ref(false)
 const submissionFeedback = ref<{ status: 'success' | 'error'; message: string } | null>(null)
 
+// Safe Notification Dispatcher (Calls SECURITY DEFINER RPC to bypass RLS)
+const sendNotificationSafe = async (payload: {
+  accountId: string
+  type: string
+  title: string
+  content: string
+  actionLink: string
+  svgType: string
+  avatarText: string
+  actionPrimary?: string | null
+  entityId?: string | null
+  entityType?: string | null
+  senderAccountId?: string | null
+}) => {
+  try {
+    const senderId = payload.senderAccountId || currentAccountId.value || user.value?.id || null
+    const { error: rpcErr } = await db.rpc('send_notification', {
+      p_account_id: payload.accountId,
+      p_type: payload.type,
+      p_title: payload.title,
+      p_content: payload.content,
+      p_action_link: payload.actionLink,
+      p_svg_type: payload.svgType,
+      p_avatar_text: payload.avatarText,
+      p_action_primary: payload.actionPrimary || null,
+      p_action_secondary: null,
+      p_entity_id: payload.entityId || null,
+      p_entity_type: payload.entityType || null,
+      p_metadata: {},
+      p_sender_account_id: senderId
+    })
+
+    if (!rpcErr) return
+
+    // Fallback: direct insert with Sender_Account_ID
+    await db.from('NOTIFICATION').insert({
+      Account_ID: payload.accountId,
+      Sender_Account_ID: senderId,
+      Type: payload.type,
+      Title: payload.title,
+      Content: payload.content,
+      Action_Link: payload.actionLink,
+      Svg_Type: payload.svgType,
+      Avatar_Text: payload.avatarText,
+      Action_Primary: payload.actionPrimary || null,
+      Entity_ID: payload.entityId || null,
+      Entity_Type: payload.entityType || null,
+      Is_Read: false
+    })
+  } catch (err) {
+    console.warn('Failed to dispatch notification to account:', payload.accountId, err)
+  }
+}
+
 // Save Draft to Database (JOB_LISTING with Status = 'Draft')
 const handleSaveDraft = async () => {
   if (!businessId.value) {
@@ -393,27 +447,6 @@ const handlePostJobListing = async () => {
 
             if (!syncErr) {
               syncedContractCount++
-            }
-
-            // Resolve artist account ID to notify them
-            let artistAccId = contract.ARTIST?.ACCOUNT_ID
-            if (!artistAccId && contract.Provider_Artist_ID) {
-              const { data: aRow } = await db
-                .from('ARTIST')
-                .select('ACCOUNT_ID')
-                .eq('ARTIST_ID', contract.Provider_Artist_ID)
-                .maybeSingle()
-              artistAccId = aRow?.ACCOUNT_ID
-            }
-
-            if (artistAccId) {
-              await db.from('NOTIFICATION').insert({
-                Account_ID: artistAccId,
-                Sender_Account_ID: currentAccountId.value || null,
-                Type: 'Booking_Update',
-                Content: `Details for "${jobListingForm.eventTitle}" were updated by ${businessName.value}. Please review the updated schedule and venue details.`,
-                Action_Link: '/Artistprofile?tab=events'
-              })
             }
           }
         }

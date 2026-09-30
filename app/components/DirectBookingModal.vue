@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { formatTime12 } from '~/utils/formatTime'
 
 const props = withDefaults(
   defineProps<{
@@ -54,6 +55,67 @@ const businessName = ref('Individual Client')
 const businessId = ref<string | null>(null)
 const isProfileLoaded = ref(false)
 
+// Slot Locking State (Realtime)
+const bookedDatesList = ref<string[]>([])
+let artistBookingRealtimeChannel: any = null
+
+const fetchBookedDates = async () => {
+  if (!props.artistId) {
+    bookedDatesList.value = []
+    return
+  }
+  try {
+    const { data, error } = await db
+      .from('BOOKING_CONTRACT')
+      .select('Start_Date, End_Date, Event_Date, Status')
+      .eq('Provider_Artist_ID', props.artistId)
+      .not('Status', 'in', '("Cancelled","Declined","Voided")')
+
+    if (!error && data) {
+      const dates = new Set<string>()
+      for (const row of data) {
+        if (row.Event_Date) dates.add(row.Event_Date)
+        if (row.Start_Date) dates.add(row.Start_Date)
+        if (row.End_Date) dates.add(row.End_Date)
+      }
+      bookedDatesList.value = Array.from(dates)
+    }
+  } catch (err) {
+    console.warn('Failed to fetch artist booked dates:', err)
+  }
+}
+
+const setupArtistRealtimeLock = () => {
+  if (artistBookingRealtimeChannel) {
+    supabase.removeChannel(artistBookingRealtimeChannel)
+    artistBookingRealtimeChannel = null
+  }
+  if (!props.artistId) return
+
+  artistBookingRealtimeChannel = supabase
+    .channel(`direct-booking-lock-${props.artistId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT',
+        filter: `Provider_Artist_ID=eq.${props.artistId}`
+      },
+      () => {
+        fetchBookedDates()
+      }
+    )
+    .subscribe()
+}
+
+const cleanupRealtimeChannel = () => {
+  if (artistBookingRealtimeChannel) {
+    supabase.removeChannel(artistBookingRealtimeChannel)
+    artistBookingRealtimeChannel = null
+  }
+}
+
 // Form States
 const bookingType = ref('Direct')
 const venueLocation = ref('')
@@ -67,6 +129,11 @@ const requiredEquipment = ref('')
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
+
+const isSelectedDateBooked = computed(() => {
+  if (!startDate.value) return false
+  return bookedDatesList.value.includes(startDate.value)
+})
 
 // Auto-Save Draft State
 const isDraftSaving = ref(false)
@@ -255,15 +322,34 @@ watch(
       successMessage.value = ''
       isSubmitting.value = false
       await loadUserContext()
+      await fetchBookedDates()
+      setupArtistRealtimeLock()
       loadDraft()
       await refreshContractCode()
+    } else {
+      cleanupRealtimeChannel()
     }
   },
   { immediate: true }
 )
 
+watch(
+  () => props.artistId,
+  async (newId) => {
+    if (props.isOpen && newId) {
+      await fetchBookedDates()
+      setupArtistRealtimeLock()
+    }
+  }
+)
+
+onBeforeUnmount(() => {
+  cleanupRealtimeChannel()
+})
+
 const handleCancelBooking = () => {
   clearDraft()
+  cleanupRealtimeChannel()
   emit('close')
 }
 
@@ -280,6 +366,11 @@ const handleSaveContract = async () => {
 
   if (!startDate.value) {
     errorMessage.value = 'Please select an Event Start Date.'
+    return
+  }
+
+  if (isSelectedDateBooked.value) {
+    errorMessage.value = `This artist is already booked on ${startDate.value}. Please choose a different date.`
     return
   }
 
@@ -410,8 +501,8 @@ const handleSaveContract = async () => {
             <button
               type="button"
               @click="handleSaveContract"
-              :disabled="isSubmitting"
-              class="text-xs sm:text-sm font-bold text-[#131315] bg-[#D0D4F7] hover:bg-white px-5 sm:px-6 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap shadow-sm disabled:opacity-50 flex items-center gap-2">
+              :disabled="isSubmitting || isSelectedDateBooked"
+              class="text-xs sm:text-sm font-bold text-[#131315] bg-[#D0D4F7] hover:bg-white px-5 sm:px-6 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
               <Icon v-if="isSubmitting" name="ic:baseline-sync" class="animate-spin text-base" />
               <span>{{ isSubmitting ? 'Submitting...' : 'Send Contract Offer' }}</span>
             </button>
@@ -536,6 +627,12 @@ const handleSaveContract = async () => {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <!-- Realtime Slot Conflict Warning -->
+              <div v-if="isSelectedDateBooked" class="col-span-full p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-300 text-xs font-Sora">
+                <Icon name="ic:baseline-error-outline" class="text-base text-rose-400 shrink-0" />
+                <span><strong>Date Conflict:</strong> {{ artistName }} already has a confirmed gig on {{ startDate }}. Please pick an open date.</span>
               </div>
 
               <div class="grid grid-cols-2 gap-3 sm:gap-4">

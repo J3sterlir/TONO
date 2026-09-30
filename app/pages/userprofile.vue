@@ -4,7 +4,7 @@ definePageMeta({
   middleware: ['auth', 'user']
 })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
 
 const supabase = useSupabaseClient()
@@ -48,6 +48,63 @@ const tagsDisplay = computed(() => {
   return userTags.value.join(', ')
 })
 
+const route = useRoute()
+
+// Realtime User Booking Contract Sync
+let userContractsRealtimeChannel: any = null
+
+const setupRealtimeUserContracts = () => {
+  if (userContractsRealtimeChannel) {
+    supabase.removeChannel(userContractsRealtimeChannel)
+    userContractsRealtimeChannel = null
+  }
+  if (!currentAccountId.value) return
+
+  userContractsRealtimeChannel = supabase
+    .channel(`user-profile-contracts-${currentAccountId.value}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT',
+        filter: `Requester_Account_ID=eq.${currentAccountId.value}`
+      },
+      () => {
+        fetchUserBookings()
+      }
+    )
+    .subscribe()
+}
+
+onBeforeUnmount(() => {
+  if (userContractsRealtimeChannel) {
+    supabase.removeChannel(userContractsRealtimeChannel)
+    userContractsRealtimeChannel = null
+  }
+})
+
+const handleDeepLinkContract = (contractId?: string) => {
+  if (!contractId) return
+  const isPending = pendingRequests.value.some(
+    (c: any) => c.Booking_ID === contractId || c.Contract_Code === contractId
+  )
+  if (isPending) {
+    activeTab.value = 'requests'
+  } else {
+    activeTab.value = 'active'
+  }
+}
+
+watch(
+  () => route.query.contractId,
+  (newContractId) => {
+    if (newContractId) {
+      handleDeepLinkContract(newContractId as string)
+    }
+  }
+)
+
 onMounted(async () => {
   try {
     const profile = await fetchCurrentUserProfile()
@@ -63,6 +120,11 @@ onMounted(async () => {
       userTags.value = [...(profile.genres || []), ...(profile.instruments || [])]
 
       await fetchUserBookings()
+      setupRealtimeUserContracts()
+
+      if (route.query.contractId) {
+        handleDeepLinkContract(route.query.contractId as string)
+      }
     }
   } catch (error) {
     console.error('Error fetching profile:', error)

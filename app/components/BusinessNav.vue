@@ -138,13 +138,8 @@ watch(
           <span class=" xs:inline font-Sora">Personal Mode</span>
         </button>
 
-        <button
-          class="flex items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-white/5"
-          title="Notifications">
-          <Icon
-            name="ic:baseline-notifications-none"
-            class="text-xl sm:text-2xl text-[#C7C5CE] transition-all duration-300 hover:text-[#D0D4F7]" />
-        </button>
+        <!-- Notification Dropdown Component -->
+        <NotificationDropdown current-role="Business" />
 
         <button
           @click="navigateTo('/userprofile')"

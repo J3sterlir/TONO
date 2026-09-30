@@ -4,7 +4,7 @@ definePageMeta({
   middleware: ['auth', 'artist']
 })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
 
@@ -529,6 +529,20 @@ onMounted(async () => {
         }
       }
       await fetchArtistEvents()
+      setupRealtimeContracts()
+
+      if (route.query.contractId) {
+        activeTab.value = 'gigs'
+        gigsSubTab.value = 'contracts'
+        const target = allArtistContracts.value.find(
+          (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
+        ) || pendingOffers.value.find(
+          (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
+        )
+        if (target) {
+          openForm2Modal(target)
+        }
+      }
     }
   } catch (error) {
     console.error('Error fetching profile:', error)
@@ -536,6 +550,59 @@ onMounted(async () => {
     isLoading.value = false
   }
 })
+
+// Realtime Booking Contract Sync
+let artistContractsRealtimeChannel: any = null
+
+const setupRealtimeContracts = () => {
+  if (artistContractsRealtimeChannel) {
+    supabase.removeChannel(artistContractsRealtimeChannel)
+    artistContractsRealtimeChannel = null
+  }
+  if (!artistId.value) return
+
+  artistContractsRealtimeChannel = supabase
+    .channel(`artist-profile-contracts-${artistId.value}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT',
+        filter: `Provider_Artist_ID=eq.${artistId.value}`
+      },
+      () => {
+        fetchArtistEvents()
+      }
+    )
+    .subscribe()
+}
+
+onBeforeUnmount(() => {
+  if (artistContractsRealtimeChannel) {
+    supabase.removeChannel(artistContractsRealtimeChannel)
+    artistContractsRealtimeChannel = null
+  }
+})
+
+// Watch contractId query parameter for notification clicks while on the page
+watch(
+  () => route.query.contractId,
+  (newContractId) => {
+    if (newContractId) {
+      activeTab.value = 'gigs'
+      gigsSubTab.value = 'contracts'
+      const target = allArtistContracts.value.find(
+        (c: any) => c.Booking_ID === newContractId || c.Contract_Code === newContractId
+      ) || pendingOffers.value.find(
+        (c: any) => c.Booking_ID === newContractId || c.Contract_Code === newContractId
+      )
+      if (target) {
+        openForm2Modal(target)
+      }
+    }
+  }
+)
 
 const openEditDetails = () => {
   isEditDetailsOpen.value = true

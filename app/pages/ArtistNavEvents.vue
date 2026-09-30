@@ -4,7 +4,7 @@ definePageMeta({
   middleware: 'auth'
 })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
@@ -277,6 +277,84 @@ const openJobDetails = (job: any) => {
   selectedJobForDetails.value = job
   isJobDetailsModalOpen.value = true
 }
+
+// Deep Linking: Auto-open modal if navigated from notification
+const route = useRoute()
+const checkQueryTriggers = () => {
+  const contractId = route.query.contractId as string
+  if (contractId) {
+    const found = pendingOffers.value.find(c => c.Booking_ID === contractId) ||
+                  allArtistContracts.value.find(c => c.Booking_ID === contractId)
+    if (found) {
+      openForm2Modal(found)
+    }
+  }
+
+  const jobId = route.query.jobId as string
+  if (jobId) {
+    const foundJob = openJobs.value.find(j => j.Job_ID === jobId)
+    if (foundJob) {
+      openJobDetails(foundJob)
+    }
+  }
+}
+
+watch(() => route.query.contractId, (newId) => {
+  if (newId) checkQueryTriggers()
+})
+
+watch(() => route.query.jobId, (newId) => {
+  if (newId) checkQueryTriggers()
+})
+
+// Realtime Zero-Refresh: Sync booking contract status changes live
+let contractSyncChannel: any = null
+const setupRealtimeContractSync = () => {
+  if (!artistId.value || contractSyncChannel) return
+
+  contractSyncChannel = supabase
+    .channel(`artist-events-sync:${artistId.value}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT',
+        filter: `Provider_Artist_ID=eq.${artistId.value}`
+      },
+      async () => {
+        // Refresh events in background without full reload
+        await fetchArtistEvents()
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT',
+        filter: `Provider_Artist_ID=eq.${artistId.value}`
+      },
+      async () => {
+        await fetchArtistEvents()
+      }
+    )
+    .subscribe()
+}
+
+onMounted(() => {
+  setTimeout(() => {
+    checkQueryTriggers()
+    setupRealtimeContractSync()
+  }, 400)
+})
+
+onBeforeUnmount(() => {
+  if (contractSyncChannel) {
+    supabase.removeChannel(contractSyncChannel)
+    contractSyncChannel = null
+  }
+})
 </script>
 
 <template>

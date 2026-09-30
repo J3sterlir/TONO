@@ -4,7 +4,7 @@ definePageMeta({
   middleware: ['auth', 'business']
 })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
@@ -88,6 +88,7 @@ const fetchContracts = async () => {
 
       if (!error && data) {
         contracts.value = data
+        checkQueryTriggers()
       }
     }
   } catch (e) {
@@ -95,6 +96,50 @@ const fetchContracts = async () => {
   } finally {
     isLoading.value = false
   }
+}
+
+// Deep Linking from Notifications
+const route = useRoute()
+const checkQueryTriggers = () => {
+  const contractId = route.query.contractId as string
+  if (!contractId || contracts.value.length === 0) return
+
+  const target = contracts.value.find(c => c.Booking_ID === contractId)
+  if (target) {
+    if (['Confirmed', 'Active'].includes(target.Status)) {
+      activeTab.value = 'active'
+    } else if (['Pending_Artist_Approval', 'Pending'].includes(target.Status)) {
+      activeTab.value = 'pending'
+    } else {
+      activeTab.value = 'history'
+    }
+  }
+}
+
+watch(() => route.query.contractId, () => {
+  checkQueryTriggers()
+})
+
+// Realtime Zero-Refresh: Sync booking contract status changes live
+let businessContractChannel: any = null
+const setupRealtimeSync = () => {
+  if (businessContractChannel) return
+
+  businessContractChannel = supabase
+    .channel('business-contracts-live')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'BOOKING_CONTRACT'
+      },
+      async () => {
+        // Refresh contract table in background without page refresh
+        await fetchContracts()
+      }
+    )
+    .subscribe()
 }
 
 // -----------------------------------------------------------------------------
@@ -187,8 +232,16 @@ const getArtistName = (contract: any) => {
   return artist.StageName?.[0]?.Artist_Name || artist.BandName?.[0]?.Band_Name || artist.USER_ACCOUNT?.Username || 'Artist'
 }
 
-onMounted(() => {
-  fetchContracts()
+onMounted(async () => {
+  await fetchContracts()
+  setupRealtimeSync()
+})
+
+onBeforeUnmount(() => {
+  if (businessContractChannel) {
+    supabase.removeChannel(businessContractChannel)
+    businessContractChannel = null
+  }
 })
 </script>
 
