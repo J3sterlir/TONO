@@ -3,6 +3,8 @@
 -- Description: Fix column name in ORDER BY clause of tono_match_recommendations RPC
 -- =============================================================================
 
+DROP FUNCTION IF EXISTS public.tono_match_recommendations(UUID, TEXT, BOOLEAN, NUMERIC, NUMERIC, INT);
+
 CREATE OR REPLACE FUNCTION public.tono_match_recommendations(
     p_user_id UUID DEFAULT auth.uid(),
     p_context TEXT DEFAULT 'discovery',           -- 'discovery' | 'recruitment'

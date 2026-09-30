@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({
-  layout: 'user',
+  layout: 'artist',
   middleware: 'auth'
 })
 
@@ -30,13 +30,6 @@ const selectedType = ref<'all' | 'Solo' | 'Band'>('all')
 
 onMounted(async () => {
   try {
-    const profile = await fetchCurrentUserProfile()
-    if (profile?.artistProfile) {
-      setPageLayout('artist')
-    } else {
-      setPageLayout('user')
-    }
-
     await fetchArtists()
   } catch (error) {
     console.error('Error initializing artists page:', error)

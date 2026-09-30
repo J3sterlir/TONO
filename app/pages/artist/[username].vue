@@ -19,6 +19,17 @@ const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 // Share Toast notification state
 const isCopied = ref(false)
 
+// Direct Booking Modal & Toast State
+const isBookingModalOpen = ref(false)
+const bookingSuccessToast = ref('')
+
+const handleBookingSubmit = (payload: any) => {
+  bookingSuccessToast.value = `Booking contract offer ${payload?.Contract_Code || ''} sent to ${displayName.value}!`
+  setTimeout(() => {
+    bookingSuccessToast.value = ''
+  }, 5000)
+}
+
 // ---------------------------------------------------------------------------
 // 1. SSR Public Data Fetching via useAsyncData
 // ---------------------------------------------------------------------------
@@ -368,7 +379,8 @@ const handleShareProfile = async () => {
     <!-- Dynamic Top Navigation based on Viewer Session -->
     <ArtistNav v-if="currentUserRole === 'artist'" />
     <UserNav v-else-if="currentUserRole === 'user' || currentUserRole === 'business'" />
-    <header v-else class="w-full bg-[#131315]/95 backdrop-blur-md border-b border-[#3A3A3C] px-6 sm:px-12 py-3.5 flex items-center justify-between z-30 sticky top-0">
+    <header v-else
+      class="w-full bg-[#131315]/95 backdrop-blur-md border-b border-[#3A3A3C] px-6 sm:px-12 py-3.5 flex items-center justify-between z-30 sticky top-0">
       <NuxtLink :to="backToDiscoveryRoute" class="flex items-center gap-2.5">
         <span class="text-2xl font-black tracking-wider text-white font-Sora">TONO</span>
         <span class="text-[11px] px-2 py-0.5 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] font-mono tracking-wide">
@@ -376,33 +388,38 @@ const handleShareProfile = async () => {
         </span>
       </NuxtLink>
       <div class="flex items-center gap-3 sm:gap-4">
-        <NuxtLink to="/Login" class="text-xs sm:text-sm font-medium text-gray-300 hover:text-white px-3 py-1.5 transition-colors">
+        <NuxtLink to="/Login"
+          class="text-xs sm:text-sm font-medium text-gray-300 hover:text-white px-3 py-1.5 transition-colors">
           Log In
         </NuxtLink>
-        <NuxtLink to="/Signin" class="text-xs sm:text-sm font-semibold bg-[#D0D4F7] hover:bg-white text-[#0E0E10] px-4 py-1.5 rounded-xl transition-all shadow-md">
+        <NuxtLink to="/Signin"
+          class="text-xs sm:text-sm font-semibold bg-[#D0D4F7] hover:bg-white text-[#0E0E10] px-4 py-1.5 rounded-xl transition-all shadow-md">
           Join TONO
         </NuxtLink>
       </div>
     </header>
 
     <!-- Floating Copy Toast -->
-    <div
-      v-if="isCopied"
+    <div v-if="isCopied"
       class="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#1E1E24] border border-[#D0D4F7]/60 text-white shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
       <Icon name="ic:round-check-circle" class="text-emerald-400 text-lg" />
       <span class="text-xs sm:text-sm font-medium">Link copied to clipboard! Ready to share.</span>
     </div>
 
     <!-- 404 / Error State if Artist Not Found -->
-    <div v-if="fetchError || !artistRecord" class="max-w-xl mx-auto my-24 p-8 bg-[#131315] border border-[#3A3A3C] rounded-2xl text-center flex flex-col items-center gap-4 shadow-xl">
-      <div class="w-16 h-16 rounded-full bg-red-950/40 border border-red-800/40 flex items-center justify-center text-red-400 text-3xl">
+    <div v-if="fetchError || !artistRecord"
+      class="max-w-xl mx-auto my-24 p-8 bg-[#131315] border border-[#3A3A3C] rounded-2xl text-center flex flex-col items-center gap-4 shadow-xl">
+      <div
+        class="w-16 h-16 rounded-full bg-red-950/40 border border-red-800/40 flex items-center justify-center text-red-400 text-3xl">
         <Icon name="ic:outline-sentiment-very-dissatisfied" />
       </div>
       <h1 class="text-2xl font-Sora font-bold text-white">Artist Not Found</h1>
       <p class="text-sm text-gray-400">
-        We couldn't find an artist with the username <span class="text-[#D0D4F7] font-mono">@{{ username }}</span>. They may have changed their username or the link might be incorrect.
+        We couldn't find an artist with the username <span class="text-[#D0D4F7] font-mono">@{{ username }}</span>. They
+        may have changed their username or the link might be incorrect.
       </p>
-      <NuxtLink :to="backToDiscoveryRoute" class="mt-2 px-5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] font-semibold text-xs sm:text-sm transition-all shadow-md">
+      <NuxtLink :to="backToDiscoveryRoute"
+        class="mt-2 px-5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] font-semibold text-xs sm:text-sm transition-all shadow-md">
         Back to Discovery
       </NuxtLink>
     </div>
@@ -413,23 +430,19 @@ const handleShareProfile = async () => {
       <div class="relative w-full overflow-hidden bg-[#131315] border-b border-[#46464D]/20">
         <!-- Background Banner Image -->
         <div class="absolute inset-0 z-0">
-          <img
-            v-if="coverPicture"
-            :src="coverPicture"
-            alt="Profile Banner"
+          <img v-if="coverPicture" :src="coverPicture" alt="Profile Banner"
             class="w-full h-full object-cover object-center opacity-70 mask-x-from-70% mask-x-to-90%" />
           <div v-else class="w-full h-full bg-linear-to-r from-[#1E1E24] to-[#121215] opacity-80"></div>
           <!-- Soft gradient overlay for contrast on mobile and desktop -->
           <div
-            class="absolute inset-0 bg-linear-to-t from-[#0E0E10] via-[#0E0E10]/40 to-transparent md:bg-linear-to-r md:from-[#0E0E10]/90 md:via-[#0E0E10]/60 md:to-transparent"></div>
+            class="absolute inset-0 bg-linear-to-t from-[#0E0E10] via-[#0E0E10]/40 to-transparent md:bg-linear-to-r md:from-[#0E0E10]/90 md:via-[#0E0E10]/60 md:to-transparent">
+          </div>
         </div>
 
         <!-- Action Toolbar (Share Profile & Owner Edit Profile) -->
         <div class="absolute top-4 right-4 sm:top-6 sm:right-8 md:right-16 z-20 flex items-center gap-2.5">
           <!-- Owner Direct Link to Editor -->
-          <NuxtLink
-            v-if="isOwner"
-            to="/Artistprofile"
+          <NuxtLink v-if="isOwner" to="/Artistprofile"
             class="flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs sm:text-sm font-semibold transition-all shadow-lg group"
             title="Edit your artist profile">
             <Icon name="ic:outline-edit" class="text-base" />
@@ -437,8 +450,7 @@ const handleShareProfile = async () => {
           </NuxtLink>
 
           <!-- Share Profile Action Button -->
-          <button
-            @click="handleShareProfile"
+          <button @click="handleShareProfile"
             class="flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-black/60 hover:bg-black/85 backdrop-blur-md border border-white/10 text-xs sm:text-sm text-gray-200 hover:text-white transition-all cursor-pointer shadow-lg group"
             title="Share this profile">
             <Icon name="ic:round-share" class="text-base text-[#C7C5CE] group-hover:text-[#D0D4F7] transition-colors" />
@@ -455,7 +467,8 @@ const handleShareProfile = async () => {
               <span class="font-Geist font-medium text-xs sm:text-[14px] text-[#D0D4F7]/90 tracking-wider uppercase">
                 {{ artistTypeLabel }}
               </span>
-              <span v-if="artistRecord.Is_Verified" class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span v-if="artistRecord.Is_Verified"
+                class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
                 <Icon name="ic:round-verified" class="text-xs" />
                 Verified
               </span>
@@ -471,8 +484,7 @@ const handleShareProfile = async () => {
             </span>
 
             <div class="max-w-xl my-1">
-              <p
-                v-if="artistBio"
+              <p v-if="artistBio"
                 class="text-xs sm:text-sm md:text-[15px] text-gray-200/90 leading-relaxed line-clamp-3 md:line-clamp-4">
                 {{ artistBio }}
               </p>
@@ -495,16 +507,20 @@ const handleShareProfile = async () => {
               <Icon name="ic:baseline-location-on" class="text-sm text-[#D0D4F7]" />
               <span>{{ artistCity }}{{ artistBarangay ? ' • ' + artistBarangay : '' }}</span>
             </div>
+
+            <div
+              @click="isBookingModalOpen = true"
+              class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full mt-3 font-Geist cursor-pointer transition-colors shadow-md group">
+              <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
+              <button class="font-medium cursor-pointer">BOOK</button>
+            </div>
           </div>
 
           <!-- Right: Avatar (Read-Only Display) -->
           <div class="flex flex-col justify-center items-center shrink-0">
             <div
               class="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 bg-[#353437] rounded-full flex items-center justify-center text-gray-500 overflow-hidden shadow-2xl border-2 border-[#46464D]/50 relative">
-              <img
-                v-if="profilePicture"
-                :src="profilePicture"
-                :alt="displayName"
+              <img v-if="profilePicture" :src="profilePicture" :alt="displayName"
                 class="w-full h-full object-cover object-center" />
               <Icon v-else name="ic:outline-account-circle" class="w-full h-full text-[#46464D]" />
             </div>
@@ -516,45 +532,33 @@ const handleShareProfile = async () => {
       <div class="w-full border-b border-[#46464D]/20 bg-[#0E0E10]">
         <div class="max-w-7xl mx-auto px-4 sm:px-8 md:px-16 overflow-x-auto scrollbar-hide">
           <div class="flex gap-8 sm:gap-12 text-[15px] sm:text-[17px] min-w-max">
-            <button
-              @click="activeTab = 'posts'"
-              class="font-Sora cursor-pointer transition-colors"
+            <button @click="activeTab = 'posts'" class="font-Sora cursor-pointer transition-colors"
               :class="activeTab === 'posts' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span
-                class="inline-block py-4 sm:py-5"
+              <span class="inline-block py-4 sm:py-5"
                 :class="activeTab === 'posts' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
                 Posts
               </span>
             </button>
 
-            <button
-              @click="activeTab = 'calendar'"
-              class="font-Sora cursor-pointer transition-colors"
+            <button @click="activeTab = 'calendar'" class="font-Sora cursor-pointer transition-colors"
               :class="activeTab === 'calendar' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span
-                class="inline-block py-4 sm:py-5"
+              <span class="inline-block py-4 sm:py-5"
                 :class="activeTab === 'calendar' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
                 Calendar
               </span>
             </button>
 
-            <button
-              @click="activeTab = 'portfolio'"
-              class="font-Sora cursor-pointer transition-colors"
+            <button @click="activeTab = 'portfolio'" class="font-Sora cursor-pointer transition-colors"
               :class="activeTab === 'portfolio' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span
-                class="inline-block py-4 sm:py-5"
+              <span class="inline-block py-4 sm:py-5"
                 :class="activeTab === 'portfolio' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
                 Portfolio
               </span>
             </button>
 
-            <button
-              @click="activeTab = 'contact'"
-              class="font-Sora cursor-pointer transition-colors"
+            <button @click="activeTab = 'contact'" class="font-Sora cursor-pointer transition-colors"
               :class="activeTab === 'contact' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span
-                class="inline-block py-4 sm:py-5"
+              <span class="inline-block py-4 sm:py-5"
                 :class="activeTab === 'contact' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
                 Contact
               </span>
@@ -571,9 +575,7 @@ const handleShareProfile = async () => {
           <div class="flex-1 w-full min-w-0 flex flex-col gap-6">
             <article class="bg-[#1B1B1D] border border-[#46464D]/40 rounded-xl overflow-hidden w-full shadow-lg">
               <div class="w-full aspect-video sm:aspect-21/9 md:aspect-video max-h-137.5 overflow-hidden bg-black/40">
-                <img
-                  src="https://images.unsplash.com/photo-1468392788711-903a924761a6"
-                  alt="Post Media"
+                <img src="https://images.unsplash.com/photo-1468392788711-903a924761a6" alt="Post Media"
                   class="object-cover w-full h-full hover:scale-[1.02] transition-transform duration-500" />
               </div>
 
@@ -604,10 +606,8 @@ const handleShareProfile = async () => {
                     </div>
                   </div>
 
-                  <button
-                    @click="handleShareProfile"
-                    class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
-                    title="Share Post">
+                  <button @click="handleShareProfile"
+                    class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer" title="Share Post">
                     <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
                   </button>
                 </div>
@@ -658,8 +658,7 @@ const handleShareProfile = async () => {
               </div>
             </div>
 
-            <button
-              @click="activeTab = 'calendar'"
+            <button @click="activeTab = 'calendar'"
               class="w-full flex items-center justify-center p-3 border rounded-lg border-[#D0D4F7]/60 hover:border-[#D0D4F7] hover:bg-[#D0D4F7]/10 font-Geist font-medium text-xs sm:text-sm text-[#D0D4F7] transition-all cursor-pointer">
               <span>VIEW ALL EVENTS</span>
             </button>
@@ -668,7 +667,12 @@ const handleShareProfile = async () => {
 
         <!-- 2. Calendar Tab Content Container -->
         <div v-else-if="activeTab === 'calendar'" class="w-full">
+          <ArtistGigCalendar
+            v-if="artistRecord?.ARTIST_ID"
+            :artist-id="artistRecord.ARTIST_ID"
+            :is-owner="isOwner" />
           <div
+            v-else
             class="w-full min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
             <div
               class="w-14 h-14 rounded-full bg-[#1E1E24] border border-[#46464D]/50 flex items-center justify-center mb-4">
@@ -676,7 +680,7 @@ const handleShareProfile = async () => {
             </div>
             <h3 class="font-Sora text-lg font-semibold text-white mb-2">Gig & Performance Schedule</h3>
             <p class="text-sm text-gray-400 max-w-md">
-              Upcoming tour dates, club sets, and festival appearances for {{ displayName }} will be displayed here.
+              Gig schedule is currently unavailable.
             </p>
           </div>
         </div>
@@ -690,8 +694,7 @@ const handleShareProfile = async () => {
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   <h2 class="text-xl font-Sora font-medium text-white">Media</h2>
-                  <span
-                    v-if="profileData?.mediaItems?.length"
+                  <span v-if="profileData?.mediaItems?.length"
                     class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
                     {{ profileData.mediaItems.length }}
                   </span>
@@ -701,9 +704,7 @@ const handleShareProfile = async () => {
               <!-- Live Media Items List -->
               <div class="flex flex-col gap-6 flex-1">
                 <template v-if="profileData?.mediaItems?.length">
-                  <article
-                    v-for="item in profileData.mediaItems"
-                    :key="item.id"
+                  <article v-for="item in profileData.mediaItems" :key="item.id"
                     class="bg-[#1C1C1F]/60 border border-[#46464D]/40 rounded-xl overflow-hidden w-full shadow-lg">
                     <div class="p-3 sm:p-4">
                       <MediaEmbed :url="item.url" :title="item.title" />
@@ -721,8 +722,7 @@ const handleShareProfile = async () => {
                 </template>
 
                 <!-- Empty State for Media -->
-                <div
-                  v-else
+                <div v-else
                   class="flex-1 min-h-64 p-8 rounded-xl bg-[#1C1C1F]/40 border border-[#46464D]/30 text-center flex flex-col items-center justify-center gap-2">
                   <Icon name="ic:outline-smart-display" class="text-3xl text-gray-500 mb-1" />
                   <p class="text-sm font-medium text-gray-300">No Featured Videos Yet</p>
@@ -735,19 +735,17 @@ const handleShareProfile = async () => {
             <div class="lg:col-span-4 flex flex-col gap-4 h-full">
               <div class="flex items-center justify-between">
                 <h2 class="text-xl font-Sora font-medium text-white">Released Songs</h2>
-                <span
-                  v-if="profileData?.audioItems?.length"
+                <span v-if="profileData?.audioItems?.length"
                   class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
                   {{ profileData.audioItems.length }}
                 </span>
               </div>
 
               <!-- Live Audio Items List -->
-              <div class="bg-[#1C1C1F]/60 border rounded-xl border-[#46464D]/40 p-4 sm:p-6 flex flex-col gap-4 shadow-lg flex-1">
+              <div
+                class="bg-[#1C1C1F]/60 border rounded-xl border-[#46464D]/40 p-4 sm:p-6 flex flex-col gap-4 shadow-lg flex-1">
                 <template v-if="profileData?.audioItems?.length">
-                  <div
-                    v-for="audio in profileData.audioItems"
-                    :key="audio.id"
+                  <div v-for="audio in profileData.audioItems" :key="audio.id"
                     class="space-y-1.5 border border-[#303035] rounded-xl overflow-hidden p-2.5 bg-[#141416]">
                     <div class="flex flex-col gap-1 pl-1 pt-1">
                       <div class="flex items-center gap-1.5">
@@ -770,8 +768,7 @@ const handleShareProfile = async () => {
                 </template>
 
                 <!-- Empty State for Audio -->
-                <div
-                  v-else
+                <div v-else
                   class="w-full flex-1 min-h-37 rounded-xl border-2 border-dashed border-[#46464D]/50 bg-[#16161A]/50 flex flex-col items-center justify-center p-4 text-center">
                   <div
                     class="w-10 h-10 rounded-full bg-[#1E1E24] border border-[#46464D]/60 flex items-center justify-center text-[#D0D4F7] mb-2 shadow-inner">
@@ -788,8 +785,7 @@ const handleShareProfile = async () => {
           <div class="bg-[#1C1C1F]/60 border rounded-xl border-[#46464D]/40 p-5 sm:p-6 flex flex-col gap-5 shadow-lg">
             <div class="flex items-center justify-between">
               <h2 class="text-xl font-Sora font-medium text-white">MILESTONES & ACHIEVEMENTS</h2>
-              <span
-                v-if="profileData?.milestoneItems?.length"
+              <span v-if="profileData?.milestoneItems?.length"
                 class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
                 {{ profileData.milestoneItems.length }}
               </span>
@@ -798,9 +794,7 @@ const handleShareProfile = async () => {
             <!-- Live Milestones List -->
             <div class="flex items-start gap-6 sm:gap-8 md:gap-10 overflow-x-auto pb-2 scrollbar-thin">
               <template v-if="profileData?.milestoneItems?.length">
-                <div
-                  v-for="m in profileData.milestoneItems"
-                  :key="m.id"
+                <div v-for="m in profileData.milestoneItems" :key="m.id"
                   class="flex flex-col gap-2.5 items-center justify-center shrink-0">
                   <div
                     class="w-24 h-24 sm:w-28 sm:h-28 md:w-30 md:h-30 rounded-full overflow-hidden border-2 border-[#D0D4F7]/60 shadow-lg bg-[#1E1E24] flex items-center justify-center bg-linear-to-br from-[#26262E] to-[#151518]">
@@ -812,14 +806,15 @@ const handleShareProfile = async () => {
                     </div>
                   </div>
                   <div class="text-center max-w-28 sm:max-w-32">
-                    <h3 class="text-xs sm:text-sm font-semibold text-white font-Sora truncate">{{ m.title }}</h3>
+                    <h3 class="text-xs sm:text-sm font-semibold text-white font-Sora">{{ m.title }}</h3>
                     <span v-if="m.eventDate" class="text-[11px] text-gray-400">{{ m.eventDate }}</span>
                   </div>
                 </div>
               </template>
 
               <!-- Empty State for Milestones -->
-              <div v-else class="w-full py-8 text-center flex flex-col items-center justify-center gap-1.5 text-gray-400">
+              <div v-else
+                class="w-full py-8 text-center flex flex-col items-center justify-center gap-1.5 text-gray-400">
                 <Icon name="ic:outline-emoji-events" class="text-3xl text-gray-500 mb-1" />
                 <p class="text-sm font-medium text-gray-300">No Milestones Recorded</p>
                 <p class="text-xs text-gray-500">Awards, wins, and notable milestones will appear here.</p>
@@ -832,8 +827,7 @@ const handleShareProfile = async () => {
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <h2 class="text-xl font-Sora font-medium text-white">PROMOTIONAL MATERIALS</h2>
-                <span
-                  v-if="profileData?.posterItems?.length"
+                <span v-if="profileData?.posterItems?.length"
                   class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
                   {{ profileData.posterItems.length }}
                 </span>
@@ -843,16 +837,11 @@ const handleShareProfile = async () => {
             <!-- Live Posters Grid -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
               <template v-if="profileData?.posterItems?.length">
-                <div
-                  v-for="poster in profileData.posterItems"
-                  :key="poster.id"
+                <div v-for="poster in profileData.posterItems" :key="poster.id"
                   class="relative aspect-3/4 w-full rounded-xl overflow-hidden border border-[#46464D]/40 shadow-lg bg-[#1A1A1E] group">
-                  <img
-                    :src="poster.fileUrl"
-                    :alt="poster.title || 'Poster'"
+                  <img :src="poster.fileUrl" :alt="poster.title || 'Poster'"
                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  <div
-                    v-if="poster.title"
+                  <div v-if="poster.title"
                     class="absolute bottom-0 inset-x-0 bg-black/75 p-2 text-center text-xs font-medium text-white truncate">
                     {{ poster.title }}
                   </div>
@@ -860,8 +849,7 @@ const handleShareProfile = async () => {
               </template>
 
               <!-- Empty State for Posters -->
-              <div
-                v-else
+              <div v-else
                 class="col-span-2 md:col-span-4 py-8 text-center flex flex-col items-center justify-center gap-1.5 text-gray-400">
                 <Icon name="ic:outline-photo-size-select-actual" class="text-3xl text-gray-500 mb-1" />
                 <p class="text-sm font-medium text-gray-300">No Promotional Posters</p>
@@ -884,8 +872,7 @@ const handleShareProfile = async () => {
               Interested in booking {{ displayName }} for gigs, recordings, or collaborations? Contact via TONO.
             </p>
             <div class="flex flex-wrap items-center justify-center gap-3">
-              <button
-                @click="handleShareProfile"
+              <button @click="handleShareProfile"
                 class="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E1E24] hover:bg-[#282830] border border-[#46464D]/60 text-xs sm:text-sm font-medium text-white transition-all cursor-pointer">
                 <Icon name="ic:round-share" class="text-base text-[#D0D4F7]" />
                 <span>Share Profile</span>
@@ -894,6 +881,36 @@ const handleShareProfile = async () => {
           </div>
         </div>
       </main>
+
+      <!-- Direct Booking Modal Component -->
+      <DirectBookingModal
+        :is-open="isBookingModalOpen"
+        :artist-id="artistRecord?.ARTIST_ID"
+        :artist-name="displayName"
+        :artist-avatar="profilePicture"
+        :artist-type="artistTypeLabel"
+        @close="isBookingModalOpen = false"
+        @submit="handleBookingSubmit" />
+
+      <!-- Booking Success Toast Notification -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition duration-300 ease-out"
+          enter-from-class="transform translate-y-4 opacity-0"
+          enter-to-class="transform translate-y-0 opacity-100"
+          leave-active-class="transition duration-200 ease-in"
+          leave-from-class="transform translate-y-0 opacity-100"
+          leave-to-class="transform translate-y-4 opacity-0">
+          <div
+            v-if="bookingSuccessToast"
+            class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 bg-[#161619] border border-emerald-500/50 rounded-2xl shadow-2xl text-emerald-300 font-Sora text-sm">
+            <div class="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <Icon name="ic:round-check" class="text-lg text-emerald-400" />
+            </div>
+            <p class="font-medium">{{ bookingSuccessToast }}</p>
+          </div>
+        </Transition>
+      </Teleport>
     </div>
   </div>
 </template>
