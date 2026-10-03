@@ -212,7 +212,7 @@
             </template>
 
             <!-- 17. Booking Removed from Calendar (Red) -->
-            <template v-else>
+            <template v-else-if="item.svgType === 'booking_removed' || item.svgType === 'booking_cancelled'">
               <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_771_1301)"></circle>
               <mask id="mask_771_1301" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
                 <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
@@ -220,6 +220,26 @@
               <g mask="url(#mask_771_1301)">
                 <path d="M47.3 53.75L50 51.05L52.7 53.75L53.75 52.7L51.05 50L53.75 47.3L52.7 46.25L50 48.95L47.3 46.25L46.25 47.3L48.95 50L46.25 52.7L47.3 53.75ZM44.75 56.75C44.3375 56.75 43.9844 56.6031 43.6906 56.3094C43.3969 56.0156 43.25 55.6625 43.25 55.25V44.75C43.25 44.3375 43.3969 43.9844 43.6906 43.6906C43.9844 43.3969 44.3375 43.25 44.75 43.25H55.25C55.6625 43.25 56.0156 43.3969 56.3094 43.6906C56.6031 43.9844 56.75 44.3375 56.75 44.75V55.25C56.75 55.6625 56.6031 56.0156 56.3094 56.3094C56.0156 56.6031 55.6625 56.75 55.25 56.75H44.75ZM44.75 55.25H55.25V44.75H44.75V55.25Z" fill="white"></path>
               </g>
+            </template>
+
+            <!-- 18. Post Liked (Violet) -->
+            <template v-else-if="item.svgType === 'post_liked'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953)"></circle>
+              <g transform="translate(43, 43) scale(0.6)">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="white"></path>
+              </g>
+            </template>
+
+            <!-- 19. Post Commented (Violet) -->
+            <template v-else-if="item.svgType === 'post_commented'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953)"></circle>
+              <g transform="translate(43, 43) scale(0.6)">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="white"></path>
+              </g>
+            </template>
+
+            <template v-else>
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953)"></circle>
             </template>
 
             <!-- All 17 Unique Gradient Definitions -->
@@ -435,8 +455,24 @@
               </g>
             </template>
 
+            <!-- 18. Post Liked (Violet) -->
+            <template v-else-if="item.svgType === 'post_liked'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953_earlier)"></circle>
+              <g transform="translate(43, 43) scale(0.6)">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="white"></path>
+              </g>
+            </template>
+
+            <!-- 19. Post Commented (Violet) -->
+            <template v-else-if="item.svgType === 'post_commented'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953_earlier)"></circle>
+              <g transform="translate(43, 43) scale(0.6)">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="white"></path>
+              </g>
+            </template>
+
             <template v-else>
-              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953)"></circle>
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953_earlier)"></circle>
             </template>
           </svg>
         </div>

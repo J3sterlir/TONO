@@ -244,3 +244,133 @@ export const optimizeCover = async (
 
   return canvasToWebpBlob(canvas, quality)
 }
+
+export interface PostCropOptions {
+  cropArea?: CropArea
+  aspectRatio?: 'original' | '1:1' | '4:5' | '16:9' | string
+  zoom?: number
+  pan?: { x: number; y: number }
+}
+
+/**
+ * Optimizes an Artist Post Media Image:
+ * - Uses custom CropArea if provided, or applies aspect ratio framing (1:1, 4:5, 16:9, or original).
+ * - Incorporates user zoom and pan adjustments.
+ * - Scales down to max 1920px (preserving aspect ratio).
+ * - Converts to WebP @ 82% quality to achieve high fidelity while keeping file size < 400KB.
+ */
+export const optimizePostMedia = async (
+  source: File | Blob | string | HTMLImageElement,
+  options?: PostCropOptions,
+  maxWidth = 1920,
+  quality = 0.82
+): Promise<Blob> => {
+  const img = source instanceof HTMLImageElement ? source : await loadImage(source)
+  const naturalWidth = img.naturalWidth
+  const naturalHeight = img.naturalHeight
+
+  if (!naturalWidth || !naturalHeight) {
+    throw new Error('Invalid image dimensions.')
+  }
+
+  // 1. Determine target aspect ratio
+  let targetRatio = naturalWidth / naturalHeight
+  const ratioChoice = options?.aspectRatio || 'original'
+
+  if (ratioChoice === '1:1') {
+    targetRatio = 1.0
+  } else if (ratioChoice === '4:5') {
+    targetRatio = 4 / 5
+  } else if (ratioChoice === '16:9') {
+    targetRatio = 16 / 9
+  }
+
+  let sourceX = 0
+  let sourceY = 0
+  let sourceWidth = naturalWidth
+  let sourceHeight = naturalHeight
+
+  if (options?.cropArea && options.cropArea.width > 0 && options.cropArea.height > 0) {
+    sourceX = Math.max(0, Math.min(options.cropArea.x, naturalWidth - 1))
+    sourceY = Math.max(0, Math.min(options.cropArea.y, naturalHeight - 1))
+    sourceWidth = Math.min(options.cropArea.width, naturalWidth - sourceX)
+    sourceHeight = Math.min(options.cropArea.height, naturalHeight - sourceY)
+  } else {
+    // Base framing by aspect ratio
+    const imgRatio = naturalWidth / naturalHeight
+    if (imgRatio > targetRatio) {
+      sourceWidth = naturalHeight * targetRatio
+      sourceHeight = naturalHeight
+      sourceX = (naturalWidth - sourceWidth) / 2
+      sourceY = 0
+    } else {
+      sourceWidth = naturalWidth
+      sourceHeight = naturalWidth / targetRatio
+      sourceX = 0
+      sourceY = (naturalHeight - sourceHeight) / 2
+    }
+
+    // Apply zoom if > 1.0
+    const zoomLevel = Math.max(1.0, Math.min(options?.zoom || 1.0, 5.0))
+    if (zoomLevel > 1.0) {
+      const zoomedW = sourceWidth / zoomLevel
+      const zoomedH = sourceHeight / zoomLevel
+
+      // Re-center around previous center
+      sourceX += (sourceWidth - zoomedW) / 2
+      sourceY += (sourceHeight - zoomedH) / 2
+
+      // Apply pan offset (pan is in preview pixels, normalized roughly to source dimension)
+      if (options?.pan) {
+        // Adjust for pan relative to zoomed viewport
+        const panXOffset = (options.pan.x / 300) * (zoomedW * 0.5)
+        const panYOffset = (options.pan.y / 300) * (zoomedH * 0.5)
+        sourceX -= panXOffset
+        sourceY -= panYOffset
+      }
+
+      sourceWidth = zoomedW
+      sourceHeight = zoomedH
+    }
+
+    // Bounds checking
+    sourceX = Math.max(0, Math.min(sourceX, naturalWidth - sourceWidth))
+    sourceY = Math.max(0, Math.min(sourceY, naturalHeight - sourceHeight))
+  }
+
+  // Calculate output dimensions capped at maxWidth
+  let outputWidth = Math.round(sourceWidth)
+  let outputHeight = Math.round(sourceHeight)
+
+  if (outputWidth > maxWidth) {
+    outputHeight = Math.round((maxWidth / outputWidth) * outputHeight)
+    outputWidth = maxWidth
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, outputWidth)
+  canvas.height = Math.max(1, outputHeight)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Canvas 2D context is not supported in this browser.')
+  }
+
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  ctx.drawImage(
+    img,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    outputWidth,
+    outputHeight
+  )
+
+  return canvasToWebpBlob(canvas, quality)
+}
+

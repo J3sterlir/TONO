@@ -5,20 +5,20 @@
  * e.g., "Champion" -> "CH"
  */
 export const getMilestoneInitials = (title?: string | null): string => {
-  if (!title || !title.trim()) return '🏆'
+  if (!title || !title.trim()) return 'mdi:trophy-variant'
 
   const stopWords = new Set(['of', 'the', 'and', 'in', 'on', 'at', 'for', 'to', 'a', 'an', 'by', '&'])
   const cleanTitle = title.trim().replace(/[^\w\s-]/g, '')
   const words = cleanTitle.split(/\s+/).filter(Boolean)
 
-  if (words.length === 0) return '🏆'
+  if (words.length === 0) return 'mdi:trophy-variant'
 
   // Filter out common noise/stop words if there are multiple words
   const significantWords = words.filter((w) => !stopWords.has(w.toLowerCase()))
   const targetWords = significantWords.length >= 2 ? significantWords : words
 
   const first = targetWords[0]
-  if (!first) return '🏆'
+  if (!first) return 'mdi:trophy-variant'
 
   if (targetWords.length === 1) {
     return first.slice(0, 2).toUpperCase()
@@ -31,5 +31,5 @@ export const getMilestoneInitials = (title?: string | null): string => {
 
   const c1 = first.charAt(0)
   const c2 = second.charAt(0)
-  return (c1 + c2).toUpperCase() || '🏆'
+  return (c1 + c2).toUpperCase() || 'mdi:trophy-variant'
 }

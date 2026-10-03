@@ -1,6 +1,31 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 
+interface Props {
+  scrolledTitle?: string
+  scrolledAvatar?: string | null
+  isScrolled?: boolean
+  isVerified?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  scrolledTitle: '',
+  scrolledAvatar: null,
+  isScrolled: false,
+  isVerified: false
+})
+
+const emit = defineEmits<{
+  (e: 'scrollToTop'): void
+}>()
+
+const handleScrollToTop = () => {
+  if (import.meta.client) {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  emit('scrollToTop')
+}
+
 const supabase = useSupabaseClient()
 const db = supabase as any
 const user = useSupabaseUser()
@@ -71,21 +96,62 @@ const handleLogout = async () => {
   <nav
     class="bg-[#131315]/90 sticky top-0 backdrop-blur-md border-b border-[#46464D]/75 z-40">
     <div class="flex items-center justify-between px-4 sm:px-8 md:px-10 py-3 sm:py-4">
-      <!-- Brand / Logo -->
-      <div
-        @click="navigateTo('/userhome')"
-        class="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0">
-        <img
-          src="/TONO_LOGO.svg"
-          alt="Logo"
-          class="h-7 w-7 sm:h-8 sm:w-8 rounded-full" />
-        <h1 class="text-xl sm:text-[1.5rem] font-bold tracking-wide">
-          TONO
-        </h1>
+      <!-- Brand / Logo & Scrolled Artist Title (Spotify Behavior) -->
+      <div class="flex items-center gap-2.5 sm:gap-3.5 shrink-0 min-w-0">
+        <div
+          @click="navigateTo('/userhome')"
+          class="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0">
+          <img
+            src="/TONO_LOGO.svg"
+            alt="Logo"
+            class="h-7 w-7 sm:h-8 sm:w-8 rounded-full" />
+          <h1 class="text-xl sm:text-[1.5rem] font-bold tracking-wide">
+            TONO
+          </h1>
+        </div>
+
+        <!-- Scrolled Artist Display when scrolled down -->
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0 -translate-x-2 scale-95"
+          enter-to-class="opacity-100 translate-x-0 scale-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="opacity-100 translate-x-0 scale-100"
+          leave-to-class="opacity-0 -translate-x-2 scale-95">
+          <div
+            v-if="isScrolled && scrolledTitle"
+            @click="handleScrollToTop"
+            class="flex items-center gap-2 sm:gap-2.5 pl-2.5 sm:pl-3.5 border-l border-[#46464D]/70 cursor-pointer group/scrolled min-w-0"
+            title="Scroll to top">
+            <img
+              v-if="scrolledAvatar"
+              :src="scrolledAvatar"
+              :alt="scrolledTitle"
+              class="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover shrink-0 ring-1 ring-[#D0D4F7]/40 shadow-sm" />
+            <div
+              v-else
+              class="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#353437] flex items-center justify-center shrink-0">
+              <Icon name="ic:outline-account-circle" class="w-4 h-4 sm:w-5 sm:h-5 text-[#D0D4F7]" />
+            </div>
+
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span
+                class="font-Sora font-bold text-xs sm:text-sm text-white group-hover/scrolled:text-[#D0D4F7] transition-colors truncate max-w-[100px] sm:max-w-[160px] md:max-w-[220px]">
+                {{ scrolledTitle }}
+              </span>
+              <Icon
+                v-if="isVerified"
+                name="ic:round-verified"
+                class="text-emerald-400 text-xs sm:text-sm shrink-0" />
+            </div>
+          </div>
+        </Transition>
       </div>
 
       <!-- Centered Nav Links (Tablet & Desktop) -->
-      <div class="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-4 sm:gap-6 md:gap-10">
+      <div
+        class="absolute left-1/2 -translate-x-1/2 items-center gap-4 sm:gap-6 md:gap-10"
+        :class="(isScrolled && scrolledTitle) ? 'hidden xl:flex' : 'hidden sm:flex'">
         <button
           @click="navigateTo('/userhome')"
           class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"

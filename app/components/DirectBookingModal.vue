@@ -441,7 +441,7 @@ const handleSaveContract = async () => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md" @click="$emit('close')">
       <div class="relative w-full max-w-5xl bg-[#131315] border border-[#2A2A2E]/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-white">
         
         <!-- Modal Top Bar -->

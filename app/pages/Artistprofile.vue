@@ -32,6 +32,132 @@ const isEditDetailsOpen = ref(false)
 const route = useRoute()
 const activeTab = ref<'posts' | 'gigs' | 'calendar' | 'portfolio' | 'contact'>('posts')
 
+import type { PostItem } from '~/composables/useArtistPosts'
+import { formatPostTimestamp, formatCount } from '~/utils/postHelpers'
+
+// Posts Feed & Modals State
+const isCreatePostOpen = ref(false)
+const selectedPost = ref<PostItem | null>(null)
+const isPostModalOpen = ref(false)
+
+const {
+  posts,
+  fetchArtistPosts,
+  fetchPostById,
+  toggleLike,
+  deletePost,
+  subscribeToPostsRealtime,
+  unsubscribeFromPostsRealtime,
+} = useArtistPosts()
+
+// Options dropdown, edit & delete post state
+const activeMenuPostId = ref<string | null>(null)
+const isDeletingPost = ref(false)
+const isEditPostOpen = ref(false)
+const postToEdit = ref<PostItem | null>(null)
+
+const togglePostMenu = (postId: string) => {
+  activeMenuPostId.value = activeMenuPostId.value === postId ? null : postId
+}
+
+const closePostMenu = () => {
+  activeMenuPostId.value = null
+}
+
+const openEditModal = (post: PostItem) => {
+  activeMenuPostId.value = null
+  postToEdit.value = post
+  isEditPostOpen.value = true
+}
+
+const handlePostUpdated = (updatedPost: PostItem) => {
+  if (selectedPost.value?.POST_ID === updatedPost.POST_ID) {
+    selectedPost.value = updatedPost
+  }
+}
+
+const handleDeletePost = async (postId: string) => {
+  activeMenuPostId.value = null
+  if (!confirm('Are you sure you want to delete this post? This cannot be undone.')) {
+    return
+  }
+
+  isDeletingPost.value = true
+  try {
+    const success = await deletePost(postId)
+    if (success) {
+      if (selectedPost.value?.POST_ID === postId) {
+        closePostModal()
+      }
+    } else {
+      alert('Failed to delete post. Please try again.')
+    }
+  } finally {
+    isDeletingPost.value = false
+  }
+}
+
+const openPostDetail = (post: PostItem) => {
+  selectedPost.value = post
+  isPostModalOpen.value = true
+}
+
+const closePostModal = () => {
+  isPostModalOpen.value = false
+  selectedPost.value = null
+}
+
+const handlePostCreated = (newPost: PostItem) => {
+  isCreatePostOpen.value = false
+}
+
+const handleSharePost = (post: PostItem) => {
+  if (import.meta.client && navigator.clipboard) {
+    const postUrl = `${window.location.origin}/Artistprofile?postId=${post.POST_ID}`
+    navigator.clipboard.writeText(postUrl)
+  }
+}
+
+// Watch artistId to load posts and subscribe to realtime
+watch(
+  artistId,
+  async (id) => {
+    if (id) {
+      await fetchArtistPosts(id)
+      subscribeToPostsRealtime(id)
+    }
+  },
+  { immediate: true }
+)
+
+// Watch query param for notification deep-linking: /Artistprofile?postId=...
+watch(
+  () => route.query.postId,
+  async (postId) => {
+    if (postId) {
+      activeTab.value = 'posts'
+      const found = posts.value.find((p) => p.POST_ID === postId) || (await fetchPostById(postId as string))
+      if (found) {
+        openPostDetail(found)
+      }
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  if (import.meta.client) {
+    window.addEventListener('click', closePostMenu)
+  }
+})
+
+onBeforeUnmount(() => {
+  unsubscribeFromPostsRealtime()
+  if (import.meta.client) {
+    window.removeEventListener('click', closePostMenu)
+  }
+})
+
 // Gigs Tab State
 const eventsLoading = ref(false)
 const yourEvents = ref<any[]>([])
@@ -39,6 +165,54 @@ const pendingOffers = ref<any[]>([])
 const allArtistContracts = ref<any[]>([])
 const contractFilter = ref<'all' | 'pending' | 'confirmed' | 'cancelled'>('all')
 const gigsSubTab = ref<'all' | 'gigs' | 'contracts'>('all')
+
+// Upcoming Events for Posts Tab Sidebar
+const upcomingEvents = computed(() => {
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+  return (yourEvents.value || [])
+    .filter((e: any) => {
+      const dateStr = (e.End_Date || e.Start_Date || e.Event_Date || e.JOB_LISTING?.Start_Date || '').split('T')[0]
+      return !dateStr || dateStr >= todayStr
+    })
+    .sort((a: any, b: any) => {
+      const da = (a.Start_Date || a.Event_Date || a.JOB_LISTING?.Start_Date || '').split('T')[0]
+      const db = (b.Start_Date || b.Event_Date || b.JOB_LISTING?.Start_Date || '').split('T')[0]
+      return da.localeCompare(db)
+    })
+    .slice(0, 4)
+    .map((e: any) => {
+      const rawDate = e.Start_Date || e.Event_Date || e.JOB_LISTING?.Start_Date || ''
+      let day = '--'
+      let month = 'TBD'
+
+      if (rawDate) {
+        const clean = String(rawDate).split('T')[0] || ''
+        const parts = clean.split('-')
+        const y = Number(parts[0])
+        const m = Number(parts[1])
+        const d = Number(parts[2])
+        if (y && m && d) {
+          const dateObj = new Date(y, m - 1, d)
+          day = String(dateObj.getDate())
+          month = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase()
+        }
+      }
+
+      const title = e.JOB_LISTING?.Event_Title || (e.Booking_Type === 'Direct' ? 'Direct Booking' : 'Live Performance')
+      const location = e.Venue_Location || e.JOB_LISTING?.Location || e.BUSINESS_PROFILE?.Business_Address || e.BUSINESS_PROFILE?.Business_Name || 'Venue TBD'
+
+      return {
+        id: e.Booking_ID || e.Contract_Code || Math.random().toString(),
+        day,
+        month,
+        title,
+        location,
+        contract: e,
+      }
+    })
+})
 
 const filteredContracts = computed(() => {
   if (contractFilter.value === 'all') return allArtistContracts.value
@@ -453,6 +627,7 @@ const isCropperOpen = ref(false)
 const cropperMode = ref<'avatar' | 'cover'>('avatar')
 const cropperImageSource = ref<string | File | Blob | null>(null)
 
+
 const tagsDisplay = computed(() => {
   if (artistTags.value.length === 0) return 'No tags selected'
   return artistTags.value.join(', ')
@@ -707,6 +882,7 @@ const handleLogout = async () => {
 
 <template>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16 overflow-x-hidden">
+
     <!-- Media Cropper Modal -->
     <MediaCropperModal :is-open="isCropperOpen" :image-source="cropperImageSource" :mode="cropperMode"
       @close="isCropperOpen = false" @apply="onCropperApply" />
@@ -917,6 +1093,7 @@ const handleLogout = async () => {
           <div class="flex-1 w-full min-w-0 flex flex-col gap-6">
             <!-- Create Post Card -->
             <div
+              @click="isCreatePostOpen = true"
               class="flex gap-2 flex-col items-center justify-center p-6 sm:p-10 md:p-12 border border-[#46464D] border-dashed rounded-xl min-h-35 sm:h-46.25 transition-all hover:border-[#D0D4F7] hover:bg-[#D0D4F7]/5 group cursor-pointer w-full">
               <div
                 class="flex border p-2.5 sm:p-3 rounded-full border-[#46464D] group-hover:border-[#D0D4F7] transition-colors">
@@ -928,52 +1105,147 @@ const handleLogout = async () => {
               </h2>
             </div>
 
-            <!-- Post Card -->
-            <article class="bg-[#1B1B1D] border border-[#46464D]/40 rounded-xl overflow-hidden w-full shadow-lg">
-              <div class="w-full aspect-video sm:aspect-21/9 md:aspect-video max-h-137.5 overflow-hidden bg-black/40">
-                <img src="https://images.unsplash.com/photo-1468392788711-903a924761a6" alt="Post Media"
-                  class="object-cover w-full h-full hover:scale-[1.02] transition-transform duration-500" />
-              </div>
-
-              <div class="flex flex-col gap-4 p-4 sm:p-6">
-                <div>
-                  <h3 class="font-Sora text-base sm:text-[18px] font-semibold text-white">
-                    {{ artistName || 'Artist' }}
-                  </h3>
-                  <span class="font-HankenGrotesk text-xs text-[#C7C5CE]">2 hours ago</span>
-                </div>
-
-                <div>
-                  <p class="text-sm sm:text-base text-gray-300 leading-relaxed">
-                    Post Caption goes here. "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-                    tempor
-                    incididunt ut labore et dolore magna aliqua. We've been experimenting with these new textures
-                    lately."
-                  </p>
-                </div>
-
-                <div class="flex justify-between items-center pt-2 border-t border-[#46464D]/20 text-sm">
-                  <div class="flex gap-4 sm:gap-6 items-center">
-                    <button
-                      class="flex gap-1.5 items-center text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer">
-                      <Icon name="ic:baseline-favorite-border" class="text-xl sm:text-2xl" />
-                      <span class="text-xs sm:text-sm font-medium">1.2k</span>
-                    </button>
-
-                    <button
-                      class="flex gap-1.5 items-center text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer">
-                      <Icon name="ic:sharp-chat-bubble-outline" class="text-xl sm:text-2xl" />
-                      <span class="text-xs sm:text-sm font-medium">1.3k</span>
-                    </button>
-                  </div>
-
-                  <button class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
-                    title="Share Post">
-                    <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
-                  </button>
-                </div>
+            <!-- Empty State (When artist has 0 posts) -->
+            <article
+              v-if="posts.length === 0"
+              class="flex justify-center items-center border-[#46464D]/40 border-dashed border rounded-xl overflow-hidden shadow-lg w-full h-[623.38px] font-Sora"
+            >
+              <div class="flex flex-col items-center gap-3">
+                <Icon name="lucide:megaphone-off" class="text-xl sm:text-[3rem] text-[#D0D4F7]" />
+                <h1 class="text-lg">No Posts Yet</h1>
               </div>
             </article>
+
+            <!-- With Post State (When artist has posts) -->
+            <template v-else>
+              <article
+                v-for="post in posts"
+                :key="post.POST_ID"
+                class="bg-[#1B1B1D] border border-[#46464D]/40 rounded-xl overflow-hidden w-full shadow-lg"
+              >
+                <!-- 1. Uploaded Image: IF NO IMAGE HIDE THE DIV COMPLETELY (NO PLACEHOLDER IMAGE) -->
+                <div
+                  v-if="post.Media"
+                  class="w-full aspect-video max-h-137.5 overflow-hidden bg-black/40 flex items-center justify-center"
+                >
+                  <img
+                    :src="post.Media"
+                    alt="Post Media"
+                    class="object-cover w-full h-full hover:scale-[1.02] transition-transform duration-500"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-4 p-4 sm:p-6">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-Sora text-base sm:text-[18px] font-semibold text-white">
+                        {{ artistName }}
+                      </h3>
+                      <div class="flex items-center gap-2 sm:gap-3">
+                        <span
+                          v-if="post.Location"
+                          class="text-xs text-gray-400 font-Geist flex items-center gap-1"
+                        >
+                          <Icon name="ic:outline-location-on" class="text-sm text-[#D0D4F7]" />
+                          {{ post.Location }}
+                        </span>
+
+                        <!-- Three dots options menu -->
+                        <div class="relative">
+                          <button
+                            type="button"
+                            @click.stop="togglePostMenu(post.POST_ID)"
+                            class="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                            title="Post options"
+                            aria-label="Post options"
+                          >
+                            <Icon name="ic:round-more-vert" class="text-xl" />
+                          </button>
+
+                          <!-- Dropdown Menu -->
+                          <div
+                            v-if="activeMenuPostId === post.POST_ID"
+                            class="absolute right-0 top-full mt-1 w-36 bg-[#222225] border border-[#46464D]/60 rounded-xl shadow-2xl py-1 z-30 flex flex-col"
+                            @click.stop
+                          >
+                            <button
+                              type="button"
+                              @click.stop="openEditModal(post)"
+                              class="w-full px-3 py-2 text-left text-xs sm:text-sm text-gray-200 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                            >
+                              <Icon name="ic:outline-edit" class="text-base text-[#D0D4F7]" />
+                              <span>Edit post</span>
+                            </button>
+                            <div class="h-px bg-[#46464D]/30 my-0.5"></div>
+                            <button
+                              type="button"
+                              @click.stop="handleDeletePost(post.POST_ID)"
+                              class="w-full px-3 py-2 text-left text-xs sm:text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 flex items-center gap-2 transition-colors cursor-pointer"
+                            >
+                              <Icon name="ic:round-delete-outline" class="text-base" />
+                              <span>Delete post</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <span class="font-HankenGrotesk text-xs text-[#C7C5CE]">
+                      {{ formatPostTimestamp(post.Created_at) }}
+                    </span>
+                  </div>
+
+                  <div v-if="post.Caption">
+                    <p class="text-sm sm:text-base text-gray-300 leading-relaxed font-Geist whitespace-pre-line">
+                      {{ post.Caption }}
+                    </p>
+                  </div>
+
+                  <div class="flex justify-between items-center pt-2 border-t border-[#46464D]/20 text-sm">
+                    <div class="flex gap-4 sm:gap-6 items-center">
+                      <!-- Likes Button with ic:baseline-favorite-border / ic:baseline-favorite in text-[#D0D4F7] -->
+                      <button
+                        type="button"
+                        @click="toggleLike(post.POST_ID)"
+                        class="flex gap-1.5 items-center cursor-pointer transition-colors"
+                        :class="post.userHasLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'"
+                      >
+                        <Icon
+                          :name="post.userHasLiked ? 'ic:baseline-favorite' : 'ic:baseline-favorite-border'"
+                          class="text-xl sm:text-2xl text-[#D0D4F7] transition-transform active:scale-125"
+                        />
+                        <span
+                          class="text-xs sm:text-sm font-medium"
+                          :class="post.userHasLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE]'"
+                        >
+                          {{ formatCount(post.likeCount) }}
+                        </span>
+                      </button>
+
+                      <!-- Comments Button -->
+                      <button
+                        type="button"
+                        @click="openPostDetail(post)"
+                        class="flex gap-1.5 items-center text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
+                      >
+                        <Icon name="ic:sharp-chat-bubble-outline" class="text-xl sm:text-2xl text-[#D0D4F7]" />
+                        <span class="text-xs sm:text-sm font-medium">
+                          {{ formatCount(post.commentCount) }}
+                        </span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      @click="handleSharePost(post)"
+                      class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
+                      title="Share Post"
+                    >
+                      <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </template>
           </div>
 
           <!-- Right: Upcoming Events Sidebar -->
@@ -985,41 +1257,41 @@ const handleLogout = async () => {
               </h2>
 
               <div class="flex flex-col gap-3 sm:gap-4">
-                <div
-                  class="flex items-center gap-3 sm:gap-4 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
+                <template v-if="upcomingEvents.length > 0">
                   <div
-                    class="flex p-2.5 sm:p-3 border border-[#B4B8DA]/20 rounded-lg bg-[#B4B8DA]/10 items-center justify-center w-12 h-12 sm:w-14 sm:h-14 shrink-0 text-center">
-                    <div class="flex flex-col font-HankenGrotesk leading-tight">
-                      <span class="text-sm sm:text-base font-bold text-white">24</span>
-                      <span class="text-[10px] text-[#D0D4F7] uppercase tracking-wider font-semibold">OCT</span>
+                    v-for="event in upcomingEvents"
+                    :key="event.id"
+                    @click="activeTab = 'calendar'"
+                    class="flex items-center gap-3 sm:gap-4 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+                  >
+                    <div
+                      class="flex p-2.5 sm:p-3 border border-[#B4B8DA]/20 rounded-lg bg-[#B4B8DA]/10 items-center justify-center w-12 h-12 sm:w-14 sm:h-14 shrink-0 text-center"
+                    >
+                      <div class="flex flex-col font-HankenGrotesk leading-tight">
+                        <span class="text-sm sm:text-base font-bold text-white">{{ event.day }}</span>
+                        <span class="text-[10px] text-[#D0D4F7] uppercase tracking-wider font-semibold">{{ event.month }}</span>
+                      </div>
+                    </div>
+
+                    <div class="flex flex-col min-w-0">
+                      <h4 class="font-medium text-sm sm:text-base text-white truncate">{{ event.title }}</h4>
+                      <p class="text-xs text-gray-400 truncate">{{ event.location }}</p>
                     </div>
                   </div>
-
-                  <div class="flex flex-col min-w-0">
-                    <h4 class="font-medium text-sm sm:text-base text-white truncate">Neon Nights Live</h4>
-                    <p class="text-xs text-gray-400 truncate">Quezon City, Manila</p>
-                  </div>
-                </div>
+                </template>
 
                 <div
-                  class="flex items-center gap-3 sm:gap-4 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
-                  <div
-                    class="flex p-2.5 sm:p-3 border border-[#B4B8DA]/20 rounded-lg bg-[#B4B8DA]/10 items-center justify-center w-12 h-12 sm:w-14 sm:h-14 shrink-0 text-center">
-                    <div class="flex flex-col font-HankenGrotesk leading-tight">
-                      <span class="text-sm sm:text-base font-bold text-white">28</span>
-                      <span class="text-[10px] text-[#D0D4F7] uppercase tracking-wider font-semibold">OCT</span>
-                    </div>
-                  </div>
-
-                  <div class="flex flex-col min-w-0">
-                    <h4 class="font-medium text-sm sm:text-base text-white truncate">Acoustic Session</h4>
-                    <p class="text-xs text-gray-400 truncate">BGC, Taguig</p>
-                  </div>
+                  v-else
+                  class="py-8 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-[#46464D]/40 rounded-xl bg-white/2"
+                >
+                  <Icon name="lucide:calendar-off" class="text-2xl text-[#C7C5CE]/50" />
+                  <p class="text-xs text-[#C7C5CE]/80 font-Geist">no upcoming events</p>
                 </div>
               </div>
             </div>
 
             <button
+              @click="activeTab = 'calendar'"
               class="w-full flex items-center justify-center p-3 border rounded-lg border-[#D0D4F7]/60 hover:border-[#D0D4F7] hover:bg-[#D0D4F7]/10 font-Geist font-medium text-xs sm:text-sm text-[#D0D4F7] transition-all cursor-pointer">
               <span>VIEW ALL EVENTS</span>
             </button>
@@ -1892,6 +2164,36 @@ const handleLogout = async () => {
       @close="isForm2ModalOpen = false"
       @accepted="fetchArtistEvents"
       @rejected="fetchArtistEvents"
+    />
+
+    <!-- Artist Create Post Modal -->
+    <ArtistCreatePostModal
+      :is-open="isCreatePostOpen"
+      :artist-id="artistId"
+      :artist-name="artistName"
+      :artist-avatar="profilePicture"
+      @close="isCreatePostOpen = false"
+      @created="handlePostCreated"
+    />
+
+    <!-- Artist Edit Post Modal -->
+    <ArtistEditPostModal
+      :is-open="isEditPostOpen"
+      :post="postToEdit"
+      :artist-id="artistId"
+      :artist-name="artistName"
+      :artist-avatar="profilePicture"
+      @close="isEditPostOpen = false; postToEdit = null"
+      @updated="handlePostUpdated"
+    />
+
+    <!-- Post Detail Modal Component -->
+    <PostDetailModal
+      :is-open="isPostModalOpen"
+      :post="selectedPost"
+      :artist-name="artistName"
+      :artist-avatar="profilePicture"
+      @close="closePostModal"
     />
 
   </div>

@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@iconify-json/ic": "^1.2.4",
+    "@iconify-json/lucide": "^1.2.138",
     "@iconify-json/mdi": "^1.2.3",
     "@types/node": "^26.4.1"
   }
