@@ -608,7 +608,7 @@ const isScrolled = computed(() => scrollY.value > 200)
 
             <div class="flex items-center gap-1.5 min-w-0">
               <span
-                class="font-Sora font-bold text-xs sm:text-sm text-white group-hover/scrolled:text-[#D0D4F7] transition-colors truncate max-w-[120px] sm:max-w-[220px]">
+                class="font-Sora font-bold text-xs sm:text-sm text-white group-hover/scrolled:text-[#D0D4F7] transition-colors truncate max-w-30 sm:max-w-55">
                 {{ displayName }}
               </span>
               <Icon

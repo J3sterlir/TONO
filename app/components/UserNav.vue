@@ -136,7 +136,7 @@ const handleLogout = async () => {
 
             <div class="flex items-center gap-1.5 min-w-0">
               <span
-                class="font-Sora font-bold text-xs sm:text-sm text-white group-hover/scrolled:text-[#D0D4F7] transition-colors truncate max-w-[100px] sm:max-w-[160px] md:max-w-[220px]">
+                class="font-Sora font-bold text-xs sm:text-sm text-white group-hover/scrolled:text-[#D0D4F7] transition-colors truncate max-w-25 sm:max-w-40 md:max-w-55">
                 {{ scrolledTitle }}
               </span>
               <Icon
