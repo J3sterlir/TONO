@@ -84,7 +84,7 @@ const handleLogout = async () => {
 
 <template>
   <nav
-    class="bg-[#131315]/90 sticky top-0 backdrop-blur-md border-b border-[#46464D]/75 z-40">
+    class="bg-[#131315]/90 sticky top-0 backdrop-blur-md border-b border-[#46464D]/75 z-40 font-HankenGrotesk">
     <div class="flex items-center justify-between px-4 sm:px-8 md:px-10 py-3 sm:py-4">
       <!-- Brand / Logo & Scrolled Artist Title (Spotify Behavior) -->
       <div class="flex items-center gap-2.5 sm:gap-3.5 shrink-0 min-w-0">
@@ -95,9 +95,14 @@ const handleLogout = async () => {
             src="/TONO_LOGO.svg"
             alt="Logo"
             class="h-7 w-7 sm:h-8 sm:w-8 rounded-full" />
-          <h1 class="text-xl sm:text-[1.5rem] font-bold tracking-wide">
+          <div class="flex items-baseline gap-1">
+            <h1 class="text-xl sm:text-[1.5rem] font-bold tracking-wide">
             TONO
           </h1>
+          <h1 class="text-xl sm:text-[1rem] font-light tracking-wide">
+            Artist
+          </h1>
+          </div>
         </div>
 
         <!-- Scrolled Artist Display when scrolled down -->

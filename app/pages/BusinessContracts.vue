@@ -246,6 +246,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <head>
+    <title>Business Contracts | TONO</title>
+  </head>
   <div class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 sm:py-10 space-y-8 font-Sora">
 
     <!-- Sanction Warning Modal -->

@@ -5,6 +5,7 @@ definePageMeta({
 })
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { motion } from 'motion-v'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile } = useTonoAuth()
@@ -172,6 +173,10 @@ const handleLogout = async () => {
 </script>
 
 <template>
+
+  <head>
+    <title>Artist Home | TONO</title>
+  </head>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen">
     <!-- Main Content -->
     <div class="px-11.75 py-16 flex flex-col gap-12 mx-auto w-full">
@@ -181,69 +186,75 @@ const handleLogout = async () => {
       <div class="flex flex-col gap-5 justify-between sm:flex-row sm:gap-2">
 
         <div class="flex flex-col gap-4">
-        <div>
-          <!--<span class="text-xs font-semibold tracking-wider uppercase text-[#D0D4F7]/80">Artist Dashboard</span>-->
-          <!--<h1 class="text-2xl md:text-3xl font-bold text-white mt-1">
+          <div>
+            <!--<span class="text-xs font-semibold tracking-wider uppercase text-[#D0D4F7]/80">Artist Dashboard</span>-->
+            <!--<h1 class="text-2xl md:text-3xl font-bold text-white mt-1">
             Welcome back, <span class="text-[#D0D4F7]">{{ artistName }}</span>
           </h1>-->
-          <!--<p class="text-xs text-gray-400 mt-1">
+            <!--<p class="text-xs text-gray-400 mt-1">
             Browse peer artists in your scene or discover instrumentalists to invite to your band.
           </p>-->
-        </div>
-
-        <!-- Mode Switcher Tabs 0.8 Genre / 0.2 Inst to 0.3 Genre / 0.7 Inst-->
-        <div class="flex flex-col items-center p-1 rounded-2xl bg-[#0E0E10] border border-[#3A3A3C] shrink-0 sm:flex-row">
-          <button
-            @click="switchFeedMode('discovery')"
-            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer w-full sm:w-fit"
-            :class="feedMode === 'discovery' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
-            <Icon name="ic:outline-music-note" class="text-base" />
-            <span>Discovery Feed (Genres over Instruments)</span>
-          </button>
-          <button
-            @click="switchFeedMode('recruitment')"
-            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer w-full sm:w-fit"
-            :class="feedMode === 'recruitment' ? 'bg-[#D0D4F7] text-[#0E0E10] shadow-md' : 'text-gray-400 hover:text-white'">
-            <Icon name="ic:outline-group-add" class="text-base" />
-            <span>Recruitment Feed (Instruments over Genres)</span>
-          </button>
-        </div>
-      </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-10 p-4 rounded-2xl bg-[#131315]/80 border border-[#3A3A3C] shadow-lg backdrop-blur-md">
-        <div class="flex items-center gap-3">
-          <div class="flex p-2.5 rounded-xl bg-[#D0D4F7]/10 text-[#D0D4F7]">
-            <Icon name="ic:baseline-location-on" class="text-xl" />
           </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-white">Location Filter Gateway</span>
-              <span class="text-xs px-2 py-0.5 rounded-full"
-                :class="isLocationFilterActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'">
-                {{ isLocationFilterActive ? 'Active' : 'Inactive' }}
-              </span>
+
+          <!-- Mode Switcher Tabs with Framer Motion Sliding Pill -->
+          <div
+            class="relative flex flex-col items-center p-1 rounded-2xl bg-[#0E0E10] border border-[#3A3A3C] shrink-0 sm:flex-row">
+            <button type="button" @click="switchFeedMode('discovery')"
+              class="relative z-10 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer w-full sm:w-fit"
+              :class="feedMode === 'discovery' ? 'text-[#0E0E10]' : 'text-gray-400 hover:text-white'">
+              <motion.div v-if="feedMode === 'discovery'" layoutId="feedModePill"
+                class="absolute inset-0 bg-[#D0D4F7] rounded-xl shadow-md -z-10"
+                :transition="{ type: 'spring', stiffness: 380, damping: 30 }" />
+              <Icon name="ic:outline-music-note" class="text-base shrink-0" />
+              <span>Discovery Feed (Genres over Instruments)</span>
+            </button>
+            <button type="button" @click="switchFeedMode('recruitment')"
+              class="relative z-10 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors duration-200 cursor-pointer w-full sm:w-fit"
+              :class="feedMode === 'recruitment' ? 'text-[#0E0E10]' : 'text-gray-400 hover:text-white'">
+              <motion.div v-if="feedMode === 'recruitment'" layoutId="feedModePill"
+                class="absolute inset-0 bg-[#D0D4F7] rounded-xl shadow-md -z-10"
+                :transition="{ type: 'spring', stiffness: 380, damping: 30 }" />
+              <Icon name="ic:outline-group-add" class="text-base shrink-0" />
+              <span>Recruitment Feed (Instruments over Genres)</span>
+            </button>
+          </div>
+        </div>
+
+        <div
+          class="flex flex-wrap items-center justify-between gap-10 p-4 rounded-2xl bg-[#131315]/80 border border-[#3A3A3C] shadow-lg backdrop-blur-md">
+          <div class="flex items-center gap-3">
+            <div class="flex p-2.5 rounded-xl bg-[#D0D4F7]/10 text-[#D0D4F7]">
+              <Icon name="ic:baseline-location-on" class="text-xl" />
             </div>
-            <p class="text-xs text-gray-400 mt-0.5">
-              {{ isLocationFilterActive 
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-white">Location Filter Gateway</span>
+                <span class="text-xs px-2 py-0.5 rounded-full"
+                  :class="isLocationFilterActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'">
+                  {{ isLocationFilterActive ? 'Active' : 'Inactive' }}
+                </span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">
+                {{ isLocationFilterActive
                   ? `Filtering by ${userCity || 'your city'}${userBarangay ? ' • ' + userBarangay : ''}`
                   : 'Showing matches across all cities and regions' }}
-            </p>
+              </p>
+            </div>
           </div>
-        </div>
 
-        <!-- Toggle Switch -->
-        <button
-          @click="handleLocationToggle"
-          :disabled="isMatchingLoading"
-          class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-300 border"
-          :class="isLocationFilterActive 
-            ? 'bg-[#1E1E24] hover:bg-[#282830] text-gray-200 border-[#3A3A3C]' 
-            : 'bg-[#D0D4F7] text-[#0E0E10] border-[#D0D4F7] hover:bg-white shadow-md shadow-[#D0D4F7]/20'">
-          <Icon :name="isLocationFilterActive ? 'ic:outline-public' : 'ic:baseline-location-searching'" class="text-base" />
-          <span>{{ isLocationFilterActive ? 'Disable Location Filter (Show Everywhere)' : 'Re-enable Near Me' }}</span>
-        </button>
-        
-      </div>
+          <!-- Toggle Switch -->
+          <button @click="handleLocationToggle" :disabled="isMatchingLoading"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all duration-300 border"
+            :class="isLocationFilterActive
+              ? 'bg-[#1E1E24] hover:bg-[#282830] text-gray-200 border-[#3A3A3C]'
+              : 'bg-[#D0D4F7] text-[#0E0E10] border-[#D0D4F7] hover:bg-white shadow-md shadow-[#D0D4F7]/20'">
+            <Icon :name="isLocationFilterActive ? 'ic:outline-my-location' : 'ic:baseline-location-searching'"
+              class="text-base" />
+            <span>{{ isLocationFilterActive ? 'Disable Location Filter (Show Everywhere)' : 'Re-enable Near Me'
+            }}</span>
+          </button>
+
+        </div>
       </div>
 
       <!-- 1. HIGH COMPATIBILITY (70% - 100%) -->
@@ -251,7 +262,7 @@ const handleLogout = async () => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <h2 class="text-xl font-bold tracking-wide">
-              {{ feedMode === 'recruitment' ? 'Top Member Candidates' : 'High Compatibility Artists' }}
+              {{ feedMode === 'recruitment' ? 'Top Member Candidates' : 'Top Recommended Artists' }}
             </h2>
             <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               70% - 100% Match
@@ -284,7 +295,8 @@ const handleLogout = async () => {
           <!-- Empty State -->
           <div v-else-if="highMatches.length === 0"
             class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-            <div class="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl mb-1">
+            <div
+              class="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl mb-1">
               <Icon name="ic:outline-music-note" />
             </div>
             <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
@@ -305,7 +317,8 @@ const handleLogout = async () => {
                 <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
                   class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
                   :class="getTierAvatarRing(artist.match_tier)" />
-                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
+                <span
+                  class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
                   :class="getTierBadgeClass(artist.match_tier)">
                   {{ formatScorePercent(artist.total_score) }}% Match
                 </span>
@@ -319,7 +332,8 @@ const handleLogout = async () => {
               </span>
 
               <!-- In recruitment mode, highlight matched instruments -->
-              <div v-if="feedMode === 'recruitment' && artist.shared_instruments.length" class="flex flex-wrap justify-center gap-1 mt-1 max-w-35">
+              <div v-if="feedMode === 'recruitment' && artist.shared_instruments.length"
+                class="flex flex-wrap justify-center gap-1 mt-1 max-w-35">
                 <span v-for="inst in artist.shared_instruments.slice(0, 2)" :key="inst"
                   class="text-[10px] px-1.5 py-0.2 rounded bg-[#D0D4F7]/15 text-[#D0D4F7] truncate">
                   {{ inst }}
@@ -350,7 +364,7 @@ const handleLogout = async () => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <h2 class="text-xl font-bold tracking-wide">
-              {{ feedMode === 'recruitment' ? 'Potential Band Members' : 'Good Compatibility Matches' }}
+              {{ feedMode === 'recruitment' ? 'Potential Band Members' : 'You May Also Like' }}
             </h2>
             <!--<span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               30% - 69% Match
@@ -382,7 +396,8 @@ const handleLogout = async () => {
           <!-- Empty State -->
           <div v-else-if="mediumMatches.length === 0"
             class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-            <div class="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl mb-1">
+            <div
+              class="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl mb-1">
               <Icon name="ic:outline-queue-music" />
             </div>
             <p class="text-sm font-medium text-gray-300">No Artists Can be Found In This Category</p>
@@ -401,7 +416,8 @@ const handleLogout = async () => {
                 <img :src="getArtistAvatarUrl(artist)" :alt="artist.display_name"
                   class="w-36 h-36 rounded-full object-cover shadow-md transition-all"
                   :class="getTierAvatarRing(artist.match_tier)" />
-                <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
+                <span
+                  class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md"
                   :class="getTierBadgeClass(artist.match_tier)">
                   {{ formatScorePercent(artist.total_score) }}% Match
                 </span>
@@ -451,13 +467,15 @@ const handleLogout = async () => {
 
           <!-- Loading Skeletons -->
           <div v-if="isMatchingLoading" class="flex gap-4 h-75 overflow-hidden">
-            <div v-for="i in 3" :key="'disc-skel-' + i" class="flex-1 min-w-50 rounded-2xl bg-[#1E1E24] animate-pulse"></div>
+            <div v-for="i in 3" :key="'disc-skel-' + i" class="flex-1 min-w-50 rounded-2xl bg-[#1E1E24] animate-pulse">
+            </div>
           </div>
 
           <!-- Empty State -->
           <div v-else-if="discoverArtists.length === 0"
             class="p-10 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-            <div class="w-14 h-14 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-2xl mb-1">
+            <div
+              class="w-14 h-14 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-2xl mb-1">
               <Icon name="ic:outline-album" />
             </div>
             <p class="text-base font-semibold text-gray-200">No Artists Can be Found In This Category</p>
@@ -470,8 +488,7 @@ const handleLogout = async () => {
           <div v-else ref="discoverScrollRef" @scroll="checkScroll(discoverScrollRef, 'discover')"
             class="flex h-75 gap-4 w-full overflow-x-auto scrollbar-hide scroll-smooth">
             <NuxtLink v-for="(artist, index) in discoverArtists" :key="artist.artist_id"
-              :to="artist.username ? `/artist/${artist.username}` : '#'"
-              :class="[
+              :to="artist.username ? `/artist/${artist.username}` : '#'" :class="[
                 'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10 no-underline text-inherit',
                 index === discoverArtists.length - 1 && discoverArtists.length > 1 ? 'hover:-ml-12' : ''
               ]">
@@ -479,10 +496,12 @@ const handleLogout = async () => {
                 class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-105" />
 
               <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent"></div>
-              <div class="absolute inset-0 bg-black/40 transition-opacity duration-500 group-hover/card:bg-transparent"></div>
+              <div class="absolute inset-0 bg-black/40 transition-opacity duration-500 group-hover/card:bg-transparent">
+              </div>
 
               <div class="absolute top-4 right-4">
-                <span class="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap shadow-md backdrop-blur-md"
+                <span
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap shadow-md backdrop-blur-md"
                   :class="getTierBadgeClass(artist.match_tier)">
                   {{ formatScorePercent(artist.total_score) }}% Match
                 </span>
@@ -539,7 +558,8 @@ const handleLogout = async () => {
           <!-- Empty State -->
           <div v-else-if="businessProfiles.length === 0"
             class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-            <div class="w-12 h-12 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-xl mb-1">
+            <div
+              class="w-12 h-12 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-xl mb-1">
               <Icon name="ic:outline-storefront" />
             </div>
             <p class="text-sm font-medium text-gray-300">No Local Businesses Listed Yet</p>
@@ -555,10 +575,12 @@ const handleLogout = async () => {
               class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 w-32 text-center">
               <img :src="getBusinessAvatarUrl(business)" :alt="business.Business_Name"
                 class="w-28 h-28 rounded-full object-cover shadow-md mb-3 border border-[#3A3A3C]" />
-              <span class="text-gray-200 text-sm font-medium tracking-wide truncate max-w-full" :title="business.Business_Name">
+              <span class="text-gray-200 text-sm font-medium tracking-wide truncate max-w-full"
+                :title="business.Business_Name">
                 {{ business.Business_Name }}
               </span>
-              <span class="text-gray-400 text-xs font-light truncate max-w-full" :title="business.Business_Service || 'Music Service'">
+              <span class="text-gray-400 text-xs font-light truncate max-w-full"
+                :title="business.Business_Service || 'Music Service'">
                 {{ business.Business_Service || 'Music Service' }}
               </span>
             </div>
@@ -572,20 +594,6 @@ const handleLogout = async () => {
               <Icon name="ic:baseline-chevron-right" class="text-2xl" />
             </button>
           </div>
-        </div>
-      </section>
-
-      <!-- 6. JOB LISTINGS SECTION -->
-      <section class="flex flex-col gap-4">
-        <h2 class="text-xl font-bold tracking-wide">Job Listings & Opportunities</h2>
-        <div class="p-8 rounded-2xl bg-[#131315]/50 border border-[#2A2A2E] text-center flex flex-col items-center justify-center gap-2">
-          <div class="w-12 h-12 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] flex items-center justify-center text-xl mb-1">
-            <Icon name="ic:outline-work-outline" />
-          </div>
-          <p class="text-sm font-medium text-gray-300">No Open Job Listings Currently</p>
-          <p class="text-xs text-gray-500 max-w-md">
-            Venue and business job listings in your area will appear here when posted.
-          </p>
         </div>
       </section>
     </div>

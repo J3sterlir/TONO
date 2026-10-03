@@ -375,6 +375,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
+  <title>User Profile | TONO</title>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16 overflow-x-hidden">
     <!-- Media Cropper Modal -->
     <MediaCropperModal

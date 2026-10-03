@@ -626,6 +626,9 @@ onMounted(() => {
 </script>
 
 <template>
+  <head>
+    <title>Business Job Listings | TONO</title>
+  </head>
   <div class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 sm:py-10 space-y-8 font-Sora">
 
     <!-- Sanctions / Proximity Warning Modal -->

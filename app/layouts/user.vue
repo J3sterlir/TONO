@@ -4,7 +4,7 @@
     <UserNav />
 
     <!-- Page content will be injected here -->
-    <main class="flex-1">
+    <main class="flex-1 font-Geist">
       <slot />
     </main>
   </div>

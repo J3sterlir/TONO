@@ -30,10 +30,13 @@ const isEditDetailsOpen = ref(false)
 
 // Multipage Tab State
 const route = useRoute()
-const activeTab = ref<'posts' | 'gigs' | 'calendar' | 'portfolio' | 'contact'>('posts')
+const activeTab = ref<'posts' | 'gigs' | 'calendar' | 'portfolio' | 'contact' | 'members'>('posts')
 
 import type { PostItem } from '~/composables/useArtistPosts'
 import { formatPostTimestamp, formatCount } from '~/utils/postHelpers'
+import { useBandMembers, type BandMemberItem } from '~/composables/useBandMembers'
+import { normalizeRole } from '~/utils/roleHelper'
+import BandInviteMemberModal from '~/components/BandInviteMemberModal.vue'
 
 // Posts Feed & Modals State
 const isCreatePostOpen = ref(false)
@@ -699,12 +702,17 @@ onMounted(async () => {
         const tabParam = route.query.tab as string
         if (tabParam === 'events') {
           activeTab.value = 'gigs'
-        } else if (['posts', 'gigs', 'calendar', 'portfolio', 'contact'].includes(tabParam)) {
+        } else if (['posts', 'gigs', 'calendar', 'portfolio', 'contact', 'members'].includes(tabParam)) {
           activeTab.value = tabParam as any
         }
       }
       await fetchArtistEvents()
       setupRealtimeContracts()
+
+      if (profile.artistProfile?.Artist_Type === 'Band') {
+        await fetchBandMembers(profile.artistProfile.ARTIST_ID, true)
+        setupRealtimeBandMembers()
+      }
 
       if (route.query.contractId) {
         activeTab.value = 'gigs'
@@ -758,7 +766,75 @@ onBeforeUnmount(() => {
     supabase.removeChannel(artistContractsRealtimeChannel)
     artistContractsRealtimeChannel = null
   }
+  if (cleanupBandMembersRealtime) {
+    cleanupBandMembersRealtime()
+    cleanupBandMembersRealtime = null
+  }
 })
+
+// Band Members Management State
+const isInviteModalOpen = ref(false)
+const memberToRemove = ref<BandMemberItem | null>(null)
+const isRemoveConfirmOpen = ref(false)
+const removeSuccessToast = ref('')
+
+const {
+  members: bandMembers,
+  isLoading: isBandMembersLoading,
+  isActionLoading: isBandActionLoading,
+  fetchBandMembers,
+  removeMember,
+  subscribeToBandMembersRealtime,
+} = useBandMembers()
+
+const activeMembersCount = computed(() => {
+  return bandMembers.value.filter(m => m.status === 'Accepted').length
+})
+
+const pendingBandMembersCount = computed(() => {
+  return bandMembers.value.filter(m => m.status === 'Pending').length
+})
+
+let cleanupBandMembersRealtime: (() => void) | null = null
+const setupRealtimeBandMembers = () => {
+  if (cleanupBandMembersRealtime) {
+    cleanupBandMembersRealtime()
+    cleanupBandMembersRealtime = null
+  }
+  if (artistId.value && artistType.value === 'Band') {
+    cleanupBandMembersRealtime = subscribeToBandMembersRealtime(artistId.value, () => {
+      fetchBandMembers(artistId.value, true)
+    })
+  }
+}
+
+const handleOpenRemoveConfirm = (member: BandMemberItem) => {
+  memberToRemove.value = member
+  isRemoveConfirmOpen.value = true
+}
+
+const handleConfirmRemoveMember = async () => {
+  if (!memberToRemove.value || !artistId.value) return
+  const target = memberToRemove.value
+  const res = await removeMember(artistId.value, target.memberId)
+  if (res.success) {
+    removeSuccessToast.value = target.status === 'Accepted'
+      ? `Removed ${target.artistName} from band.`
+      : `Cancelled invitation for ${target.artistName}.`
+    setTimeout(() => {
+      removeSuccessToast.value = ''
+    }, 4000)
+  }
+  isRemoveConfirmOpen.value = false
+  memberToRemove.value = null
+}
+
+const handleMemberInvited = (payload: { accountId: string; role: string; artistName: string }) => {
+  removeSuccessToast.value = `Invitation sent to ${payload.artistName} as ${payload.role}!`
+  setTimeout(() => {
+    removeSuccessToast.value = ''
+  }, 4500)
+}
 
 // Watch contractId query parameter for notification clicks while on the page
 watch(
@@ -881,6 +957,9 @@ const handleLogout = async () => {
 </script>
 
 <template>
+  <head>
+    <title>Artist Profile | TONO</title>
+  </head>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16 overflow-x-hidden">
 
     <!-- Media Cropper Modal -->
@@ -1044,6 +1123,27 @@ const handleLogout = async () => {
               :class="activeTab === 'gigs' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
               Gigs
               <span v-if="pendingOffers.length" class="absolute top-3 -right-2 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            </span>
+          </button>
+
+          <!-- Members Tab (Only for Band artists) -->
+          <button
+            v-if="artistType === 'Band'"
+            @click="activeTab = 'members'"
+            class="font-Sora cursor-pointer transition-colors"
+            :class="activeTab === 'members' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'"
+          >
+            <span
+              class="inline-block py-4 sm:py-5 relative"
+              :class="activeTab === 'members' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''"
+            >
+              Members
+              <span
+                v-if="pendingBandMembersCount > 0"
+                class="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-amber-400 text-black font-bold"
+              >
+                {{ pendingBandMembersCount }}
+              </span>
             </span>
           </button>
 
@@ -2111,6 +2211,270 @@ const handleLogout = async () => {
           </section>
 
         </div>
+
+        <!-- Members Tab Content (Only for Band artists) -->
+        <div v-else-if="activeTab === 'members'" class="w-full space-y-8 font-Sora">
+          <!-- Floating Status Toast -->
+          <div
+            v-if="removeSuccessToast"
+            class="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-[#1E1E24] border border-[#D0D4F7]/60 text-white shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200"
+          >
+            <Icon name="lucide:check-circle" class="text-emerald-400 text-lg shrink-0" />
+            <span class="text-xs sm:text-sm font-medium">{{ removeSuccessToast }}</span>
+          </div>
+
+          <!-- SECTION 1: Band Recruitment & Invite Header -->
+          <section class="bg-[#18181B] border border-[#46464D]/40 rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-xl">
+            <!-- Background glow accent -->
+            <div class="absolute -right-20 -top-20 w-80 h-80 rounded-full bg-[#D0D4F7]/5 blur-3xl pointer-events-none"></div>
+
+            <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div class="max-w-2xl space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-mono uppercase tracking-wider text-[#D0D4F7] bg-[#D0D4F7]/10 px-2.5 py-0.5 rounded-full border border-[#D0D4F7]/20">
+                    Band Recruitment
+                  </span>
+                  <span class="text-xs text-gray-400 font-Geist">Active Lineup</span>
+                </div>
+                <h3 class="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                  Recruit & Manage Band Members
+                </h3>
+                <p class="text-xs sm:text-sm text-gray-300 font-Geist leading-relaxed">
+                  Search all verified solo artists across TONO to join your band. Assign their designated instrument or vocal role, review active members, and track invitation statuses.
+                </p>
+
+                <!-- Quick Roster Counters -->
+                <div class="flex flex-wrap items-center gap-3 pt-2">
+                  <div class="px-3 py-1.5 rounded-xl bg-[#141416] border border-[#46464D]/30 flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-Geist">Total:</span>
+                    <span class="text-sm font-bold text-white font-mono">{{ bandMembers.length }}</span>
+                  </div>
+                  <div class="px-3 py-1.5 rounded-xl bg-emerald-950/30 border border-emerald-500/20 flex items-center gap-2 text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span class="text-xs font-Geist">Active:</span>
+                    <span class="text-sm font-bold font-mono">{{ activeMembersCount }}</span>
+                  </div>
+                  <div v-if="pendingBandMembersCount > 0" class="px-3 py-1.5 rounded-xl bg-amber-950/30 border border-amber-500/20 flex items-center gap-2 text-amber-400">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span class="text-xs font-Geist">Invited:</span>
+                    <span class="text-sm font-bold font-mono">{{ pendingBandMembersCount }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Primary Action: Invite Member Button -->
+              <div class="shrink-0">
+                <button
+                  type="button"
+                  @click="isInviteModalOpen = true"
+                  class="flex items-center gap-2.5 px-6 py-3.5 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] font-bold text-sm transition-all duration-200 shadow-lg hover:shadow-[#D0D4F7]/20 hover:scale-[1.02] cursor-pointer group"
+                >
+                  <Icon name="lucide:user-plus" class="text-lg group-hover:scale-110 transition-transform" />
+                  <span>Invite Member</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 2: Complete Lineup & Members Roster -->
+          <section class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-lg font-bold text-white tracking-wide">Current Lineup & Invitations</h4>
+                <p class="text-xs text-gray-400 font-Geist">All active performers and outgoing invitations</p>
+              </div>
+              <button
+                v-if="bandMembers.length > 0"
+                @click="fetchBandMembers(artistId, true)"
+                class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#D0D4F7] transition-colors p-1"
+                title="Refresh members"
+              >
+                <Icon name="lucide:refresh-cw" class="text-sm" :class="{ 'animate-spin': isBandMembersLoading }" />
+                <span class="hidden sm:inline">Refresh</span>
+              </button>
+            </div>
+
+            <!-- Loading Skeleton -->
+            <div v-if="isBandMembersLoading && bandMembers.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div v-for="i in 3" :key="i" class="h-44 rounded-2xl bg-[#18181B] animate-pulse border border-[#46464D]/20"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div
+              v-else-if="bandMembers.length === 0"
+              class="flex flex-col items-center justify-center p-12 sm:p-16 border border-[#46464D]/40 border-dashed rounded-2xl bg-[#161619] text-center"
+            >
+              <div class="w-16 h-16 rounded-full bg-[#1F1F24] border border-white/10 flex items-center justify-center text-[#D0D4F7] mb-4">
+                <Icon name="lucide:users" class="text-3xl" />
+              </div>
+              <h5 class="text-base font-bold text-white mb-1">No Band Members Yet</h5>
+              <p class="text-xs sm:text-sm text-gray-400 font-Geist max-w-md leading-relaxed">
+                Your band roster is currently empty. Recruit verified solo artists on TONO to complete your lineup for gigs and contracts.
+              </p>
+            </div>
+
+            <!-- Member Cards Grid -->
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div
+                v-for="member in bandMembers"
+                :key="member.memberId"
+                class="bg-[#18181B] border border-[#46464D]/40 hover:border-[#D0D4F7]/40 rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 group shadow-md"
+              >
+                <!-- Card Top Info -->
+                <div class="space-y-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <!-- Avatar with status indicator ring -->
+                      <div class="relative shrink-0">
+                        <img
+                          v-if="member.profilePicture"
+                          :src="member.profilePicture"
+                          :alt="member.artistName"
+                          class="w-12 h-12 rounded-full object-cover ring-2"
+                          :class="member.status === 'Accepted' ? 'ring-emerald-500/40' : 'ring-amber-500/40'"
+                        />
+                        <div
+                          v-else
+                          class="w-12 h-12 rounded-full bg-[#2A2A30] text-gray-200 flex items-center justify-center font-bold text-base uppercase ring-2"
+                          :class="member.status === 'Accepted' ? 'ring-emerald-500/40' : 'ring-amber-500/40'"
+                        >
+                          {{ member.artistName.charAt(0) }}
+                        </div>
+                        <span
+                          class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#18181B]"
+                          :class="member.status === 'Accepted' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'"
+                          :title="member.status === 'Accepted' ? 'Active' : 'Invited'"
+                        ></span>
+                      </div>
+
+                      <div class="min-w-0">
+                        <h5 class="text-sm sm:text-base font-bold text-white truncate group-hover:text-[#D0D4F7] transition-colors">
+                          {{ member.artistName }}
+                        </h5>
+                        <p class="text-xs text-gray-400 font-mono truncate">
+                          @{{ member.username }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <!-- Status Badge -->
+                    <span
+                      class="text-[11px] px-2.5 py-0.5 rounded-full font-medium shrink-0"
+                      :class="member.status === 'Accepted'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'"
+                    >
+                      {{ member.status === 'Accepted' ? 'Active' : 'Invited' }}
+                    </span>
+                  </div>
+
+                  <!-- Role Display (Artist Name below it Role, normalized) -->
+                  <div class="pt-1">
+                    <span class="text-[11px] text-gray-400 font-Geist block mb-1">Role in Band:</span>
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#D0D4F7]/10 border border-[#D0D4F7]/25 text-[#D0D4F7] font-medium text-xs font-Geist">
+                      <Icon name="lucide:music" class="text-xs shrink-0" />
+                      <span>{{ normalizeRole(member.instrumentRole) || 'Band Member' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Dates & Details -->
+                  <div class="text-[11px] text-gray-500 font-Geist space-y-0.5">
+                    <p v-if="member.city" class="flex items-center gap-1 text-gray-400">
+                      <Icon name="ic:baseline-location-on" class="text-xs text-[#D0D4F7]" />
+                      <span>{{ member.city }}</span>
+                    </p>
+                    <p v-if="member.status === 'Accepted' && member.joinedAt">
+                      Joined: {{ new Date(member.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                    </p>
+                    <p v-else-if="member.invitedAt">
+                      Invited: {{ new Date(member.invitedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Card Bottom Actions (Remove member or cancel invite) -->
+                <div class="mt-4 pt-3 border-t border-[#46464D]/25 flex items-center justify-between">
+                  <NuxtLink
+                    :to="`/artist/${member.username}`"
+                    class="text-xs text-gray-400 hover:text-white transition-colors flex items-center gap-1 group/link"
+                  >
+                    <span>View Profile</span>
+                    <Icon name="lucide:external-link" class="text-[11px] group-hover/link:translate-x-0.5 transition-transform" />
+                  </NuxtLink>
+
+                  <button
+                    type="button"
+                    @click="handleOpenRemoveConfirm(member)"
+                    class="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30 px-2.5 py-1 rounded-lg border border-red-500/20 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Icon name="lucide:trash-2" class="text-xs" />
+                    <span>{{ member.status === 'Accepted' ? 'Remove' : 'Cancel Invite' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Member Removal Confirmation Dialog -->
+          <div
+            v-if="isRemoveConfirmOpen && memberToRemove"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            @click.self="isRemoveConfirmOpen = false"
+          >
+            <div class="w-full max-w-md bg-[#161619] border border-[#46464D]/60 rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-red-950/50 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                  <Icon name="lucide:alert-triangle" class="text-xl" />
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">
+                    {{ memberToRemove.status === 'Accepted' ? 'Remove Band Member?' : 'Cancel Invitation?' }}
+                  </h4>
+                  <p class="text-xs text-gray-400 font-Geist">
+                    {{ memberToRemove.status === 'Accepted'
+                      ? `Are you sure you want to remove ${memberToRemove.artistName} from your band roster?`
+                      : `Are you sure you want to revoke the pending invitation for ${memberToRemove.artistName}?` }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="p-3 rounded-xl bg-[#1F1F24] border border-white/5 flex items-center gap-3">
+                <img
+                  v-if="memberToRemove.profilePicture"
+                  :src="memberToRemove.profilePicture"
+                  :alt="memberToRemove.artistName"
+                  class="w-9 h-9 rounded-full object-cover shrink-0"
+                />
+                <div v-else class="w-9 h-9 rounded-full bg-[#2A2A30] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {{ memberToRemove.artistName.charAt(0) }}
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-bold text-white truncate">{{ memberToRemove.artistName }}</p>
+                  <p class="text-[11px] text-[#D0D4F7] font-Geist">{{ normalizeRole(memberToRemove.instrumentRole) }}</p>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  @click="isRemoveConfirmOpen = false; memberToRemove = null"
+                  class="px-4 py-2 rounded-xl border border-white/10 hover:border-white/30 text-gray-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  :disabled="isBandActionLoading"
+                  @click="handleConfirmRemoveMember"
+                  class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+                >
+                  <Icon v-if="isBandActionLoading" name="lucide:loader-2" class="animate-spin text-xs" />
+                  <span>{{ memberToRemove.status === 'Accepted' ? 'Confirm Removal' : 'Confirm Cancellation' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -2194,6 +2558,15 @@ const handleLogout = async () => {
       :artist-name="artistName"
       :artist-avatar="profilePicture"
       @close="closePostModal"
+    />
+
+    <!-- Band Invite Member Modal Component -->
+    <BandInviteMemberModal
+      :is-open="isInviteModalOpen"
+      :band-id="artistId"
+      :current-members="bandMembers"
+      @close="isInviteModalOpen = false"
+      @invited="handleMemberInvited"
     />
 
   </div>

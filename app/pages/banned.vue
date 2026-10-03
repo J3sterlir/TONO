@@ -12,6 +12,9 @@ const handleLogout = async () => {
 </script>
 
 <template>
+    <head>
+    <title>Account Banned | TONO</title>
+  </head>
     <div class="min-h-screen bg-[#121214] flex flex-col items-center justify-center p-6 text-center">
         <!-- Banned Modal -->
         <div class="max-w-md w-full bg-[#1E1E20] border border-red-500/30 p-8 rounded-xl shadow-2xl flex flex-col items-center gap-6">

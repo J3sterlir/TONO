@@ -319,9 +319,7 @@
         <!-- Content Details -->
         <div class="flex-1 min-w-0 space-y-1">
           <div class="flex items-start justify-between gap-2">
-            <p class="text-sm font-medium text-white leading-snug">
-              {{ item.title }}
-            </p>
+            <p class="text-sm font-medium text-white leading-snug" v-html="formatSubtitle(item.title)"></p>
             <span v-if="item.isUnread" class="w-2 h-2 rounded-full bg-[#D0D4F7] shadow-[0_0_8px_#D0D4F7] shrink-0 mt-1"></span>
           </div>
 
@@ -480,9 +478,7 @@
         <!-- Content Details -->
         <div class="flex-1 min-w-0 space-y-1">
           <div class="flex items-start justify-between gap-2">
-            <p class="text-sm font-medium text-white leading-snug">
-              {{ item.title }}
-            </p>
+            <p class="text-sm font-medium text-white leading-snug" v-html="formatSubtitle(item.title)"></p>
             <span v-if="item.isUnread" class="w-2 h-2 rounded-full bg-[#D0D4F7] shadow-[0_0_8px_#D0D4F7] shrink-0 mt-1"></span>
           </div>
 

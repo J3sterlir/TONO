@@ -80,6 +80,9 @@ const fetchMetrics = async () => {
 </script>
 
 <template>
+  <head>
+    <title>Business Dashboard | TONO</title>
+  </head>
   <div class="h-full text-white flex flex-col min-h-full pb-16 overflow-x-hidden font-Sora">
     <!-- Header Banner & Profile Info -->
     <div class="relative w-full overflow-hidden bg-[#131315] border-b border-[#46464D]/20">

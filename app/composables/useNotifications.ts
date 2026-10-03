@@ -122,7 +122,48 @@ export const useNotifications = () => {
       }
 
       if (data) {
-        notificationsList.value = data.map(mapRowToNotification)
+        // Collect band_invite items that still indicate actions
+        const bandInvitesWithActions = data.filter((row: any) =>
+          (row.Type === 'band_invite' || row.type === 'band_invite') &&
+          (row.Action_Primary || row.action_primary) &&
+          (row.Entity_ID || row.entity_id)
+        )
+
+        const resolvedStatuses = new Map<string, string>()
+        if (bandInvitesWithActions.length > 0) {
+          const bandIds = bandInvitesWithActions.map((r: any) => r.Entity_ID || r.entity_id)
+          try {
+            const { data: membersData } = await db
+              .from('BAND_MEMBERS')
+              .select('Band_ID, Status')
+              .eq('Member_ID', userId)
+              .in('Band_ID', bandIds)
+
+            if (membersData) {
+              for (const m of membersData) {
+                resolvedStatuses.set(m.Band_ID, m.Status)
+              }
+            }
+          } catch (e) {
+            console.warn('[useNotifications] Could not verify band member statuses:', e)
+          }
+        }
+
+        notificationsList.value = data.map((row: any) => {
+          const item = mapRowToNotification(row)
+          if (item.type === 'band_invite' && item.entityId && resolvedStatuses.has(item.entityId)) {
+            const status = resolvedStatuses.get(item.entityId)
+            if (status === 'Accepted' || status === 'Declined') {
+              item.hasActions = false
+              item.actionPrimary = undefined
+              item.actionSecondary = undefined
+              item.subtitle = status === 'Accepted'
+                ? '✓ Invitation accepted! Welcome to the band.'
+                : 'Invitation declined.'
+            }
+          }
+          return item
+        })
       }
     } catch (err) {
       console.error('Unexpected error loading notifications:', err)
@@ -272,14 +313,33 @@ export const useNotifications = () => {
 
       if (error) throw error
 
-      // Update notification item state
-      item.hasActions = false
-      item.subtitle = accept
+      const newSubtitle = accept
         ? '✓ Invitation accepted! Welcome to the band.'
         : 'Invitation declined.'
+
+      // Update in-memory notification item state immediately
+      item.hasActions = false
+      item.actionPrimary = undefined
+      item.actionSecondary = undefined
+      item.subtitle = newSubtitle
       item.isUnread = false
 
-      await markAsRead(item)
+      // Persist to database so reload retains cleared action buttons permanently
+      try {
+        await db
+          .from('NOTIFICATION')
+          .update({
+            Action_Primary: null,
+            Action_Secondary: null,
+            Content: newSubtitle,
+            Is_Read: true,
+          })
+          .eq('Notification_ID', item.id)
+      } catch (notifErr) {
+        console.warn('Failed to update NOTIFICATION record action state:', notifErr)
+        await markAsRead(item)
+      }
+
       return { success: true }
     } catch (err: any) {
       console.error('Failed to update band membership status:', err)

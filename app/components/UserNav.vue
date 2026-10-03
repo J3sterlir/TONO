@@ -94,7 +94,7 @@ const handleLogout = async () => {
 
 <template>
   <nav
-    class="bg-[#131315]/90 sticky top-0 backdrop-blur-md border-b border-[#46464D]/75 z-40">
+    class="bg-[#131315]/90 sticky top-0 backdrop-blur-md border-b border-[#46464D]/75 z-40 font-HankenGrotesk">
     <div class="flex items-center justify-between px-4 sm:px-8 md:px-10 py-3 sm:py-4">
       <!-- Brand / Logo & Scrolled Artist Title (Spotify Behavior) -->
       <div class="flex items-center gap-2.5 sm:gap-3.5 shrink-0 min-w-0">

@@ -37,6 +37,9 @@ onMounted(() => {
 </script>
 
 <template>
+    <head>
+    <title>Artist Verification | TONO</title>
+  </head>
     <div class="min-h-screen bg-[#121214] flex flex-col items-center justify-center p-6 text-center">
         <!-- Rejected Modal -->
         <div v-if="isRejected" class="max-w-md w-full bg-[#1E1E20] border border-red-500/30 p-8 rounded-xl shadow-2xl flex flex-col items-center gap-6">

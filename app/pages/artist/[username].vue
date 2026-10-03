@@ -5,6 +5,7 @@ definePageMeta({
 
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
+import { normalizeRole } from '~/utils/roleHelper'
 
 const route = useRoute()
 const username = computed(() => (route.params.username as string) || '')
@@ -292,6 +293,80 @@ const { data: profileData, error: fetchError } = await useAsyncData(
 
     const upcomingEvents = upcomingEventsData || []
 
+    // E. Fetch Band Members (Only if artist is a Band)
+    let bandMembers: any[] = []
+    if (artist.Artist_Type === 'Band') {
+      try {
+        const { data: membersRpcData, error: membersRpcErr } = await db.rpc('get_band_members', {
+          p_band_id: artist.ARTIST_ID,
+          p_include_pending: false,
+        })
+
+        if (!membersRpcErr && membersRpcData) {
+          bandMembers = membersRpcData.map((m: any) => ({
+            memberId: m.member_id,
+            artistId: m.artist_id,
+            artistName: m.artist_name || m.username || 'Artist',
+            username: m.username || '',
+            profilePicture: m.profile_picture || null,
+            city: m.city || null,
+            instrumentRole: normalizeRole(m.instrument_role) || 'Band Member',
+            specialty: m.specialty || null,
+            joinedAt: m.joined_at,
+          }))
+        } else {
+          // Fallback query
+          const { data: fallbackMembers } = await db
+            .from('BAND_MEMBERS')
+            .select(`
+              Member_ID,
+              Instrument_Role,
+              Status,
+              Joined_at,
+              USER_ACCOUNT:Member_ID (
+                ACCOUNT_ID,
+                Username,
+                Profile_Picture,
+                City,
+                ARTIST:ACCOUNT_ID (
+                  ARTIST_ID,
+                  Artist_Type,
+                  SOLO_ARTIST (
+                    Artist_Name,
+                    Specialty
+                  )
+                )
+              )
+            `)
+            .eq('Band_ID', artist.ARTIST_ID)
+            .eq('Status', 'Accepted')
+
+          if (fallbackMembers) {
+            bandMembers = fallbackMembers.map((m: any) => {
+              const u = m.USER_ACCOUNT
+              const soloArtist = Array.isArray(u?.ARTIST)
+                ? u?.ARTIST.find((a: any) => a.Artist_Type === 'Solo')
+                : (u?.ARTIST?.Artist_Type === 'Solo' ? u?.ARTIST : null)
+
+              return {
+                memberId: m.Member_ID,
+                artistId: soloArtist?.ARTIST_ID || null,
+                artistName: soloArtist?.SOLO_ARTIST?.Artist_Name || u?.Username || 'Artist',
+                username: u?.Username || '',
+                profilePicture: u?.Profile_Picture || null,
+                city: u?.City || null,
+                instrumentRole: normalizeRole(m.Instrument_Role) || 'Band Member',
+                specialty: soloArtist?.SOLO_ARTIST?.Specialty || null,
+                joinedAt: m.Joined_at,
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn('[artist/[username]] Could not load band members:', e)
+      }
+    }
+
     return {
       artist,
       genres,
@@ -301,6 +376,7 @@ const { data: profileData, error: fetchError } = await useAsyncData(
       milestoneItems,
       posterItems,
       upcomingEvents,
+      bandMembers,
     }
   }
 )
@@ -352,6 +428,8 @@ const tagsDisplay = computed(() => {
   if (artistTags.value.length === 0) return 'No tags listed'
   return artistTags.value.join(', ')
 })
+
+const bandMembers = computed(() => profileData.value?.bandMembers || [])
 
 const isOwner = computed(() => {
   if (!currentUser.value || !artistRecord.value) return false
@@ -406,7 +484,7 @@ const upcomingEvents = computed(() => {
 })
 
 // Tab Navigation
-const activeTab = ref<'posts' | 'calendar' | 'portfolio' | 'contact'>('posts')
+const activeTab = ref<'posts' | 'calendar' | 'portfolio' | 'contact' | 'members'>('posts')
 
 // Fallback preview URL helper
 const fallbackShareImage = 'https://tono.ph/images/tono-og-cover.jpg'
@@ -768,6 +846,21 @@ const isScrolled = computed(() => scrollY.value > 200)
               <span class="inline-block py-4 sm:py-5"
                 :class="activeTab === 'posts' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
                 Posts
+              </span>
+            </button>
+
+            <!-- Members Tab (Only for Band artists) -->
+            <button
+              v-if="artistTypeLabel === 'Band'"
+              @click="activeTab = 'members'"
+              class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'members' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'"
+            >
+              <span
+                class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'members' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''"
+              >
+                Members
               </span>
             </button>
 
@@ -1168,6 +1261,96 @@ const isScrolled = computed(() => scrollY.value > 200)
                 <span>Share Profile</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- 5. Members Tab Content Container (Only for Band artists) -->
+        <div v-else-if="activeTab === 'members'" class="w-full space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#46464D]/25">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-bold font-Sora text-white">Band Lineup</h2>
+              <p class="text-xs sm:text-sm text-gray-400 font-Geist">Official active performers of {{ displayName }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono px-3 py-1 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] border border-[#D0D4F7]/25 font-semibold">
+                {{ bandMembers.length }} {{ bandMembers.length === 1 ? 'Performer' : 'Performers' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Lineup Grid -->
+          <div v-if="bandMembers.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            <NuxtLink
+              v-for="member in bandMembers"
+              :key="member.memberId"
+              :to="member.username ? `/artist/${member.username}` : '#'"
+              class="bg-[#18181B] hover:bg-[#1E1E24] border border-[#46464D]/40 hover:border-[#D0D4F7]/60 rounded-2xl p-5 flex flex-col items-center text-center transition-all duration-300 group shadow-md hover:-translate-y-1 hover:shadow-xl hover:shadow-[#D0D4F7]/5 cursor-pointer"
+            >
+              <!-- Avatar with verified solo artist badge -->
+              <div class="relative mb-3">
+                <img
+                  v-if="member.profilePicture"
+                  :src="member.profilePicture"
+                  :alt="member.artistName"
+                  class="w-20 h-20 rounded-full object-cover ring-2 ring-[#D0D4F7]/30 group-hover:ring-[#D0D4F7] transition-all duration-300"
+                />
+                <div
+                  v-else
+                  class="w-20 h-20 rounded-full bg-[#26262C] text-gray-200 flex items-center justify-center font-bold text-2xl uppercase ring-2 ring-[#D0D4F7]/30 group-hover:ring-[#D0D4F7] transition-all duration-300"
+                >
+                  {{ member.artistName.charAt(0) }}
+                </div>
+                <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#18181B] flex items-center justify-center">
+                  <Icon name="ic:round-verified" class="text-emerald-400 text-sm" />
+                </div>
+              </div>
+
+              <!-- Artist Name (bold Sora) -->
+              <h3 class="font-Sora font-bold text-base sm:text-lg text-white group-hover:text-[#D0D4F7] transition-colors truncate max-w-full">
+                {{ member.artistName }}
+              </h3>
+
+              <p class="text-xs text-gray-400 font-mono mb-3">
+                @{{ member.username }}
+              </p>
+
+              <!-- Role (Artist Name below it Role, normalized) -->
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#D0D4F7]/10 border border-[#D0D4F7]/25 text-[#D0D4F7] font-medium text-xs font-Geist mb-3">
+                <Icon name="lucide:music" class="text-xs shrink-0" />
+                <span>{{ normalizeRole(member.instrumentRole) || 'Band Member' }}</span>
+              </div>
+
+              <!-- Extra Meta (City or Specialty) -->
+              <div class="text-[11px] text-gray-400 font-Geist mt-auto space-y-0.5">
+                <p v-if="member.specialty" class="text-gray-300 font-medium truncate max-w-full">
+                  {{ member.specialty }}
+                </p>
+                <p v-if="member.city" class="flex items-center justify-center gap-1">
+                  <Icon name="ic:baseline-location-on" class="text-xs text-[#D0D4F7]" />
+                  <span>{{ member.city }}</span>
+                </p>
+              </div>
+
+              <!-- Clickable prompt hint -->
+              <div class="mt-4 pt-3 w-full border-t border-[#46464D]/25 flex items-center justify-center gap-1 text-xs text-gray-400 group-hover:text-[#D0D4F7] transition-colors">
+                <span>View Solo Profile</span>
+                <Icon name="lucide:arrow-right" class="text-xs group-hover:translate-x-1 transition-transform" />
+              </div>
+            </NuxtLink>
+          </div>
+
+          <!-- Empty State -->
+          <div
+            v-else
+            class="w-full py-16 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50"
+          >
+            <div class="w-16 h-16 rounded-full bg-[#1E1E24] border border-white/10 flex items-center justify-center text-[#D0D4F7] mb-4">
+              <Icon name="lucide:users" class="text-3xl" />
+            </div>
+            <h3 class="font-Sora text-lg font-semibold text-white mb-1">Lineup Not Public Yet</h3>
+            <p class="text-xs sm:text-sm text-gray-400 font-Geist max-w-md">
+              {{ displayName }} has not yet listed their active members.
+            </p>
           </div>
         </div>
       </main>

@@ -327,7 +327,7 @@ const goBack = () => {
 </script>
 
 <template>
-    <title>Sign In</title>
+    <title>Sign In | TONO</title>
     <div class="flex min-h-screen flex-col lg:flex-row">
         <div
             class="flex w-full justify-center items-center bg-[#131315] px-5 py-6 sm:px-6 sm:py-8 lg:basis-[40%] lg:px-0 lg:py-0">

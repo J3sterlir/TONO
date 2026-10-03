@@ -41,7 +41,7 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <title>Login</title>
+  <title>Login | TONO</title>
   <div class="flex flex-col h-screen sm:flex-row">
     <div class="basis-full flex justify-center items-center bg-[#131315] w-screen sm:basis-[40%]">
       <div class="text-white w-[65%] flex flex-col gap-2">
@@ -99,7 +99,7 @@ const handleLogin = async () => {
     <div
       class="basis-[60%] justify-center items-center w-screen bg-blend-multiply bg-cover bg-center bg-[linear-gradient(0deg,rgba(18,18,20,0.95)_0%,rgba(93,93,94,0)_51%,rgba(255,255,255,0.1)_100%),url(https://images.unsplash.com/photo-1761474926416-ba16c9b39ea0)] hidden sm:flex sm:visible">
       <div class="text-[#E5E1E4]">
-        <div class="font-bold text-[4.5rem] backdrop-blur-[0.2rem]">
+        <div class="font-bold text-[4.5rem] backdrop-blur-[0.2rem] font-Geist">
           <h1>EXPLORE THE</h1>
           <h1><mark class="bg-[#D0D4F7] text-[#151A34] rounded-2xl px-2">COMMUNITY</mark></h1>
           <h1>EXPLORE YOUR</h1>

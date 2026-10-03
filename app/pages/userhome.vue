@@ -151,6 +151,7 @@ const fetchBusinessProfiles = async () => {
 </script>
 
 <template>
+  <title>User Home | TONO</title>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen">
 
 
@@ -453,7 +454,7 @@ const fetchBusinessProfiles = async () => {
       <!-- 5. LOCAL MUSIC INDUSTRY (SERVICES) -->
       <section class="flex flex-col gap-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold tracking-wide">Local Music Industry</h2>
+          <h2 class="text-xl font-bold tracking-wide">Businesses & Local Music Industry</h2>
           <span v-if="businessProfiles.length > 0" class="text-xs text-gray-500 font-medium">
             {{ businessProfiles.length }} {{ businessProfiles.length === 1 ? 'business' : 'businesses' }}
           </span>

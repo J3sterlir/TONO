@@ -133,6 +133,7 @@ const fetchUserEvents = async () => {
 </script>
 
 <template>
+  <title>Events | TONO</title>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16">
     <main class="max-w-7xl mx-auto w-full px-6 sm:px-10 py-10 flex flex-col gap-10">
       <!-- Header -->

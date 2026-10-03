@@ -37,7 +37,7 @@ const scrollTo = (id: string) => {
 </script>
 
 <template>
-    <title>TONO</title>
+    <title>Welcome to TONO</title>
     <nav
         class="flex bg-[#121214]/80 px-4 sm:px-8 py-3.5 sm:py-4 items-center justify-between backdrop-blur-[30px] sticky top-0 z-50 border-b border-white/5">
         <!-- Brand / Logo -->
