@@ -27,6 +27,13 @@ const handleLogin = async () => {
       throw new Error('Unable to sign in. Please check your credentials and try again.')
     }
 
+    const route = useRoute()
+    const redirectUrl = route.query.redirect as string | undefined
+    if (redirectUrl && redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) {
+      await navigateTo(redirectUrl)
+      return
+    }
+
     if (result.profile?.artistProfile) {
       await navigateTo('/Artisthome')
     } else {

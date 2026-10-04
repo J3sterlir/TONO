@@ -9,7 +9,8 @@ export interface NotificationItem {
   category: 'new' | 'earlier'
   type: string
   svgType: string
-  avatarText?: string
+  avatarText: string
+  avatarUrl?: string | null
   hasActions?: boolean
   actionPrimary?: string
   actionSecondary?: string
@@ -22,6 +23,25 @@ export interface NotificationItem {
 }
 
 let realtimeChannel: any = null
+let channelUserId: string | null = null
+let activeSubscribers = 0
+
+// Helper to compute abbreviated 2-letter uppercase initials
+export const getTwoLetterInitials = (text?: string | null): string => {
+  if (!text) return 'TO'
+  const cleaned = text.trim()
+  if (!cleaned) return 'TO'
+  const words = cleaned.split(/\s+/)
+  const w0 = words[0] || ''
+  const w1 = words[1] || ''
+  if (w0 && w1) {
+    return (w0.charAt(0) + w1.charAt(0)).toUpperCase()
+  }
+  if (cleaned.length >= 2) {
+    return cleaned.substring(0, 2).toUpperCase()
+  }
+  return cleaned.charAt(0).toUpperCase()
+}
 
 export const useNotifications = () => {
   const supabase = useSupabaseClient()
@@ -67,7 +87,7 @@ export const useNotifications = () => {
   }
 
   // Transform raw Supabase row into standard NotificationItem (casing resilient)
-  const mapRowToNotification = (row: any): NotificationItem => {
+  const mapRowToNotification = (row: any, senderAcc?: any): NotificationItem => {
     const rawIsRead = row.Is_Read !== undefined ? row.Is_Read : row.is_read
     const isUnread = rawIsRead !== undefined ? !rawIsRead : false
     const createdRaw = row.Created_At || row.created_at
@@ -76,6 +96,9 @@ export const useNotifications = () => {
     const category: 'new' | 'earlier' = hoursOld < 24 ? 'new' : 'earlier'
 
     const meta = row.Metadata || row.metadata || {}
+    const senderPic = senderAcc?.Profile_Picture || meta.avatar_url || meta.sender_avatar || meta.profile_picture || null
+    const candidateName = senderAcc?.Username || meta.sender_name || meta.band_name || row.Avatar_Text || row.avatar_text || row.Title || 'TONO'
+    const avatarText = getTwoLetterInitials(candidateName)
 
     return {
       id: row.Notification_ID || row.notification_id,
@@ -86,7 +109,8 @@ export const useNotifications = () => {
       category,
       type: row.Type || row.type || 'system',
       svgType: row.Svg_Type || row.svg_type || 'job_posted',
-      avatarText: row.Avatar_Text || row.avatar_text || 'TONO',
+      avatarText,
+      avatarUrl: senderPic,
       hasActions: !!(
         row.Action_Primary || row.action_primary ||
         row.Action_Secondary || row.action_secondary
@@ -122,6 +146,23 @@ export const useNotifications = () => {
       }
 
       if (data) {
+        // Collect unique sender IDs to fetch real profile pictures in a batch
+        const senderIds = Array.from(new Set(data.map((r: any) => r.Sender_Account_ID || r.sender_account_id).filter(Boolean)))
+        const sendersMap = new Map<string, any>()
+        if (senderIds.length > 0) {
+          try {
+            const { data: senders } = await db
+              .from('USER_ACCOUNT')
+              .select('ACCOUNT_ID, Username, Profile_Picture')
+              .in('ACCOUNT_ID', senderIds)
+            if (senders) {
+              senders.forEach((s: any) => sendersMap.set(s.ACCOUNT_ID, s))
+            }
+          } catch (e) {
+            console.warn('[useNotifications] Could not fetch senders for avatars:', e)
+          }
+        }
+
         // Collect band_invite items that still indicate actions
         const bandInvitesWithActions = data.filter((row: any) =>
           (row.Type === 'band_invite' || row.type === 'band_invite') &&
@@ -150,7 +191,9 @@ export const useNotifications = () => {
         }
 
         notificationsList.value = data.map((row: any) => {
-          const item = mapRowToNotification(row)
+          const sId = row.Sender_Account_ID || row.sender_account_id
+          const sender = sId ? sendersMap.get(sId) : null
+          const item = mapRowToNotification(row, sender)
           if (item.type === 'band_invite' && item.entityId && resolvedStatuses.has(item.entityId)) {
             const status = resolvedStatuses.get(item.entityId)
             if (status === 'Accepted' || status === 'Declined') {
@@ -177,6 +220,13 @@ export const useNotifications = () => {
     const userId = await getUserId()
     if (!userId) return
 
+    activeSubscribers++
+
+    // If channel is already actively listening for this exact user, keep it
+    if (realtimeChannel && channelUserId && channelUserId.toLowerCase() === userId.toLowerCase()) {
+      return
+    }
+
     // Clean up any stale subscription channel
     if (realtimeChannel) {
       try {
@@ -187,8 +237,9 @@ export const useNotifications = () => {
       realtimeChannel = null
     }
 
+    channelUserId = userId.toLowerCase()
     realtimeChannel = supabase
-      .channel(`user-notifications-${userId}-${Date.now()}`)
+      .channel(`user-notifications-${userId.toLowerCase()}-${Date.now()}`)
       .on(
         'postgres_changes',
         {
@@ -196,25 +247,55 @@ export const useNotifications = () => {
           schema: 'public',
           table: 'NOTIFICATION'
         },
-        (payload: any) => {
+        async (payload: any) => {
           const row = payload.new || payload.old
           const targetAccount = row?.Account_ID || row?.account_id
-          // Only process notifications intended for this user
-          if (targetAccount && targetAccount !== userId) return
+          // Only process notifications intended for this user (case-insensitive)
+          if (targetAccount && String(targetAccount).toLowerCase() !== String(userId).toLowerCase()) return
 
           if (payload.eventType === 'INSERT') {
-            const newItem = mapRowToNotification(payload.new)
+            const sId = payload.new?.Sender_Account_ID || payload.new?.sender_account_id
+            let senderAcc: any = null
+            if (sId) {
+              try {
+                const { data: sData } = await db
+                  .from('USER_ACCOUNT')
+                  .select('ACCOUNT_ID, Username, Profile_Picture')
+                  .eq('ACCOUNT_ID', sId)
+                  .maybeSingle()
+                senderAcc = sData
+              } catch {
+                // Non-blocking
+              }
+            }
+
+            const newItem = mapRowToNotification(payload.new, senderAcc)
             const existingIdx = notificationsList.value.findIndex(n => n.id === newItem.id)
             if (existingIdx === -1) {
               notificationsList.value.unshift(newItem)
 
-              // Trigger floating toast alert banner if dropdown is closed
-              incomingAlert.value = newItem
-              setTimeout(() => {
-                if (incomingAlert.value?.id === newItem.id) {
-                  incomingAlert.value = null
+              // Check if user is currently at /messages route (both window.location and vue-router)
+              let isAtMessages = false
+              try {
+                if (typeof window !== 'undefined' && window.location?.pathname) {
+                  isAtMessages = window.location.pathname.toLowerCase().startsWith('/messages')
+                } else {
+                  const route = useRoute()
+                  isAtMessages = !!(route?.path && route.path.toLowerCase().startsWith('/messages'))
                 }
-              }, 4500)
+              } catch {
+                isAtMessages = false
+              }
+
+              // Completely disable floating toast alert banner when at /messages route
+              if (!isAtMessages) {
+                incomingAlert.value = newItem
+                setTimeout(() => {
+                  if (incomingAlert.value?.id === newItem.id) {
+                    incomingAlert.value = null
+                  }
+                }, 4500)
+              }
             }
           } else if (payload.eventType === 'UPDATE') {
             const updated = payload.new
@@ -245,15 +326,17 @@ export const useNotifications = () => {
       })
   }
 
-  // Cleanup subscription
+  // Cleanup subscription with reference counting
   const unsubscribe = () => {
-    if (realtimeChannel) {
+    activeSubscribers = Math.max(0, activeSubscribers - 1)
+    if (activeSubscribers === 0 && realtimeChannel) {
       try {
         supabase.removeChannel(realtimeChannel)
       } catch {
         // Safe ignore
       }
       realtimeChannel = null
+      channelUserId = null
     }
   }
 

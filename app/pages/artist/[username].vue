@@ -39,6 +39,46 @@ const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 // Share Toast notification state
 const isCopied = ref(false)
 
+// Messaging state
+const { getOrCreateThread } = useMessaging()
+const chatToast = ref('')
+const initiatingButton = ref<'hero' | 'contact' | null>(null)
+
+const handleInitiateChat = async (source: 'hero' | 'contact' = 'hero') => {
+  const resolvedUser = currentUser.value || (await supabase.auth.getUser()).data.user
+  if (!resolvedUser) {
+    await navigateTo(`/Login?redirect=/artist/${username.value}`)
+    return
+  }
+
+  const artistAccId = artistRecord.value?.ACCOUNT_ID || profileData.value?.artist?.ACCOUNT_ID || profileData.value?.artist?.USER_ACCOUNT?.ACCOUNT_ID
+  if (!artistAccId) return
+
+  if (resolvedUser.id.toLowerCase() === artistAccId.toLowerCase()) {
+    chatToast.value = 'You cannot start a chat with yourself.'
+    setTimeout(() => {
+      chatToast.value = ''
+    }, 4000)
+    return
+  }
+
+  initiatingButton.value = source
+  try {
+    const threadId = await getOrCreateThread(artistAccId, resolvedUser.id)
+    if (threadId) {
+      await navigateTo(`/Messages?threadId=${threadId}`)
+    }
+  } catch (err: any) {
+    console.error('Failed to initiate chat:', err)
+    chatToast.value = err?.message || 'Could not start conversation.'
+    setTimeout(() => {
+      chatToast.value = ''
+    }, 4000)
+  } finally {
+    initiatingButton.value = null
+  }
+}
+
 // Direct Booking Modal & Toast State
 const isBookingModalOpen = ref(false)
 const bookingSuccessToast = ref('')
@@ -717,6 +757,13 @@ const isScrolled = computed(() => scrollY.value > 200)
       <span class="text-xs sm:text-sm font-medium">Link copied to clipboard! Ready to share.</span>
     </div>
 
+    <!-- Floating Chat Notification Toast -->
+    <div v-if="chatToast"
+      class="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#1E1E24] border border-[#D0D4F7]/60 text-white shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
+      <Icon name="mdi:information-outline" class="text-[#D0D4F7] text-lg" />
+      <span class="text-xs sm:text-sm font-medium">{{ chatToast }}</span>
+    </div>
+
     <!-- 404 / Error State if Artist Not Found -->
     <div v-if="fetchError || !artistRecord"
       class="max-w-xl mx-auto my-24 p-8 bg-[#131315] border border-[#3A3A3C] rounded-2xl text-center flex flex-col items-center gap-4 shadow-xl">
@@ -828,10 +875,21 @@ const isScrolled = computed(() => scrollY.value > 200)
               <span>{{ artistCity }}{{ artistBarangay ? ' • ' + artistBarangay : '' }}</span>
             </div>
 
-            <div @click="isBookingModalOpen = true"
-              class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full mt-3 font-Geist cursor-pointer transition-colors shadow-lg group">
-              <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
-              <button class="font-medium cursor-pointer">BOOK</button>
+            <div class="flex items-center gap-3 mt-3 flex-wrap">
+              <div @click="isBookingModalOpen = true"
+                class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full font-Geist cursor-pointer transition-colors shadow-lg group">
+                <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
+                <button class="font-medium cursor-pointer">BOOK</button>
+              </div>
+
+              <!-- Message Action Button (Hero Banner) -->
+              <div v-if="!isOwner" @click="handleInitiateChat('hero')"
+                class="flex items-center px-5 py-2.5 bg-[#1E1E24]/80 hover:bg-[#282830] border border-[#46464D]/60 hover:border-[#D0D4F7]/60 text-[#D0D4F7] hover:text-white gap-2 rounded-full font-Geist cursor-pointer transition-all shadow-md group"
+                :class="initiatingButton === 'hero' ? 'opacity-80 pointer-events-none' : ''">
+                <Icon v-if="initiatingButton === 'hero'" name="svg-spinners:ring-resize" class="text-sm" />
+                <Icon v-else name="mdi:message-text-outline" class="text-sm group-hover:scale-110 transition-transform" />
+                <button class="font-medium cursor-pointer text-xs sm:text-sm">Message</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1255,8 +1313,15 @@ const isScrolled = computed(() => scrollY.value > 200)
               Interested in booking {{ displayName }} for gigs, recordings, or collaborations? Contact via TONO.
             </p>
             <div class="flex flex-wrap items-center justify-center gap-3">
+              <button v-if="!isOwner" @click="handleInitiateChat('contact')"
+                :disabled="initiatingButton !== null"
+                class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs sm:text-sm font-semibold transition-all shadow-md cursor-pointer disabled:opacity-50">
+                <Icon v-if="initiatingButton === 'contact'" name="svg-spinners:ring-resize" class="text-base" />
+                <Icon v-else name="mdi:message-text-outline" class="text-base" />
+                <span>Chat Now</span>
+              </button>
               <button @click="handleShareProfile"
-                class="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E1E24] hover:bg-[#282830] border border-[#46464D]/60 text-xs sm:text-sm font-medium text-white transition-all cursor-pointer">
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E1E24] hover:bg-[#282830] border border-[#46464D]/60 text-xs sm:text-sm font-medium text-white transition-all cursor-pointer">
                 <Icon name="ic:round-share" class="text-base text-[#D0D4F7]" />
                 <span>Share Profile</span>
               </button>

@@ -37,11 +37,13 @@ const hasBusinessProfile = useState<boolean>('tono_user_has_business', () => fal
 const imageLoadError = ref(false)
 
 const { fetchCurrentUserProfile } = useTonoAuth()
+const { totalUnreadCount, fetchThreads, setupRealtime } = useMessaging()
 
 const isDiscoverActive = computed(() => route.path === '/userhome' || route.path === '/')
 const isArtistsActive = computed(() => route.path.startsWith('/UserNavArtists'))
 const isEventsActive = computed(() => route.path.startsWith('/UserNavEvents'))
 const isProfileActive = computed(() => route.path.toLowerCase() === '/userprofile')
+const isMessagesActive = computed(() => route.path.toLowerCase() === '/messages')
 
 const loadUserData = async () => {
   try {
@@ -68,8 +70,10 @@ const loadUserData = async () => {
   }
 }
 
-onMounted(() => {
-  loadUserData()
+onMounted(async () => {
+  await loadUserData()
+  fetchThreads()
+  setupRealtime()
 })
 
 watch(
@@ -192,6 +196,22 @@ const handleLogout = async () => {
           <span class="hidden md:inline font-Sora">Business Suite</span>
         </button>
 
+        <button
+          @click="navigateTo('/Messages')"
+          class="relative flex items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-white/5 group"
+          :class="isMessagesActive ? 'bg-[#D0D4F7]/10' : ''"
+          title="Messages">
+          <Icon
+            name="mdi:message-outline"
+            class="text-xl sm:text-2xl transition-all duration-300"
+            :class="isMessagesActive ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] group-hover:text-[#D0D4F7]'" />
+          <span
+            v-if="totalUnreadCount > 0"
+            class="absolute top-1 right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-[#D0D4F7] text-[#0E0E10] text-[10px] font-bold">
+            {{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}
+          </span>
+        </button>
+
         <!-- Notification Dropdown Component -->
         <NotificationDropdown current-role="User" />
 
@@ -217,11 +237,11 @@ const handleLogout = async () => {
         <!-- Logout Button -->
         <button
           @click="handleLogout"
-          class="flex items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-white/5"
+          class="flex group items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-[#ff3c3c]/5"
           title="Log Out">
           <Icon
             name="ic:outline-vpn-key-off"
-            class="text-xl sm:text-2xl text-[#C7C5CE] transition-all duration-300 hover:text-[#ff3c3c]" />
+            class="text-xl sm:text-2xl text-[#C7C5CE] transition-all duration-300 group-hover:text-[#ff3c3c]" />
         </button>
       </div>
     </div>
@@ -253,15 +273,6 @@ const handleLogout = async () => {
           ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
           : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7]'">
         Events
-      </button>
-
-      <!-- Mobile Business Suite Switcher -->
-      <button
-        v-if="hasBusinessProfile"
-        @click="navigateTo('/BusinessDash')"
-        class="py-1 px-2.5 text-xs font-semibold transition-all duration-300 cursor-pointer text-[#D0D4F7] flex items-center gap-1 bg-[#1E1E24] border border-[#3A3A3C] rounded-lg">
-        <Icon name="ic:baseline-storefront" class="text-sm" />
-        <span>Business</span>
       </button>
     </div>
   </nav>

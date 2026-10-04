@@ -1,5 +1,86 @@
 <template>
   <div class="space-y-4">
+    <!-- Global Shared SVG Gradients for Notification Badges -->
+    <svg width="0" height="0" class="absolute pointer-events-none opacity-0" aria-hidden="true">
+      <defs>
+        <linearGradient id="paint0_linear_770_953" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_770_953_earlier" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1059" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1066" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1112" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1126" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF8800" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1175" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1183" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1190" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1233" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1241" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1256" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1264" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF8800" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1272" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1279" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1286" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1294" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_771_1301" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF282C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+        <linearGradient id="paint0_linear_dm" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#585F9C" />
+          <stop offset="1" stop-color="#D0D4F7" />
+        </linearGradient>
+      </defs>
+    </svg>
     <!-- Empty State -->
     <div v-if="filteredNotifications.length === 0" class="py-12 text-center space-y-2">
       <Icon name="ic:outline-notifications-off" class="text-3xl text-gray-500 mx-auto" />
@@ -27,16 +108,53 @@
           ? 'bg-[#222228] border border-[#3A3A42] hover:border-[#D0D4F7]/40 shadow-sm'
           : 'bg-[#18181B]/60 hover:bg-[#202024] border border-transparent hover:border-[#2A2A2E]'"
       >
-        <!-- Avatar with 17 Figma Corner Badges -->
+        <!-- Avatar with Figma Corner Badge -->
         <div class="w-12 h-12 shrink-0 relative">
           <svg viewBox="0 0 63 63" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 shrink-0">
-            <circle cx="31.5" cy="31.5" r="31.5" fill="#2E2E38"></circle>
-            <text x="31.5" y="36" text-anchor="middle" font-size="14" fill="#8E8E9A" font-family="monospace" font-weight="bold">
-              {{ item.avatarText || 'TONO' }}
-            </text>
+            <defs>
+              <clipPath :id="'avatar-clip-new-' + item.id">
+                <circle cx="31.5" cy="31.5" r="31.5" />
+              </clipPath>
+            </defs>
+
+            <!-- Profile Picture or 2-letter abbreviation fallback -->
+            <template v-if="item.avatarUrl">
+              <image
+                :href="item.avatarUrl"
+                x="0"
+                y="0"
+                width="63"
+                height="63"
+                preserveAspectRatio="xMidYMid slice"
+                :clip-path="`url(#avatar-clip-new-${item.id})`"
+              />
+            </template>
+            <template v-else>
+              <circle cx="31.5" cy="31.5" r="31.5" fill="#25252D" stroke="#3A3A44" stroke-width="1.5"></circle>
+              <text
+                x="31.5"
+                y="38.5"
+                text-anchor="middle"
+                font-size="19"
+                fill="#D0D4F7"
+                font-family="sans-serif"
+                font-weight="700"
+                letter-spacing="0.5"
+              >
+                {{ item.avatarText || 'TO' }}
+              </text>
+            </template>
+
+            <!-- 0. Direct Message / Chat (Violet/Blue Gradient) -->
+            <template v-if="item.svgType === 'direct_message' || item.type === 'direct_message'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_dm)"></circle>
+              <g>
+                <path d="M45.5 45.5H54.5C55.325 45.5 56 46.175 56 47V52C56 52.825 55.325 53.5 54.5 53.5H48.5L45 56V47C45 46.175 45.675 45.5 46.5 45.5Z" fill="white" />
+              </g>
+            </template>
 
             <!-- 1. Band Invite (Violet) -->
-            <template v-if="item.svgType === 'band_invite'">
+            <template v-else-if="item.svgType === 'band_invite'">
               <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953)"></circle>
               <mask id="mask_770_953" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
                 <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
@@ -312,6 +430,10 @@
                 <stop stop-color="#FF282C"></stop>
                 <stop offset="1" stop-color="#D0D4F7"></stop>
               </linearGradient>
+              <linearGradient id="paint0_linear_dm" x1="50" y1="37" x2="50" y2="63" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#585F9C"></stop>
+                <stop offset="1" stop-color="#D0D4F7"></stop>
+              </linearGradient>
             </defs>
           </svg>
         </div>
@@ -417,13 +539,50 @@
         <!-- Avatar with Figma Corner Badge -->
         <div class="w-12 h-12 shrink-0 relative">
           <svg viewBox="0 0 63 63" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 shrink-0">
-            <circle cx="31.5" cy="31.5" r="31.5" fill="#2E2E38"></circle>
-            <text x="31.5" y="36" text-anchor="middle" font-size="14" fill="#8E8E9A" font-family="monospace" font-weight="bold">
-              {{ item.avatarText || 'TONO' }}
-            </text>
+            <defs>
+              <clipPath :id="'avatar-clip-earlier-' + item.id">
+                <circle cx="31.5" cy="31.5" r="31.5" />
+              </clipPath>
+            </defs>
+
+            <!-- Profile Picture or 2-letter abbreviation fallback -->
+            <template v-if="item.avatarUrl">
+              <image
+                :href="item.avatarUrl"
+                x="0"
+                y="0"
+                width="63"
+                height="63"
+                preserveAspectRatio="xMidYMid slice"
+                :clip-path="`url(#avatar-clip-earlier-${item.id})`"
+              />
+            </template>
+            <template v-else>
+              <circle cx="31.5" cy="31.5" r="31.5" fill="#25252D" stroke="#3A3A44" stroke-width="1.5"></circle>
+              <text
+                x="31.5"
+                y="38.5"
+                text-anchor="middle"
+                font-size="19"
+                fill="#D0D4F7"
+                font-family="sans-serif"
+                font-weight="700"
+                letter-spacing="0.5"
+              >
+                {{ item.avatarText || 'TO' }}
+              </text>
+            </template>
+
+            <!-- 0. Direct Message / Chat (Violet/Blue Gradient) -->
+            <template v-if="item.svgType === 'direct_message' || item.type === 'direct_message'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_dm)"></circle>
+              <g>
+                <path d="M45.5 45.5H54.5C55.325 45.5 56 46.175 56 47V52C56 52.825 55.325 53.5 54.5 53.5H48.5L45 56V47C45 46.175 45.675 45.5 46.5 45.5Z" fill="white" />
+              </g>
+            </template>
 
             <!-- Reusable badge matching item.svgType -->
-            <template v-if="item.svgType === 'schedule_update'">
+            <template v-else-if="item.svgType === 'schedule_update'">
               <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_771_1264)"></circle>
               <mask id="mask_771_1264_earlier" maskUnits="userSpaceOnUse" x="41" y="41" width="18" height="18">
                 <rect x="41" y="41" width="18" height="18" fill="#D9D9D9"></rect>
@@ -466,6 +625,14 @@
               <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953_earlier)"></circle>
               <g transform="translate(43, 43) scale(0.6)">
                 <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="white"></path>
+              </g>
+            </template>
+
+            <!-- 20. Direct Message (Teal / Violet) -->
+            <template v-else-if="item.svgType === 'direct_message'">
+              <circle cx="50" cy="50" r="13" fill="url(#paint0_linear_770_953_earlier)"></circle>
+              <g transform="translate(43, 43) scale(0.6)">
+                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" fill="white"></path>
               </g>
             </template>
 

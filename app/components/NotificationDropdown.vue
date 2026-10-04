@@ -32,7 +32,7 @@
     <!-- ==================================================== -->
     <Transition name="fade-slide">
       <div
-        v-if="incomingAlert && !isOpen"
+        v-if="incomingAlert && !isOpen && !isMessagesRoute"
         @click="openAndHighlight(incomingAlert)"
         class="fixed top-20 right-4 z-50 max-w-sm bg-[#1C1C1F]/95 backdrop-blur-md border border-[#D0D4F7]/40 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3 cursor-pointer hover:border-[#D0D4F7] transition-all"
       >
@@ -232,6 +232,14 @@ const isOpen = ref(false)
 const isDesktop = ref(true)
 
 const user = useSupabaseUser()
+const route = useRoute()
+
+const isMessagesRoute = computed(() => {
+  if (typeof window !== 'undefined' && window.location?.pathname) {
+    return window.location.pathname.toLowerCase().startsWith('/messages')
+  }
+  return !!(route?.path && route.path.toLowerCase().startsWith('/messages'))
+})
 
 const {
   notificationsList,
@@ -380,6 +388,17 @@ watch(
     } else {
       unsubscribe()
       notificationsList.value = []
+    }
+  },
+  { immediate: true }
+)
+
+// Clear any floating alert toast immediately when navigating into /messages
+watch(
+  () => route.path,
+  (newPath) => {
+    if (newPath && newPath.toLowerCase().startsWith('/messages')) {
+      incomingAlert.value = null
     }
   },
   { immediate: true }

@@ -40,6 +40,9 @@ const navItems = [
   },
 ]
 
+const { totalUnreadCount, fetchThreads, setupRealtime } = useMessaging()
+const isMessagesActive = computed(() => route.path.toLowerCase() === '/messages')
+
 const loadAvatar = async () => {
   try {
     const userId = user.value?.id || (await supabase.auth.getUser()).data.user?.id
@@ -60,8 +63,10 @@ const loadAvatar = async () => {
   }
 }
 
-onMounted(() => {
-  loadAvatar()
+onMounted(async () => {
+  await loadAvatar()
+  fetchThreads()
+  setupRealtime()
 })
 
 watch(
@@ -136,6 +141,23 @@ watch(
           title="Switch to Personal Mode">
           <Icon name="ic:outline-explore" class="text-base text-[#D0D4F7] group-hover:scale-110 transition-transform shrink-0" />
           <span class=" xs:inline font-Sora">Personal Mode</span>
+        </button>
+
+        <!-- Messages Button -->
+        <button
+          @click="navigateTo('/Messages')"
+          class="relative flex items-center justify-center p-2 sm:p-2.5 rounded-full transition-all duration-300 cursor-pointer hover:bg-white/5 group"
+          :class="isMessagesActive ? 'bg-[#D0D4F7]/10' : ''"
+          title="Messages">
+          <Icon
+            name="mdi:message-outline"
+            class="text-xl sm:text-2xl transition-all duration-300"
+            :class="isMessagesActive ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] group-hover:text-[#D0D4F7]'" />
+          <span
+            v-if="totalUnreadCount > 0"
+            class="absolute top-1 right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-[#D0D4F7] text-[#0E0E10] text-[10px] font-bold">
+            {{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}
+          </span>
         </button>
 
         <!-- Notification Dropdown Component -->

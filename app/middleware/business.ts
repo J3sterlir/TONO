@@ -4,7 +4,11 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   const user = authData?.user
 
   if (!user) {
-    return navigateTo('/Login')
+    const redirectQuery =
+      to.fullPath && to.fullPath !== '/' && to.fullPath !== '/Login'
+        ? `?redirect=${encodeURIComponent(to.fullPath)}`
+        : ''
+    return navigateTo(`/Login${redirectQuery}`)
   }
 
   const { fetchCurrentUserProfile } = useTonoAuth()

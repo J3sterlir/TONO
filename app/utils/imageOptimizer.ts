@@ -374,3 +374,71 @@ export const optimizePostMedia = async (
   return canvasToWebpBlob(canvas, quality)
 }
 
+/**
+ * Optimizes a Chat Message Image:
+ * - Preserves natural aspect ratio (no forced crop).
+ * - Caps maximum dimension to 1920px (Full HD/2K clarity for chat).
+ * - Iteratively compresses to WebP to strictly guarantee file size <= maxMb (default 1.5MB).
+ */
+export const optimizeChatMessageImage = async (
+  source: File | Blob | string | HTMLImageElement,
+  maxMb = 1.5,
+  maxDimension = 1920
+): Promise<File> => {
+  const maxBytes = maxMb * 1024 * 1024
+  const img = source instanceof HTMLImageElement ? source : await loadImage(source)
+  const naturalWidth = img.naturalWidth
+  const naturalHeight = img.naturalHeight
+
+  if (!naturalWidth || !naturalHeight) {
+    throw new Error('Invalid image dimensions.')
+  }
+
+  // Calculate scaled dimensions (preserve aspect ratio)
+  let width = naturalWidth
+  let height = naturalHeight
+  if (width > maxDimension || height > maxDimension) {
+    if (width > height) {
+      height = Math.round((height * maxDimension) / width)
+      width = maxDimension
+    } else {
+      width = Math.round((width * maxDimension) / height)
+      height = maxDimension
+    }
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, width)
+  canvas.height = Math.max(1, height)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Canvas 2D context is not supported in this browser.')
+  }
+
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, 0, 0, width, height)
+
+  // Adaptive quality loop to ensure <= maxMb
+  let quality = 0.85
+  let blob = await canvasToWebpBlob(canvas, quality)
+
+  while (blob.size > maxBytes && quality > 0.35) {
+    quality -= 0.12
+    blob = await canvasToWebpBlob(canvas, quality)
+  }
+
+  // If still over (extremely dense image), step down canvas resolution by 20%
+  if (blob.size > maxBytes) {
+    canvas.width = Math.max(1, Math.round(width * 0.8))
+    canvas.height = Math.max(1, Math.round(height * 0.8))
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    blob = await canvasToWebpBlob(canvas, 0.75)
+  }
+
+  const origName = source instanceof File ? source.name : 'photo.webp'
+  const baseName = origName.replace(/\.[^/.]+$/, '')
+  return new File([blob], `${baseName}.webp`, { type: 'image/webp' })
+}
+

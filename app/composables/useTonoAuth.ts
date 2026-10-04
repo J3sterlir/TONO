@@ -412,6 +412,18 @@ export const useTonoAuth = () => {
 
     if (authError) throw authError
 
+    // Record login activity timestamp
+    if (authData.user?.id) {
+      try {
+        await db
+          .from('USER_ACCOUNT')
+          .update({ Last_Active_At: new Date().toISOString() })
+          .eq('ACCOUNT_ID', authData.user.id)
+      } catch {
+        // Non-blocking
+      }
+    }
+
     const profile = await fetchCurrentUserProfile(authData.user?.id)
 
     return {
