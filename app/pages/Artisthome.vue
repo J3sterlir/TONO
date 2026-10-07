@@ -6,6 +6,7 @@ definePageMeta({
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { motion } from 'motion-v'
+import { getBusinessInitials } from '~/utils/linkResolver'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile } = useTonoAuth()
@@ -130,6 +131,7 @@ interface BusinessProfileItem {
   Business_Name: string
   Business_Service: string | null
   Profile_Picture: string | null
+  Cover_Picture?: string | null
   Business_Address?: string | null
   Contact_Information?: string | null
 }
@@ -148,7 +150,7 @@ const fetchBusinessProfiles = async () => {
   try {
     const { data, error } = await supabase
       .from('BUSINESS_PROFILE')
-      .select('BUSINESS_ID, Business_Name, Business_Service, Profile_Picture, Business_Address, Contact_Information')
+      .select('BUSINESS_ID, Business_Name, Business_Service, Profile_Picture, Cover_Picture, Business_Address, Contact_Information')
       .order('Business_Name', { ascending: true })
 
     if (error) {
@@ -530,7 +532,7 @@ const handleLogout = async () => {
       <!-- 5. LOCAL MUSIC INDUSTRY (SERVICES) -->
       <section class="flex flex-col gap-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold tracking-wide">Local Music Industry</h2>
+          <h2 class="text-xl font-bold tracking-wide">Businesses & Local Music Industry</h2>
           <span v-if="businessProfiles.length > 0" class="text-xs text-gray-500 font-medium">
             {{ businessProfiles.length }} {{ businessProfiles.length === 1 ? 'business' : 'businesses' }}
           </span>
@@ -572,10 +574,23 @@ const handleLogout = async () => {
           <div v-else ref="servicesScrollRef" @scroll="checkScroll(servicesScrollRef, 'services')"
             class="flex overflow-x-auto gap-6 p-2 pt-4 scrollbar-hide scroll-smooth">
             <div v-for="business in businessProfiles" :key="business.BUSINESS_ID"
-              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 w-32 text-center">
-              <img :src="getBusinessAvatarUrl(business)" :alt="business.Business_Name"
-                class="w-28 h-28 rounded-full object-cover shadow-md mb-3 border border-[#3A3A3C]" />
-              <span class="text-gray-200 text-sm font-medium tracking-wide truncate max-w-full"
+              @click="navigateTo(`/business/${business.BUSINESS_ID}`)"
+              class="flex flex-col items-center shrink-0 cursor-pointer transition-transform hover:scale-105 w-32 text-center group">
+              <div class="relative w-28 h-28 mb-3 shrink-0">
+                <img
+                  v-if="business.Profile_Picture"
+                  :src="business.Profile_Picture"
+                  :alt="business.Business_Name"
+                  class="w-28 h-28 rounded-full object-cover shadow-md border border-[#3A3A3C] transition-colors"
+                />
+                <div
+                  v-else
+                  class="w-28 h-28 rounded-full bg-linear-to-br from-[#26262E] to-[#18181D] border border-[#46464D]/60 hover:border-[#D0D4F7]/60 flex items-center justify-center text-[#D0D4F7] font-Sora font-bold text-2xl uppercase shadow-md select-none transition-colors"
+                >
+                  {{ getBusinessInitials(business.Business_Name) }}
+                </div>
+              </div>
+              <span class="text-gray-200 text-sm font-medium tracking-wide truncate max-w-full group-hover:text-white"
                 :title="business.Business_Name">
                 {{ business.Business_Name }}
               </span>

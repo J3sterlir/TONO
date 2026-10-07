@@ -20,6 +20,9 @@ const emit = defineEmits<{
   (e: 'apply', blob: Blob): void
 }>()
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 // DOM & State Refs
 const apertureRef = ref<HTMLDivElement | null>(null)
 const imageEl = ref<HTMLImageElement | null>(null)

@@ -206,62 +206,67 @@ const handleWithdrawApplication = async () => {
     isWithdrawing.value = false
   }
 }
+
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
 </script>
 
 <template>
-  <div v-if="isOpen && job" class="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+  <div v-if="isOpen && job" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden">
     <!-- Backdrop -->
-    <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" @click="emit('close')"></div>
+    <div class="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" @click="emit('close')"></div>
 
     <!-- Modal Content: Form 3 JOB LISTING APPLICATION & PROPOSAL -->
     <div
-      class="relative w-full max-w-4xl bg-[#131315] border border-[#2A2A2E]/80 rounded-2xl p-6 sm:p-8 space-y-6 text-white font-Sora z-10 my-8 shadow-2xl animate-in zoom-in-95 duration-200"
+      class="relative w-full max-w-4xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-[#131315] border border-[#2A2A2E]/80 rounded-2xl sm:rounded-3xl shadow-2xl text-white font-Sora z-10 overflow-hidden animate-in zoom-in-95 duration-200"
     >
-      <!-- Top Action Bar -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E]/60 pb-4">
-        <div>
-          <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">JOB LISTING APPLICATION</span>
-          <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-0.5">
+      <!-- Top Action Bar (Pinned Header) -->
+      <div class="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-7 py-4 sm:py-5 border-b border-[#2A2A2E]/80 bg-[#131315]/95 backdrop-blur-md">
+        <div class="min-w-0">
+          <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider block">JOB LISTING APPLICATION</span>
+          <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight mt-0.5 truncate">
             {{ job.Job_Code || 'JB-LISTING' }}
           </h1>
         </div>
 
-        <div class="flex items-center gap-3 self-start sm:self-auto">
-          <button
-            type="button"
-            @click="emit('close')"
-            class="px-4 py-2 rounded-full text-xs font-medium border border-[#46464D] text-gray-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
-          >
-            Close
-          </button>
-
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
           <!-- If already applied -->
           <template v-if="existingApp || hasAlreadyApplied">
             <button
               v-if="!isEditing && existingApp?.Status === 'Pending'"
               type="button"
               @click="isEditing = true"
-              class="px-4 py-2 rounded-full text-xs font-semibold border border-[#D0D4F7] text-[#D0D4F7] hover:bg-[#D0D4F7]/10 transition-all cursor-pointer flex items-center gap-1.5"
+              class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-semibold border border-[#D0D4F7] text-[#D0D4F7] hover:bg-[#D0D4F7]/10 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <Icon name="ic:outline-edit" class="text-sm" />
               <span>Edit Proposal</span>
             </button>
             <span
               v-else-if="!isEditing"
-              class="px-5 py-2 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5"
+              class="px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5"
             >
               <Icon name="ic:round-check" class="text-base" />
               <span>{{ existingApp?.Status || 'Applied' }}</span>
             </span>
           </template>
+
+          <button
+            type="button"
+            @click="emit('close')"
+            class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-medium border border-[#46464D] text-gray-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
 
-      <!-- Feedback / Error Notice -->
-      <div v-if="errorMessage" class="p-3.5 rounded-xl bg-red-950/30 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
-        <Icon name="ic:baseline-error" class="text-base shrink-0" />
-        <span>{{ errorMessage }}</span>
-      </div>
+      <!-- Modal Body (Internal Smooth Scrolling with overscroll-contain) -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 overscroll-contain">
+        <!-- Feedback / Error Notice -->
+        <div v-if="errorMessage" class="p-3.5 rounded-xl bg-red-950/30 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
+          <Icon name="ic:baseline-error" class="text-base shrink-0" />
+          <span>{{ errorMessage }}</span>
+        </div>
 
       <div v-if="applySuccess" class="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2">
         <Icon name="ic:round-check-circle" class="text-base shrink-0" />
@@ -330,7 +335,7 @@ const handleWithdrawApplication = async () => {
               </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
                 <p class="text-sm font-medium text-white font-mono">{{ formatTime12(job.Start_Time || '19:00') }}</p>
@@ -429,27 +434,42 @@ const handleWithdrawApplication = async () => {
           </div>
 
           <div class="flex items-center justify-between pt-2 text-xs">
-            <button
-              v-if="existingApp.Status === 'Pending'"
-              type="button"
-              @click="handleWithdrawApplication"
-              :disabled="isWithdrawing"
-              class="px-4 py-2 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Icon v-if="isWithdrawing" name="ic:baseline-sync" class="animate-spin text-sm" />
-              <span>Withdraw Application</span>
-            </button>
-            <span v-else class="text-[11px] text-gray-400">Application has been processed by host.</span>
+            <template v-if="existingApp.Status === 'Pending'">
+              <button
+                type="button"
+                @click="handleWithdrawApplication"
+                :disabled="isWithdrawing"
+                class="px-4 py-2 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Icon v-if="isWithdrawing" name="ic:baseline-sync" class="animate-spin text-sm" />
+                <span>Withdraw Application</span>
+              </button>
+              <button
+                type="button"
+                @click="isEditing = true"
+                class="px-5 py-2 rounded-full font-bold bg-[#D0D4F7] hover:bg-white text-[#131315] transition-all cursor-pointer shadow flex items-center gap-1.5"
+              >
+                <Icon name="ic:outline-edit" class="text-sm" />
+                <span>Edit Proposal</span>
+              </button>
+            </template>
 
-            <button
-              v-if="existingApp.Status === 'Pending'"
-              type="button"
-              @click="isEditing = true"
-              class="px-5 py-2 rounded-full font-bold bg-[#D0D4F7] hover:bg-white text-[#131315] transition-all cursor-pointer shadow flex items-center gap-1.5"
-            >
-              <Icon name="ic:outline-edit" class="text-sm" />
-              <span>Edit Proposal</span>
-            </button>
+            <template v-else-if="existingApp.Status === 'Accepted'">
+              <div class="flex items-center gap-2 text-emerald-400 font-medium">
+                <Icon name="ic:baseline-check-circle" class="text-base" />
+                <span>Application Accepted! Host has sent a contract offer.</span>
+              </div>
+              <NuxtLink
+                to="/ArtistNavEvents"
+                @click="$emit('close')"
+                class="px-4 py-2 rounded-full font-bold bg-emerald-400 hover:bg-emerald-300 text-black transition-all cursor-pointer shadow flex items-center gap-1.5"
+              >
+                <Icon name="ic:baseline-assignment" class="text-sm" />
+                <span>Review Contract</span>
+              </NuxtLink>
+            </template>
+
+            <span v-else class="text-[11px] text-gray-400">Application has been processed by host.</span>
           </div>
         </div>
 
@@ -468,18 +488,17 @@ const handleWithdrawApplication = async () => {
               />
               <span class="text-[10px] text-gray-400">Host listed budget: ₱{{ Number(job.Compensation_Fee || 0).toLocaleString() }}</span>
             </div>
-
-            <div class="flex flex-col justify-end">
-              <p class="text-xs text-gray-400 leading-relaxed">
-                Provide an introductory note or setlist pitch to help the venue manager review your audition.
-              </p>
-            </div>
           </div>
 
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-mono uppercase tracking-wider text-gray-300">
               Pitch Message / Setlist Readiness (Optional)
             </label>
+            <div class="flex flex-col justify-end">
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Provide an introductory note or setlist pitch to help the venue manager review your audition.
+              </p>
+            </div>
             <textarea
               v-model="pitchMessage"
               rows="3"
@@ -523,6 +542,7 @@ const handleWithdrawApplication = async () => {
         </div>
       </div>
 
-    </div>
+      </div><!-- End Modal Body -->
+    </div><!-- End Modal Card -->
   </div>
 </template>

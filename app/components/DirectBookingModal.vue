@@ -23,6 +23,9 @@ const emit = defineEmits<{
   (e: 'submit', payload: any): void
 }>()
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile } = useTonoAuth()

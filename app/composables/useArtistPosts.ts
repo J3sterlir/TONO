@@ -4,7 +4,8 @@ import type { PostCropOptions } from '~/utils/imageOptimizer'
 
 export interface PostItem {
   POST_ID: string
-  ARTIST_ID: string
+  ARTIST_ID?: string | null
+  BUSINESS_ID?: string | null
   Media: string | null
   File_URL: string | null
   Caption: string | null
@@ -144,6 +145,79 @@ export const useArtistPosts = () => {
   }
 
   /**
+   * Fetches all posts for a given business ID, along with like counts, comment counts, and like state.
+   */
+  const fetchBusinessPosts = async (businessId: string): Promise<PostItem[]> => {
+    if (!businessId) return []
+    isLoading.value = true
+
+    try {
+      const currentUserId = await getUserId()
+
+      // 1. Fetch posts
+      const { data: rawPosts, error: postsError } = await db
+        .from('POST')
+        .select('*')
+        .eq('BUSINESS_ID', businessId)
+        .order('Created_at', { ascending: false })
+
+      if (postsError) throw postsError
+      if (!rawPosts || rawPosts.length === 0) {
+        posts.value = []
+        return []
+      }
+
+      const postIds = rawPosts.map((p: any) => p.POST_ID)
+
+      // 2. Fetch all likes for these posts
+      const { data: likesData } = await db
+        .from('POST_LIKES')
+        .select('POST_ID, ACCOUNT_ID')
+        .in('POST_ID', postIds)
+
+      // 3. Fetch all comments for count
+      const { data: commentsData } = await db
+        .from('POST_COMMENTS')
+        .select('POST_ID, Comment_ID')
+        .in('POST_ID', postIds)
+
+      const likesList = likesData || []
+      const commentsList = commentsData || []
+
+      // 4. Assemble post items
+      const assembled: PostItem[] = rawPosts.map((p: any) => {
+        const postLikes = likesList.filter((l: any) => l.POST_ID === p.POST_ID)
+        const postComments = commentsList.filter((c: any) => c.POST_ID === p.POST_ID)
+        const userHasLiked = currentUserId
+          ? postLikes.some((l: any) => l.ACCOUNT_ID === currentUserId)
+          : false
+
+        return {
+          POST_ID: p.POST_ID,
+          ARTIST_ID: p.ARTIST_ID || null,
+          BUSINESS_ID: p.BUSINESS_ID || null,
+          Media: p.Media || null,
+          File_URL: p.File_URL || null,
+          Caption: p.Caption || '',
+          Location: p.Location || null,
+          Created_at: p.Created_at,
+          likeCount: postLikes.length,
+          commentCount: postComments.length,
+          userHasLiked,
+        }
+      })
+
+      posts.value = assembled
+      return assembled
+    } catch (err) {
+      console.error('Error fetching business posts:', err)
+      return []
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Fetches a single post by ID (for deep-linking from notifications)
    */
   const fetchPostById = async (postId: string): Promise<PostItem | null> => {
@@ -179,7 +253,8 @@ export const useArtistPosts = () => {
 
       const item: PostItem = {
         POST_ID: rawPost.POST_ID,
-        ARTIST_ID: rawPost.ARTIST_ID,
+        ARTIST_ID: rawPost.ARTIST_ID || null,
+        BUSINESS_ID: rawPost.BUSINESS_ID || null,
         Media: rawPost.Media || null,
         File_URL: rawPost.File_URL || null,
         Caption: rawPost.Caption || '',
@@ -204,11 +279,12 @@ export const useArtistPosts = () => {
   }
 
   /**
-   * Creates a post (with image optimization or text-only)
+   * Creates a post (with image optimization or text-only) for either an artist or a business.
    */
   const createPost = async (
-    artistId: string,
-    payload: CreatePostPayload
+    ownerId: string,
+    payload: CreatePostPayload,
+    ownerType: 'artist' | 'business' = 'artist'
   ): Promise<{ success: boolean; post?: PostItem; error?: string }> => {
     isSubmitting.value = true
     try {
@@ -247,15 +323,24 @@ export const useArtistPosts = () => {
       }
 
       // 2. Insert post row into POST table
+      const insertRecord: Record<string, any> = {
+        Media: uploadedMediaUrl,
+        File_URL: uploadedMediaUrl,
+        Caption: payload.caption.trim() || null,
+        Location: payload.location?.trim() || null,
+      }
+
+      if (ownerType === 'business') {
+        insertRecord.BUSINESS_ID = ownerId
+        insertRecord.ARTIST_ID = null
+      } else {
+        insertRecord.ARTIST_ID = ownerId
+        insertRecord.BUSINESS_ID = null
+      }
+
       const { data: newRow, error: insertError } = await db
         .from('POST')
-        .insert({
-          ARTIST_ID: artistId,
-          Media: uploadedMediaUrl,
-          File_URL: uploadedMediaUrl,
-          Caption: payload.caption.trim() || null,
-          Location: payload.location?.trim() || null,
-        })
+        .insert(insertRecord)
         .select()
         .single()
 
@@ -263,7 +348,8 @@ export const useArtistPosts = () => {
 
       const newPost: PostItem = {
         POST_ID: newRow.POST_ID,
-        ARTIST_ID: newRow.ARTIST_ID,
+        ARTIST_ID: newRow.ARTIST_ID || null,
+        BUSINESS_ID: newRow.BUSINESS_ID || null,
         Media: newRow.Media || null,
         File_URL: newRow.File_URL || null,
         Caption: newRow.Caption || '',
@@ -827,6 +913,7 @@ export const useArtistPosts = () => {
     comments,
     isLoadingComments,
     fetchArtistPosts,
+    fetchBusinessPosts,
     fetchPostById,
     createPost,
     updatePost,

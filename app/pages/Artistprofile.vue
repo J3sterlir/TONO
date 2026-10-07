@@ -7,6 +7,7 @@ definePageMeta({
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
+import { resolveSocialLink } from '~/utils/linkResolver'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile, resolveUserType } = useTonoAuth()
@@ -16,10 +17,34 @@ const artistName = ref('Artist')
 const artistBio = ref('')
 const usertype = ref('')
 const artistTags = ref<string[]>([])
+const artistLinks = ref<any[]>([])
 const profilePicture = ref<string | null>(null)
 const coverPicture = ref<string | null>(null)
 const globalAvatarUrl = useState<string | null>('tono_user_avatar', () => null)
 const isLoading = ref(true)
+
+const resolvedSocialLinks = computed(() => {
+  const rawLinks = artistLinks.value
+  if (!rawLinks) return []
+  if (Array.isArray(rawLinks)) {
+    return rawLinks
+      .map((l: any) => {
+        const url = typeof l === 'string' ? l : l.url
+        const label = typeof l === 'string' ? '' : l.label
+        return resolveSocialLink(url, label)
+      })
+      .filter((l) => Boolean(l.url))
+  }
+  if (typeof rawLinks === 'object') {
+    return Object.entries(rawLinks)
+      .map(([key, val]) => {
+        const url = typeof val === 'string' ? val : (val as any)?.url || ''
+        return resolveSocialLink(url, key)
+      })
+      .filter((l) => Boolean(l.url))
+  }
+  return []
+})
 
 // Artist Details & Tags State
 const artistId = ref('')
@@ -694,6 +719,10 @@ onMounted(async () => {
         artistBio.value = profile.artistProfile.Bio
       }
 
+      if (profile.artistProfile?.Links) {
+        artistLinks.value = (profile.artistProfile.Links as any) || []
+      }
+
       usertype.value = resolveUserType(profile)
       artistGenres.value = profile.genres || []
       artistInstruments.value = profile.instruments || []
@@ -776,6 +805,7 @@ onBeforeUnmount(() => {
 const isInviteModalOpen = ref(false)
 const memberToRemove = ref<BandMemberItem | null>(null)
 const isRemoveConfirmOpen = ref(false)
+useModalScrollLock(isRemoveConfirmOpen)
 const removeSuccessToast = ref('')
 
 const {
@@ -864,12 +894,16 @@ const onProfileDetailsSaved = (data: {
   bio: string
   genres: string[]
   instruments: string[]
+  links?: Array<{ url: string; label: string }>
 }) => {
   artistName.value = data.name
   artistBio.value = data.bio
   artistGenres.value = data.genres
   artistInstruments.value = data.instruments
   artistTags.value = [...data.genres, ...data.instruments]
+  if (data.links) {
+    artistLinks.value = data.links
+  }
 }
 
 const triggerAvatarSelect = () => {
@@ -969,7 +1003,7 @@ const handleLogout = async () => {
     <!-- Edit Profile Details Modal -->
     <ArtistEditDetailsModal :is-open="isEditDetailsOpen" :artist-id="artistId" :artist-type="artistType"
       :initial-name="artistName" :initial-bio="artistBio" :initial-genres="artistGenres"
-      :initial-instruments="artistInstruments" @close="isEditDetailsOpen = false" @saved="onProfileDetailsSaved" />
+      :initial-instruments="artistInstruments" :initial-links="artistLinks" @close="isEditDetailsOpen = false" @saved="onProfileDetailsSaved" />
 
     <!-- Hidden File Inputs -->
     <input ref="avatarInputRef" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden"
@@ -1896,16 +1930,48 @@ const handleLogout = async () => {
 
         <!-- Contact Tab Content Container -->
         <div v-else-if="activeTab === 'contact'" class="w-full">
-          <!-- Add Contact content here -->
           <div
             class="w-full min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
             <div
               class="w-14 h-14 rounded-full bg-[#1E1E24] border border-[#46464D]/50 flex items-center justify-center mb-4">
               <Icon name="ic:outline-alternate-email" class="text-2xl text-[#D0D4F7]" />
             </div>
-            <h3 class="font-Sora text-lg font-semibold text-white mb-2">Contact & Inquiries</h3>
-            <p class="text-sm text-gray-400 max-w-md">Booking contacts, management details, and social links will appear
-              here.</p>
+            <h3 class="font-Sora text-lg font-semibold text-white mb-2">Bookings & Management</h3>
+            <p class="text-sm text-gray-400 max-w-md mb-6">
+              Official public contact points and social media profiles for {{ artistName }}.
+            </p>
+
+            <!-- Social Media & External Links -->
+            <div v-if="resolvedSocialLinks.length > 0" class="w-full max-w-lg mb-6">
+              <h4 class="text-xs font-mono uppercase tracking-wider text-gray-400 mb-3 text-center">Connected Links</h4>
+              <div class="flex flex-wrap items-center justify-center gap-2">
+                <a
+                  v-for="(link, idx) in resolvedSocialLinks"
+                  :key="idx"
+                  :href="link.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#18181B] hover:bg-[#26262C] border border-[#46464D]/40 hover:border-[#D0D4F7]/50 text-xs text-gray-200 transition-colors group cursor-pointer"
+                >
+                  <Icon :name="link.icon" class="text-sm text-[#D0D4F7]" />
+                  <span class="font-medium">{{ link.handle || link.label || link.platform }}</span>
+                  <Icon name="heroicons:arrow-up-right-20-solid" class="text-xs text-gray-500 group-hover:text-white" />
+                </a>
+              </div>
+            </div>
+
+            <!-- Empty State if no links -->
+            <div v-else class="mb-6 text-xs text-gray-500">
+              No external links connected yet. Add your social profiles and music streaming links.
+            </div>
+
+            <button
+              @click="openEditDetails"
+              class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs sm:text-sm font-semibold transition-all shadow-md cursor-pointer"
+            >
+              <Icon name="ic:outline-edit" class="text-base" />
+              <span>Edit Contact & Social Links</span>
+            </button>
           </div>
         </div>
 

@@ -23,6 +23,9 @@ const emit = defineEmits<{
   (e: 'save', payload: { url: string; title: string; displayText: string; platform: string }): void
 }>()
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 const url = ref('')
 const title = ref('')
 const displayText = ref('')

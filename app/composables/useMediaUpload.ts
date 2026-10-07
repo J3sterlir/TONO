@@ -214,9 +214,177 @@ export const useMediaUpload = () => {
     }
   }
 
+  /**
+   * Optimizes and uploads an Avatar image for a Business Profile to Supabase Storage,
+   * updates the BUSINESS_PROFILE database record, and cleans up the previous avatar.
+   */
+  const uploadBusinessAvatar = async (
+    fileOrBlob: File | Blob,
+    businessId: string,
+    previousUrl?: string | null,
+    cropArea?: CropArea
+  ): Promise<{ url: string } | null> => {
+    uploadError.value = null
+
+    if (!businessId) {
+      uploadError.value = 'Business ID is required to upload business avatar.'
+      throw new Error(uploadError.value)
+    }
+
+    if (fileOrBlob instanceof File) {
+      const validation = validateImageFile(fileOrBlob, 15)
+      if (!validation.valid) {
+        uploadError.value = validation.error || 'Invalid file.'
+        throw new Error(uploadError.value)
+      }
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    const user = authData?.user
+    if (authError || !user) {
+      uploadError.value = 'User authentication required to upload image.'
+      throw new Error(uploadError.value)
+    }
+
+    isUploadingAvatar.value = true
+
+    try {
+      let optimizedBlob: Blob
+      if (fileOrBlob instanceof Blob && fileOrBlob.type === 'image/webp' && !cropArea) {
+        optimizedBlob = fileOrBlob
+      } else {
+        optimizedBlob = await optimizeAvatar(fileOrBlob, cropArea)
+      }
+
+      const timestamp = Date.now()
+      const filePath = `${user.id}/business_${businessId}_avatar_${timestamp}.webp`
+
+      const { error: storageError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, optimizedBlob, {
+          contentType: 'image/webp',
+          upsert: true,
+        })
+
+      if (storageError) {
+        throw storageError
+      }
+
+      const { data: publicData } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      const publicUrl = publicData.publicUrl
+
+      const db = supabase as any
+      const { error: dbError } = await db
+        .from('BUSINESS_PROFILE')
+        .update({ Profile_Picture: publicUrl })
+        .eq('BUSINESS_ID', businessId)
+
+      if (dbError) {
+        throw dbError
+      }
+
+      if (previousUrl && previousUrl !== publicUrl) {
+        cleanupOldFile('avatars', previousUrl)
+      }
+
+      return { url: publicUrl }
+    } catch (err: any) {
+      console.error('Error uploading business avatar:', err)
+      uploadError.value = err.message || 'Failed to upload business profile picture.'
+      throw err
+    } finally {
+      isUploadingAvatar.value = false
+    }
+  }
+
+  /**
+   * Optimizes and uploads a Cover banner image for a Business Profile to Supabase Storage,
+   * updates the BUSINESS_PROFILE database record, and cleans up the previous cover.
+   */
+  const uploadBusinessCover = async (
+    fileOrBlob: File | Blob,
+    businessId: string,
+    previousUrl?: string | null,
+    cropArea?: CropArea
+  ): Promise<{ url: string } | null> => {
+    uploadError.value = null
+
+    if (!businessId) {
+      uploadError.value = 'Business ID is required to upload business cover.'
+      throw new Error(uploadError.value)
+    }
+
+    if (fileOrBlob instanceof File) {
+      const validation = validateImageFile(fileOrBlob, 20)
+      if (!validation.valid) {
+        uploadError.value = validation.error || 'Invalid file.'
+        throw new Error(uploadError.value)
+      }
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    const user = authData?.user
+    if (authError || !user) {
+      uploadError.value = 'User authentication required to upload image.'
+      throw new Error(uploadError.value)
+    }
+
+    isUploadingCover.value = true
+
+    try {
+      let optimizedBlob: Blob
+      if (fileOrBlob instanceof Blob && fileOrBlob.type === 'image/webp' && !cropArea) {
+        optimizedBlob = fileOrBlob
+      } else {
+        optimizedBlob = await optimizeCover(fileOrBlob, cropArea)
+      }
+
+      const timestamp = Date.now()
+      const filePath = `${user.id}/business_${businessId}_cover_${timestamp}.webp`
+
+      const { error: storageError } = await supabase.storage
+        .from('covers')
+        .upload(filePath, optimizedBlob, {
+          contentType: 'image/webp',
+          upsert: true,
+        })
+
+      if (storageError) {
+        throw storageError
+      }
+
+      const { data: publicData } = supabase.storage.from('covers').getPublicUrl(filePath)
+      const publicUrl = publicData.publicUrl
+
+      const db = supabase as any
+      const { error: dbError } = await db
+        .from('BUSINESS_PROFILE')
+        .update({ Cover_Picture: publicUrl })
+        .eq('BUSINESS_ID', businessId)
+
+      if (dbError) {
+        throw dbError
+      }
+
+      if (previousUrl && previousUrl !== publicUrl) {
+        cleanupOldFile('covers', previousUrl)
+      }
+
+      return { url: publicUrl }
+    } catch (err: any) {
+      console.error('Error uploading business cover:', err)
+      uploadError.value = err.message || 'Failed to upload business cover.'
+      throw err
+    } finally {
+      isUploadingCover.value = false
+    }
+  }
+
   return {
     uploadAvatar,
     uploadCover,
+    uploadBusinessAvatar,
+    uploadBusinessCover,
     isUploadingAvatar,
     isUploadingCover,
     uploadError,

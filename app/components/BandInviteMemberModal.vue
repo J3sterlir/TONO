@@ -120,6 +120,8 @@ const handleClose = () => {
 }
 
 // Fetch verified solo artists whenever modal opens
+useModalScrollLock(() => props.isOpen)
+
 watch(
   () => props.isOpen,
   (open) => {
@@ -129,13 +131,6 @@ watch(
       roleInput.value = ''
       localError.value = null
       localSuccess.value = null
-      if (import.meta.client) {
-        document.body.style.overflow = 'hidden'
-      }
-    } else {
-      if (import.meta.client) {
-        document.body.style.overflow = ''
-      }
     }
   }
 )

@@ -258,6 +258,7 @@ const rejectArtist = async (artistId: string) => {
 const isEditModalOpen = ref(false)
 const isBanModalOpen = ref(false)
 const isDeleteModalOpen = ref(false)
+useModalScrollLock(() => isEditModalOpen.value || isBanModalOpen.value || isDeleteModalOpen.value)
 const isDeleting = ref(false)
 const deleteErrorMessage = ref<string | null>(null)
 const selectedUser = ref<any>(null)

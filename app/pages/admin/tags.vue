@@ -31,6 +31,7 @@ const isLoadingTags = ref(true)
 
 // Modal State
 const showModal = ref(false)
+useModalScrollLock(showModal)
 const modalType = ref<'add' | 'edit' | 'delete'>('add')
 const targetTagType = ref<'Genre' | 'Instrument'>('Genre')
 const editingTag = ref<TagItem | null>(null)

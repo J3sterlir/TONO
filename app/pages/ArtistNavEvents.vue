@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
       <!-- SECTION 1: "YOUR EVENTS" (Deduplicated Job Listings vs Contracts) -->
       <!-- ================================================================= -->
       <section class="space-y-4 font-Sora">
-        <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center items-end sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
           <div>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Events</h2>
             <p class="text-xs text-gray-400 mt-0.5">
@@ -491,7 +491,7 @@ onBeforeUnmount(() => {
       <!-- SECTION 3: "OPEN JOBS / GIGS" (Casting Call with Details Modal) -->
       <!-- ================================================================= -->
       <section class="space-y-4 font-Sora">
-        <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center items-end sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
           <div>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Open Jobs / Gigs</h2>
             <p class="text-xs text-gray-400 mt-0.5">
@@ -569,7 +569,7 @@ onBeforeUnmount(() => {
       <!-- SECTION 3: "LIVE EVENTS / GIGS" (Happening Today) -->
       <!-- ================================================================= -->
       <section class="space-y-4 font-Sora">
-        <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center items-start sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Live Events / Gigs</h2>

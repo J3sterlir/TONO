@@ -361,15 +361,7 @@ const executeGuardRail = async (action: 'Accept' | 'Decline', item: Notification
 }
 
 // Body scroll lock on mobile when modal is active
-watch(isOpen, (open) => {
-  if (typeof document !== 'undefined') {
-    if (open && !isDesktop.value) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-  }
-})
+useModalScrollLock(() => isOpen.value && !isDesktop.value)
 
 // Auto-refresh when tab gains focus
 const handleVisibilityChange = async () => {
@@ -423,7 +415,6 @@ onBeforeUnmount(() => {
     document.removeEventListener('pointerdown', handleDocumentClick)
     document.removeEventListener('keydown', handleKeyDown)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
-    document.body.style.overflow = ''
   }
   unsubscribe()
 })

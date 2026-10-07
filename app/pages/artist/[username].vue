@@ -6,6 +6,7 @@ definePageMeta({
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
 import { normalizeRole } from '~/utils/roleHelper'
+import { resolveSocialLink } from '~/utils/linkResolver'
 
 const route = useRoute()
 const username = computed(() => (route.params.username as string) || '')
@@ -83,12 +84,7 @@ const handleInitiateChat = async (source: 'hero' | 'contact' = 'hero') => {
 const isBookingModalOpen = ref(false)
 const bookingSuccessToast = ref('')
 
-watch(isBookingModalOpen, (isOpen) => {
-  // Check import.meta.client so it runs only in the browser (avoids Nuxt SSR errors)
-  if (import.meta.client) {
-    document.body.style.overflow = isOpen ? 'hidden' : ''
-  }
-})
+useModalScrollLock(isBookingModalOpen)
 
 const handleBookingSubmit = (payload: any) => {
   bookingSuccessToast.value = `Booking contract offer ${payload?.Contract_Code || ''} sent to ${displayName.value}!`
@@ -127,6 +123,7 @@ const { data: profileData, error: fetchError } = await useAsyncData(
         ACCOUNT_ID,
         Artist_Type,
         Bio,
+        Links,
         Is_Verified,
         Status,
         SOLO_ARTIST (
@@ -474,6 +471,29 @@ const bandMembers = computed(() => profileData.value?.bandMembers || [])
 const isOwner = computed(() => {
   if (!currentUser.value || !artistRecord.value) return false
   return currentUser.value.id === artistRecord.value.ACCOUNT_ID
+})
+
+const resolvedSocialLinks = computed(() => {
+  const rawLinks = artistRecord.value?.Links
+  if (!rawLinks) return []
+  if (Array.isArray(rawLinks)) {
+    return rawLinks
+      .map((l: any) => {
+        const url = typeof l === 'string' ? l : l.url
+        const label = typeof l === 'string' ? '' : l.label
+        return resolveSocialLink(url, label)
+      })
+      .filter((l) => Boolean(l.url))
+  }
+  if (typeof rawLinks === 'object') {
+    return Object.entries(rawLinks)
+      .map(([key, val]) => {
+        const url = typeof val === 'string' ? val : (val as any)?.url || ''
+        return resolveSocialLink(url, key)
+      })
+      .filter((l) => Boolean(l.url))
+  }
+  return []
 })
 
 // Upcoming Events for Posts Tab Sidebar
@@ -1302,8 +1322,9 @@ const isScrolled = computed(() => scrollY.value > 200)
 
         <!-- 4. Contact Tab Content Container -->
         <div v-else-if="activeTab === 'contact'" class="w-full">
-          <div
-            class="w-full min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
+          <div class="flex flex-col justify-between gap-5 sm:flex-row">
+            <div
+            class="w-full  min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
             <div
               class="w-14 h-14 rounded-full bg-[#1E1E24] border border-[#46464D]/50 flex items-center justify-center mb-4">
               <Icon name="ic:outline-alternate-email" class="text-2xl text-[#D0D4F7]" />
@@ -1320,12 +1341,28 @@ const isScrolled = computed(() => scrollY.value > 200)
                 <Icon v-else name="mdi:message-text-outline" class="text-base" />
                 <span>Chat Now</span>
               </button>
-              <button @click="handleShareProfile"
-                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E1E24] hover:bg-[#282830] border border-[#46464D]/60 text-xs sm:text-sm font-medium text-white transition-all cursor-pointer">
-                <Icon name="ic:round-share" class="text-base text-[#D0D4F7]" />
-                <span>Share Profile</span>
-              </button>
             </div>
+          </div>
+          <div class="w-full sm:w-fit min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-start text-center bg-[#131315]/50">
+            <!-- Social Media & External Links -->
+            <div v-if="resolvedSocialLinks.length > 0" class="border-[#46464D]/30 w-full max-w-lg">
+              <h4 class="text-xs font-mono uppercase tracking-wider text-gray-400 mb-3 text-center">Social & External Links</h4>
+              <div class="flex flex-wrap items-center justify-center gap-2">
+                <a
+                  v-for="(link, idx) in resolvedSocialLinks"
+                  :key="idx"
+                  :href="link.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#18181B] hover:bg-[#26262C] border border-[#46464D]/40 hover:border-[#D0D4F7]/50 text-xs text-gray-200 transition-colors group cursor-pointer"
+                >
+                  <Icon :name="link.icon" class="text-sm text-[#D0D4F7]" />
+                  <span class="font-medium">{{ link.handle || link.label || link.platform }}</span>
+                  <Icon name="heroicons:arrow-up-right-20-solid" class="text-xs text-gray-500 group-hover:text-white" />
+                </a>
+              </div>
+            </div>
+          </div>
           </div>
         </div>
 

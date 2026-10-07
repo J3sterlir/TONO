@@ -76,6 +76,9 @@ const editInputText = ref('')
 // Unsend confirm state
 const unsendConfirmMessage = ref<MessageItem | null>(null)
 
+// Disable background scroll while any modal/lightbox is active
+useModalScrollLock(() => Boolean(editingMessage.value || unsendConfirmMessage.value || lightboxImageUrl.value))
+
 // Scroll container reference
 const messagesContainerRef = ref<HTMLElement | null>(null)
 

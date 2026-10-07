@@ -74,11 +74,12 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
+useModalScrollLock(() => props.isOpen)
+
 watch(
   () => props.isOpen,
   (open) => {
     if (import.meta.client) {
-      document.body.style.overflow = open ? 'hidden' : ''
       if (open) {
         window.addEventListener('keydown', handleKeyDown)
       } else {
@@ -92,7 +93,6 @@ watch(
 
 onUnmounted(() => {
   if (import.meta.client) {
-    document.body.style.overflow = ''
     window.removeEventListener('keydown', handleKeyDown)
   }
 })

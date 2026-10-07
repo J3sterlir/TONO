@@ -18,6 +18,9 @@ const db = supabase as any
 const isSubmitting = ref(false)
 const feedbackMessage = ref('')
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 // Song item interface
 interface SongItem {
   id: string
@@ -143,7 +146,7 @@ const handleArtistAccept = async () => {
 
       await db
         .from('JOB_LISTING')
-        .update({ Status: 'Filled' })
+        .update({ Status: 'Closed' })
         .eq('Job_ID', props.contract.Job_ID)
     }
 

@@ -22,6 +22,9 @@ const emit = defineEmits<{
   (e: 'save', payload: { fileUrl: string; title: string }): void
 }>()
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 const title = ref('')
 const fileUrl = ref('')
 const selectedFile = ref<File | null>(null)

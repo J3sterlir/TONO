@@ -26,6 +26,9 @@ const isAcknowledged = ref(false)
 const cancellationReason = ref('')
 const isSubmitting = ref(false)
 
+// Disable background scroll while modal is open
+useModalScrollLock(() => props.isOpen)
+
 const daysRemaining = computed(() => {
   if (!props.startDate) return 0
   const now = new Date()

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { resolveSocialLink, normalizeUrl, type ResolvedLink } from '~/utils/linkResolver'
 
 const props = withDefaults(
   defineProps<{
@@ -10,12 +11,14 @@ const props = withDefaults(
     initialBio?: string
     initialGenres?: string[]
     initialInstruments?: string[]
+    initialLinks?: any
   }>(),
   {
     initialName: '',
     initialBio: '',
     initialGenres: () => [],
     initialInstruments: () => [],
+    initialLinks: () => [],
   }
 )
 
@@ -26,6 +29,7 @@ const emit = defineEmits<{
     bio: string
     genres: string[]
     instruments: string[]
+    links: Array<{ url: string; label: string }>
   }): void
 }>()
 
@@ -37,6 +41,69 @@ const name = ref('')
 const bio = ref('')
 const selectedGenres = ref<string[]>([])
 const selectedInstruments = ref<string[]>([])
+
+interface LinkItem {
+  url: string
+  label: string
+}
+
+const links = ref<LinkItem[]>([])
+const newUrlInput = ref('')
+
+const pendingLinkResolution = computed<ResolvedLink | null>(() => {
+  const trimmed = newUrlInput.value.trim()
+  if (!trimmed) return null
+  return resolveSocialLink(trimmed)
+})
+
+const parseInitialLinks = (raw: any): LinkItem[] => {
+  if (!raw) return []
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item: any) => {
+        if (typeof item === 'string') {
+          const resolved = resolveSocialLink(item)
+          return { url: item, label: resolved.label }
+        }
+        const url = item?.url || item?.link || ''
+        const label = item?.label || item?.name || resolveSocialLink(url).label
+        return { url, label }
+      })
+      .filter((l: LinkItem) => Boolean(l.url))
+  }
+  if (typeof raw === 'object') {
+    return Object.entries(raw)
+      .map(([key, val]) => {
+        const url = typeof val === 'string' ? val : (val as any)?.url || ''
+        return { url, label: key }
+      })
+      .filter((l: LinkItem) => Boolean(l.url))
+  }
+  return []
+}
+
+const addLink = () => {
+  const url = normalizeUrl(newUrlInput.value)
+  if (!url) return
+
+  if (links.value.some((l) => l.url.toLowerCase() === url.toLowerCase())) {
+    errorMessage.value = 'This link has already been added.'
+    return
+  }
+
+  const resolved = resolveSocialLink(url)
+  links.value.push({
+    url,
+    label: resolved.label,
+  })
+
+  newUrlInput.value = ''
+  errorMessage.value = null
+}
+
+const removeLink = (index: number) => {
+  links.value.splice(index, 1)
+}
 
 // Reference Options
 const allGenres = ref<{ id: string; name: string }[]>([])
@@ -86,19 +153,19 @@ const loadTags = async () => {
   }
 }
 
+useModalScrollLock(() => props.isOpen)
+
 // Reset / Initialize on modal open
 watch(
   () => props.isOpen,
   (open) => {
-    if (import.meta.client) {
-      document.body.style.overflow = open ? 'hidden' : ''
-    }
-
     if (open) {
       name.value = props.initialName || ''
       bio.value = props.initialBio || ''
       selectedGenres.value = [...(props.initialGenres || [])]
       selectedInstruments.value = [...(props.initialInstruments || [])]
+      links.value = parseInitialLinks(props.initialLinks)
+      newUrlInput.value = ''
       genreSearch.value = ''
       instrumentSearch.value = ''
       errorMessage.value = null
@@ -107,12 +174,6 @@ watch(
   },
   { immediate: true }
 )
-
-onUnmounted(() => {
-  if (import.meta.client) {
-    document.body.style.overflow = ''
-  }
-})
 
 // Filtered Tag Lists
 const filteredGenres = computed(() => {
@@ -164,11 +225,12 @@ const handleSave = async () => {
     const trimmedName = name.value.trim()
     const trimmedBio = bio.value.trim()
 
-    // 1. Update ARTIST record (Bio only; stage name belongs to SOLO_ARTIST.Artist_Name or BAND.Band_Name)
+    // 1. Update ARTIST record (Bio & Links)
     const { error: artistError } = await db
       .from('ARTIST')
       .update({
         Bio: trimmedBio || null,
+        Links: links.value,
       })
       .eq('ARTIST_ID', props.artistId)
 
@@ -259,6 +321,7 @@ const handleSave = async () => {
       bio: trimmedBio,
       genres: [...selectedGenres.value],
       instruments: [...selectedInstruments.value],
+      links: [...links.value],
     })
 
     emit('close')
@@ -441,6 +504,88 @@ const handleSave = async () => {
               <span v-if="filteredInstruments.length === 0" class="text-xs text-gray-500 py-1">
                 No matching instruments found.
               </span>
+            </div>
+          </div>
+
+          <!-- Social & External Media Links -->
+          <div class="space-y-3 pt-2 border-t border-[#46464D]/30">
+            <div class="flex items-center justify-between">
+              <label class="block text-xs sm:text-sm font-semibold text-gray-200 font-Sora">
+                Social Media & External Links
+              </label>
+              <span class="text-xs text-[#D0D4F7] font-medium">
+                {{ links.length }} link{{ links.length === 1 ? '' : 's' }}
+              </span>
+            </div>
+
+            <p class="text-xs text-gray-400 font-Geist">
+              Paste URLs for Facebook, YouTube, Instagram, Spotify, SoundCloud, Bandcamp, TikTok, or personal website.
+            </p>
+
+            <!-- Add URL Input Bar -->
+            <div class="flex items-center gap-2">
+              <div class="flex relative flex-1">
+                <Icon name="ic:outline-link" class="absolute left-3 top-2.5 text-gray-400 text-base" />
+                <input
+                  type="url"
+                  v-model="newUrlInput"
+                  @keydown.enter.prevent="addLink"
+                  placeholder="https://instagram.com/yourhandle or youtube.com/@channel"
+                  class="items-center w-full pl-9 pr-3.5 py-2 bg-[#1E1E24] border border-[#46464D]/60 rounded-xl text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7]"
+                />
+              </div>
+              <button
+                type="button"
+                @click="addLink"
+                :disabled="!newUrlInput.trim()"
+                class="px-3.5 py-2 rounded-xl bg-[#282830] text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 shrink-0 border border-[#46464D]/40"
+
+                :class="!newUrlInput.trim()
+    ? 'bg-[#1C1C1F] text-gray-500 border-[#2A2A2E] cursor-not-allowed opacity-50'
+    : 'bg-[#282830] text-white border-[#46464D]/40 hover:bg-[#D0D4F7] hover:text-black cursor-pointer shadow-sm'"
+              >
+                <Icon name="ic:round-add" class="text-base" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            <!-- Live URL Preview Pill -->
+            <div
+              v-if="pendingLinkResolution"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#141416] border border-[#D0D4F7]/40 text-xs text-[#D0D4F7]"
+            >
+              <Icon :name="pendingLinkResolution.icon" class="text-sm shrink-0" />
+              <span class="font-medium">{{ pendingLinkResolution.platform }}:</span>
+              <span class="truncate text-gray-300">{{ pendingLinkResolution.handle || pendingLinkResolution.url }}</span>
+            </div>
+
+            <!-- Current Links List -->
+            <div v-if="links.length > 0" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              <div
+                v-for="(link, idx) in links"
+                :key="idx"
+                class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#141416] border border-[#46464D]/40 group"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <Icon :name="resolveSocialLink(link.url).icon" class="text-base text-[#D0D4F7] shrink-0" />
+                  <div class="min-w-0 flex items-center gap-2">
+                    <span class="text-xs font-medium text-white truncate max-w-44">
+                      {{ resolveSocialLink(link.url).handle || resolveSocialLink(link.url).label }}
+                    </span>
+                    <span class="text-[11px] text-gray-500 font-mono truncate hidden sm:inline">
+                      {{ link.url }}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  @click="removeLink(idx)"
+                  class="flex p-1 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-950/30 transition-colors cursor-pointer shrink-0"
+                  title="Remove link"
+                >
+                  <Icon name="ic:round-close" class="text-sm" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

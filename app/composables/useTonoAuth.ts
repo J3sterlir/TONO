@@ -20,6 +20,9 @@ export type TonoBusinessProfile = {
   Business_Address: string | null
   Contact_Information: string | null
   Business_Service: string | null
+  Profile_Picture?: string | null
+  Cover_Picture?: string | null
+  Links?: Array<{ url: string; label?: string }> | Record<string, unknown> | null
 }
 
 export type TonoArtistProfile = {
@@ -28,7 +31,7 @@ export type TonoArtistProfile = {
   Artist_Type: TonoArtistType
   StageName: string
   Bio: string | null
-  Links: Record<string, unknown> | null
+  Links: Array<{ url: string; label?: string }> | Record<string, unknown> | null
   Is_Verified: boolean
   Status: string
   Created_at?: string | null

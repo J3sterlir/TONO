@@ -27,6 +27,7 @@ const isProcessing = ref(false)
 
 // Edit Application Modal State (Business review & status changes)
 const isEditModalOpen = ref(false)
+useModalScrollLock(isEditModalOpen)
 const selectedAppForEdit = ref<any>(null)
 const editForm = reactive({
   status: 'Pending' as 'Pending' | 'Shortlisted' | 'Accepted' | 'Declined',
@@ -296,6 +297,15 @@ const handleSaveAppEdit = async () => {
       .eq('Application_ID', selectedAppForEdit.value.Application_ID)
 
     if (error) throw error
+
+    // If application is marked as Accepted, ensure the job listing is marked as Closed
+    if (editForm.status === 'Accepted' && selectedAppForEdit.value.Job_ID) {
+      const { error: jobErr } = await db
+        .from('JOB_LISTING')
+        .update({ Status: 'Closed' })
+        .eq('Job_ID', selectedAppForEdit.value.Job_ID)
+      if (jobErr) console.warn('Warning updating job listing to Closed:', jobErr)
+    }
 
     actionFeedback.value = {
       status: 'success',

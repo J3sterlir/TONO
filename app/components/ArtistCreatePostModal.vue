@@ -7,11 +7,15 @@ const props = withDefaults(
     artistName?: string
     artistAvatar?: string | null
     artistId?: string
+    ownerId?: string
+    ownerType?: 'artist' | 'business'
   }>(),
   {
     artistName: 'Artist',
     artistAvatar: '',
     artistId: '',
+    ownerId: '',
+    ownerType: 'artist',
   }
 )
 
@@ -226,19 +230,24 @@ const resetState = () => {
 }
 
 const handleSubmit = async () => {
-  if (!canSubmit.value || !props.artistId) return
+  const targetId = props.ownerId || props.artistId
+  if (!canSubmit.value || !targetId) return
   isSubmitting.value = true
 
-  const result = await createPost(props.artistId, {
-    imageFile: selectedFile.value,
-    caption: caption.value.trim(),
-    location: location.value.trim(),
-    aspectRatio: selectedRatio.value,
-    cropData: {
-      zoom: zoom.value,
-      pan: { ...pan.value },
+  const result = await createPost(
+    targetId,
+    {
+      imageFile: selectedFile.value,
+      caption: caption.value.trim(),
+      location: location.value.trim(),
+      aspectRatio: selectedRatio.value,
+      cropData: {
+        zoom: zoom.value,
+        pan: { ...pan.value },
+      },
     },
-  })
+    props.ownerType || 'artist'
+  )
 
   if (result.success && result.post) {
     emit('created', result.post)
@@ -257,11 +266,12 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
+useModalScrollLock(() => props.isOpen)
+
 watch(
   () => props.isOpen,
   (open) => {
     if (import.meta.client) {
-      document.body.style.overflow = open ? 'hidden' : ''
       if (open) {
         window.addEventListener('keydown', handleKeyDown)
       } else {
@@ -275,7 +285,6 @@ watch(
 
 onUnmounted(() => {
   if (import.meta.client) {
-    document.body.style.overflow = ''
     window.removeEventListener('keydown', handleKeyDown)
   }
   cleanupMediaUrl()

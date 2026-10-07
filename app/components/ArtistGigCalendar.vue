@@ -24,6 +24,7 @@ const isLoading = ref(true)
 // Selected gig for modal
 const selectedGig = ref<any | null>(null)
 const isModalOpen = ref(false)
+useModalScrollLock(isModalOpen)
 
 // Proximity warning state for cancellations
 const isWarningModalOpen = ref(false)
