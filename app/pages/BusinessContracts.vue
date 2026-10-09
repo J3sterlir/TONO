@@ -22,6 +22,31 @@ const businessId = ref('')
 // Contracts from Supabase
 const contracts = ref<any[]>([])
 
+// Booking Completion
+const completingBookingId = ref<string | null>(null)
+const currentTime = ref(Date.now())
+let completionClock: ReturnType<typeof setInterval> | null = null
+
+// Check whether the booking's scheduled end time has passed.
+// Booking schedules are interpreted in Philippine time (UTC+08:00).
+const canCompleteContract = (contract: any): boolean => {
+  if (!['Confirmed', 'Active'].includes(contract.Status)) {
+    return false
+  }
+
+  const endDate = contract.End_Date || contract.Start_Date || contract.Event_Date
+  const endTime = contract.End_Time
+
+  if (!endDate || !endTime) return false
+
+  const scheduledEnd = new Date(`${endDate}T${endTime}+08:00`)
+
+  return (
+    !Number.isNaN(scheduledEnd.getTime()) &&
+    currentTime.value >= scheduledEnd.getTime()
+  )
+}
+
 // 5-Day Proximity Warning Modal
 const isWarningModalOpen = ref(false)
 const targetContractForCancellation = ref<any>(null)
@@ -212,6 +237,68 @@ const handleConfirmCancellation = async (reason: string, isLateParam?: boolean) 
 }
 
 // -----------------------------------------------------------------------------
+// Booking Completion
+// -----------------------------------------------------------------------------
+const handleCompleteContract = async (contract: any) => {
+  // Prevent duplicate requests and premature completion.
+  if (completingBookingId.value || !canCompleteContract(contract)) return
+
+  // Require explicit confirmation before changing the contract status.
+  const confirmed = window.confirm(
+    `Mark contract ${contract.Contract_Code || ''} as completed? This will move it to your contract history.`
+  )
+
+  if (!confirmed) return
+
+  completingBookingId.value = contract.Booking_ID
+
+  try {
+    // Retrieve the current Supabase access token for API authentication.
+    const { data, error: sessionError } = await supabase.auth.getSession()
+
+    if (sessionError) throw sessionError
+
+    const accessToken = data.session?.access_token
+
+    if (!accessToken) {
+      throw new Error('Your session has expired. Please log in again.')
+    }
+
+    // The server validates the participant, booking status, and end time.
+    await $fetch('/api/bookings/complete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: {
+        bookingId: contract.Booking_ID
+      }
+    })
+
+    // Display the result and refresh the contract lists.
+    feedbackMessage.value = {
+      status: 'success',
+      message: `Contract ${contract.Contract_Code} marked as completed successfully.`
+    }
+
+    await fetchContracts()
+  } catch (err: any) {
+    console.error('Failed to complete contract:', err)
+
+    feedbackMessage.value = {
+      status: 'error',
+      message:
+        err.data?.statusMessage ||
+        err.statusMessage ||
+        err.message ||
+        'Failed to complete contract.'
+    }
+  } finally {
+    completingBookingId.value = null
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Filtered Views
 // -----------------------------------------------------------------------------
 const activeContracts = computed(() => {
@@ -235,12 +322,22 @@ const getArtistName = (contract: any) => {
 onMounted(async () => {
   await fetchContracts()
   setupRealtimeSync()
+
+  // Refresh the current time every 30 seconds for button availability.
+  completionClock = setInterval(() => {
+    currentTime.value = Date.now()
+  }, 30_000)
 })
 
 onBeforeUnmount(() => {
   if (businessContractChannel) {
     supabase.removeChannel(businessContractChannel)
     businessContractChannel = null
+  }
+    // Stop the timer when leaving the page.
+  if (completionClock) {
+    clearInterval(completionClock)
+    completionClock = null
   }
 })
 </script>
@@ -395,22 +492,35 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Footer Actions -->
-            <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E] text-xs">
               <span class="text-[10px] font-mono text-gray-400">
                 Type: {{ contract.Booking_Type || 'Direct' }}
               </span>
 
-              <button
-                type="button"
-                @click="initiateCancelContract(contract)"
-                class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
-              >
-                Cancel Contract
-              </button>
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- Completion is available only after the scheduled end time. -->
+                <button
+                  type="button"
+                  :disabled="!canCompleteContract(contract) || completingBookingId !== null"
+                  @click="handleCompleteContract(contract)"
+                  class="px-3.5 py-1.5 rounded-full border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {{ completingBookingId === contract.Booking_ID ? 'Completing...' : 'Mark as Completed' }}
+                </button>
+
+                <!-- Existing cancellation functionality remains unchanged. -->
+                <button
+                  type="button"
+                  @click="initiateCancelContract(contract)"
+                  class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
+                >
+                  Cancel Contract
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </div>  
+       </div>   
 
       <!-- TAB 2: PENDING ARTIST APPROVAL -->
       <div v-else-if="activeTab === 'pending'">
