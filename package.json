@@ -25,6 +25,8 @@
     "@iconify-json/ic": "^1.2.4",
     "@iconify-json/lucide": "^1.2.138",
     "@iconify-json/mdi": "^1.2.3",
-    "@types/node": "^26.4.1"
+    "@types/node": "^26.4.1",
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.3.12"
   }
 }

@@ -14,11 +14,16 @@ export const formatTime12 = (timeStr?: string | null): string => {
     return trimmed.toUpperCase()
   }
 
+  
   // Parse HH:mm or HH:mm:ss
   const parts = trimmed.split(':')
-  if (parts.length >= 2) {
-    const hours = parseInt(parts[0], 10)
-    const minutes = parseInt(parts[1], 10)
+  const hourPart = parts[0]
+  const minutePart = parts[1]
+
+  if (hourPart !== undefined && minutePart !== undefined) {
+    const hours = parseInt(hourPart, 10)
+    const minutes = parseInt(minutePart, 10)
+
     if (!isNaN(hours) && !isNaN(minutes)) {
       const period = hours >= 12 ? 'PM' : 'AM'
       const h12 = hours % 12 === 0 ? 12 : hours % 12
@@ -26,6 +31,7 @@ export const formatTime12 = (timeStr?: string | null): string => {
       return `${h12}:${mStr} ${period}`
     }
   }
+
 
   return trimmed
 }
