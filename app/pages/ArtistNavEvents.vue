@@ -29,7 +29,94 @@ const selectedContractForForm2 = ref<any>(null)
 const isJobDetailsModalOpen = ref(false)
 const selectedJobForDetails = ref<any>(null)
 
+// Booking Completion
+const completingBookingId = ref<string | null>(null)
+const completionFeedback = ref<{ status: 'success' | 'error'; message: string } | null>(null)
+const currentTime = ref(Date.now())
+let completionClock: ReturnType<typeof setInterval> | null = null
+
+// Allow completion 30 minutes after the scheduled end time (Philippine time).
+const canCompleteContract = (contract: any): boolean => {
+  if (!['Confirmed', 'Active'].includes(contract.Status)) return false
+
+  const endDate = contract.End_Date || contract.Start_Date || contract.Event_Date
+  const endTime = contract.End_Time
+
+  if (!endDate || !endTime) return false
+
+  const scheduledEnd = new Date(`${endDate}T${endTime}+08:00`)
+  const completionAvailableAt = scheduledEnd.getTime() + 30 * 60 * 1000
+
+  return (
+    !Number.isNaN(scheduledEnd.getTime()) &&
+    currentTime.value >= completionAvailableAt
+  )
+}
+
+// Complete a confirmed booking after the 30-minute allowance.
+const handleCompleteContract = async (contract: any) => {
+  if (completingBookingId.value || !canCompleteContract(contract)) return
+
+  const confirmed = window.confirm(
+    `Mark contract ${contract.Contract_Code || ''} as completed? This will remove it from your confirmed events.`
+  )
+
+  if (!confirmed) return
+
+  completingBookingId.value = contract.Booking_ID
+
+  try {
+    // Use the current session to authenticate the API request.
+    const { data, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+
+    const accessToken = data.session?.access_token
+    if (!accessToken) {
+      throw new Error('Your session has expired. Please log in again.')
+    }
+
+    // The backend verifies the artist, status, and scheduled end time.
+    await $fetch('/api/bookings/complete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: {
+        bookingId: contract.Booking_ID
+      }
+    })
+
+    completionFeedback.value = {
+      status: 'success',
+      message: `Contract ${contract.Contract_Code} marked as completed successfully.`
+    }
+
+    // Refresh the artist's events and contracts.
+    await fetchArtistEvents()
+  } catch (err: any) {
+    console.error('Failed to complete artist booking:', err)
+
+    completionFeedback.value = {
+      status: 'error',
+      message:
+        err.data?.statusMessage ||
+        err.statusMessage ||
+        err.message ||
+        'Failed to complete booking.'
+    }
+  } finally {
+    completingBookingId.value = null
+  }
+}
+
 onMounted(async () => {
+  // Update the current time every 30 seconds.
+  // This allows the completion button to become enabled
+  // once 30 minutes have passed after the event's scheduled end time.
+  completionClock = setInterval(() => {
+    currentTime.value = Date.now()
+  }, 30_000)
+
   try {
     const profile = await fetchCurrentUserProfile()
     if (profile?.artistProfile) {
@@ -354,6 +441,12 @@ onBeforeUnmount(() => {
     supabase.removeChannel(contractSyncChannel)
     contractSyncChannel = null
   }
+
+  // Stop the completion timer when leaving this page.
+  if (completionClock) {
+    clearInterval(completionClock)
+    completionClock = null
+  }
 })
 </script>
 
@@ -373,6 +466,25 @@ onBeforeUnmount(() => {
             Browse casting calls, audition for open gigs, and track your confirmed performances.
           </p>
         </div>
+      </div>
+
+      <!-- Booking Completion Feedback -->
+      <div
+        v-if="completionFeedback"
+        class="p-4 rounded-xl border flex items-center justify-between gap-3 text-xs"
+        :class="completionFeedback.status === 'success'
+          ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+          : 'bg-red-950/30 border-red-500/40 text-red-200'"
+      >
+        <span>{{ completionFeedback.message }}</span>
+
+        <button
+          type="button"
+          @click="completionFeedback = null"
+          class="text-gray-400 hover:text-white cursor-pointer"
+        >
+          <Icon name="ic:round-close" />
+        </button>
       </div>
 
       <!-- PENDING OFFERS ALERT BANNER (Triggers Form 2 Artist Approval) -->
@@ -482,6 +594,22 @@ onBeforeUnmount(() => {
                 <Icon name="ic:baseline-storefront" class="text-[#D0D4F7] text-sm shrink-0" />
                 <span>Host: {{ event.BUSINESS_PROFILE.Business_Name }}</span>
               </div>
+            </div>
+
+            <!-- Booking Completion Action -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E]">
+              <span class="text-[10px] text-gray-400">
+                Available 30 minutes after the scheduled end time
+              </span>
+
+              <button
+                type="button"
+                :disabled="!canCompleteContract(event) || completingBookingId !== null"
+                @click="handleCompleteContract(event)"
+                class="px-3.5 py-2 rounded-full border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-xs"
+              >
+                {{ completingBookingId === event.Booking_ID ? 'Completing...' : 'Mark as Completed' }}
+              </button>
             </div>
           </div>
         </div>

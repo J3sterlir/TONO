@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
     // perform its own authentication and authorization checks.
     const supabaseUrl = process.env.SUPABASE_URL
     const serviceKey =
+      process.env.SUPABASE_SECRET_KEY ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SERVICE_KEY ||
       process.env.NUXT_SUPABASE_SECRET_KEY
@@ -220,12 +221,13 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Do not allow completion before the scheduled end time.
-    if (Date.now() < scheduledEnd.getTime()) {
+    // Allow completion only 30 minutes after the scheduled end time.
+    const completionAvailableAt = scheduledEnd.getTime() + 30 * 60 * 1000
+    if (Date.now() < completionAvailableAt) {
       throw createError({
         statusCode: 409,
         statusMessage:
-          'This booking cannot be completed before its scheduled end time.'
+          'This booking can only be completed 30 minutes after its scheduled end time.'
       })
     }
 

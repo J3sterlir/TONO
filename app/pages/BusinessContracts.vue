@@ -41,9 +41,12 @@ const canCompleteContract = (contract: any): boolean => {
 
   const scheduledEnd = new Date(`${endDate}T${endTime}+08:00`)
 
+  // Add a 30-minute allowance for possible performance delays.
+  const completionAvailableAt = scheduledEnd.getTime() + 30 * 60 * 1000
+
   return (
     !Number.isNaN(scheduledEnd.getTime()) &&
-    currentTime.value >= scheduledEnd.getTime()
+    currentTime.value >= completionAvailableAt
   )
 }
 
