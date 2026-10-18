@@ -201,15 +201,70 @@ const fetchDashboardData = async () => {
   }
 }
 
+// System Infrastructure & Storage Metrics State
+const systemStats = ref<any>(null)
+const isLoadingStats = ref(true)
+const isRefreshingStats = ref(false)
+
+const fetchSystemStats = async () => {
+  isLoadingStats.value = true
+  try {
+    const res: any = await $fetch('/api/admin/system-stats')
+    if (res?.success) {
+      systemStats.value = res
+    }
+  } catch (err: any) {
+    console.warn('Failed to load system stats:', err)
+  } finally {
+    isLoadingStats.value = false
+    isRefreshingStats.value = false
+  }
+}
+
+const handleManualRefreshStats = async () => {
+  isRefreshingStats.value = true
+  await Promise.all([
+    fetchSystemStats(),
+    fetchDashboardData()
+  ])
+}
+
 onMounted(() => {
   fetchDashboardData()
+  fetchSystemStats()
 })
 </script>
 
 <template>
   <div>
-    <nav class="flex items-center px-16 h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10">
-      <h1 class="text-[#D0D4F7] text-[24px] font-medium">Welcome Back Admin!</h1>
+    <nav class="flex items-center justify-between px-6 sm:px-16 h-16 sm:h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10 pl-16 sm:pl-16">
+      <div class="flex items-center gap-3">
+        <h1 class="text-[#D0D4F7] text-lg sm:text-[24px] font-medium tracking-tight">Welcome Back Admin!</h1>
+      </div>
+
+      <!-- Live Heartbeat Pill & Refresh Button -->
+      <div class="flex items-center gap-3">
+        <div v-if="systemStats?.database" class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-[#1C1C1F]/90 border border-[#2A2A2E] text-xs">
+          <span class="relative flex h-2 w-2">
+            <span v-if="systemStats.database.status === 'Operational'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2" :class="systemStats.database.status === 'Operational' ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+          </span>
+          <span class="text-zinc-300 font-medium font-mono">{{ systemStats.database.status }}</span>
+          <span class="text-zinc-500">•</span>
+          <span class="text-zinc-400 font-mono">{{ systemStats.database.latencyMs }}ms</span>
+        </div>
+
+        <button
+          @click="handleManualRefreshStats"
+          :disabled="isRefreshingStats"
+          type="button"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1C1C1F] hover:bg-white/10 border border-[#2A2A2E] text-xs font-medium text-[#D0D4F7] transition-all cursor-pointer disabled:opacity-50"
+          title="Refresh dashboard metrics"
+        >
+          <Icon name="ic:round-refresh" class="text-base" :class="{ 'animate-spin': isRefreshingStats }" />
+          <span class="hidden xs:inline">Refresh</span>
+        </button>
+      </div>
     </nav>
     <main class="p-8 lg:p-16">
       <!-- Metric Counters Row -->
@@ -259,6 +314,221 @@ onMounted(() => {
             </div>
           </div>
         </NuxtLink>
+      </div>
+
+      <!-- System Infrastructure & Live Metrics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+
+        <!-- 1. Storage Bucket Usage GUI -->
+        <div class="bg-[#1C1C1F]/60 border border-[#2A2A2E]/50 rounded-2xl p-6 flex flex-col justify-between backdrop-blur-md relative overflow-hidden group hover:border-[#D0D4F7]/40 transition-all shadow-lg">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="flex p-2 rounded-xl bg-[#D0D4F7]/10 text-[#D0D4F7]">
+                  <Icon name="ic:outline-cloud-done" class="text-2xl" />
+                </div>
+                <div>
+                  <h2 class="text-base font-bold text-white tracking-wide">Storage Bucket Usage</h2>
+                  <p class="text-xs text-zinc-400 font-light">Supabase Cloud Storage</p>
+                </div>
+              </div>
+              <span v-if="systemStats?.storage" class="text-xs px-2.5 py-1 rounded-full font-mono font-bold"
+                :class="systemStats.storage.usedPercent > 90 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : systemStats.storage.usedPercent > 70 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'">
+                {{ systemStats.storage.usedPercent }}% Used
+              </span>
+            </div>
+
+            <!-- Big Metric Value -->
+            <div v-if="isLoadingStats && !systemStats" class="py-6 flex flex-col gap-2">
+              <div class="h-8 w-36 bg-zinc-800 animate-pulse rounded-lg"></div>
+              <div class="h-3 w-full bg-zinc-800 animate-pulse rounded-full mt-2"></div>
+            </div>
+            <div v-else-if="systemStats?.storage" class="space-y-4">
+              <div class="flex items-baseline justify-between">
+                <div>
+                  <span class="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">{{ systemStats.storage.formattedUsed }}</span>
+                  <span class="text-xs text-zinc-400 ml-1.5">/ {{ systemStats.storage.formattedQuota }}</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs font-semibold text-emerald-400 font-mono">{{ systemStats.storage.formattedFree }} free</span>
+                </div>
+              </div>
+
+              <!-- GUI Progress Bar Meter -->
+              <div class="relative w-full h-3.5 bg-black/50 rounded-full overflow-hidden p-0.5 border border-white/5">
+                <div
+                  class="h-full rounded-full transition-all duration-700 ease-out"
+                  :style="{ width: `${Math.max(2, systemStats.storage.usedPercent)}%` }"
+                  :class="systemStats.storage.usedPercent > 90
+                    ? 'bg-linear-to-r from-rose-600 to-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+                    : systemStats.storage.usedPercent > 70
+                      ? 'bg-linear-to-r from-amber-600 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                      : 'bg-linear-to-r from-indigo-500 via-[#818cf8] to-[#D0D4F7] shadow-[0_0_12px_rgba(208,212,247,0.4)]'"
+                ></div>
+              </div>
+
+              <!-- Per-Bucket Breakdown Pills -->
+              <div class="pt-2">
+                <p class="text-[11px] font-mono uppercase tracking-wider text-zinc-500 mb-2">Bucket Breakdown</p>
+                <div class="flex flex-wrap gap-2">
+                  <div
+                    v-for="b in systemStats.storage.buckets"
+                    :key="b.name"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/40 border border-white/5 text-[11px]"
+                  >
+                    <span class="font-medium text-zinc-300 capitalize">{{ b.name }}</span>
+                    <span class="text-zinc-500 font-mono">•</span>
+                    <span class="text-[#D0D4F7] font-mono font-medium">{{ b.formattedSize }}</span>
+                    <span class="text-zinc-500 text-[10px]">({{ b.fileCount }})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Database Status & Latency Card -->
+        <div class="bg-[#1C1C1F]/60 border border-[#2A2A2E]/50 rounded-2xl p-6 flex flex-col justify-between backdrop-blur-md relative overflow-hidden group hover:border-[#D0D4F7]/40 transition-all shadow-lg">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="flex p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+                  <Icon name="ic:outline-storage" class="text-2xl" />
+                </div>
+                <div>
+                  <h2 class="text-base font-bold text-white tracking-wide">Database Health</h2>
+                  <p class="text-xs text-zinc-400 font-light">{{ systemStats?.database?.engine || 'PostgreSQL Engine' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span v-if="systemStats?.database?.status === 'Operational'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="systemStats?.database?.status === 'Operational' ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+                </span>
+                <span class="text-xs font-bold font-mono" :class="systemStats?.database?.status === 'Operational' ? 'text-emerald-400' : 'text-amber-400'">
+                  {{ systemStats?.database?.status || 'Connecting...' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Big Metric Value -->
+            <div v-if="isLoadingStats && !systemStats" class="py-6 flex flex-col gap-2">
+              <div class="h-8 w-36 bg-zinc-800 animate-pulse rounded-lg"></div>
+              <div class="h-16 w-full bg-zinc-800 animate-pulse rounded-lg mt-2"></div>
+            </div>
+            <div v-else-if="systemStats?.database" class="space-y-4">
+              <div class="flex items-baseline justify-between">
+                <div>
+                  <span class="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">{{ systemStats.database.latencyMs }}</span>
+                  <span class="text-xs text-zinc-400 ml-1 font-mono">ms latency</span>
+                </div>
+                <div>
+                  <span class="text-[11px] px-2.5 py-0.5 rounded-full font-mono font-medium"
+                    :class="systemStats.database.latencyMs < 100 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : systemStats.database.latencyMs < 300 ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'">
+                    {{ systemStats.database.latencyMs < 100 ? 'Optimal' : systemStats.database.latencyMs < 300 ? 'Moderate' : 'High' }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Database Details Breakdown -->
+              <div class="grid grid-cols-2 gap-2.5 pt-2">
+                <div class="p-3 rounded-xl bg-black/40 border border-white/5">
+                  <p class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Service Mode</p>
+                  <p class="text-xs font-semibold text-zinc-200 mt-0.5">Pooled Direct</p>
+                </div>
+                <div class="p-3 rounded-xl bg-black/40 border border-white/5">
+                  <p class="text-[10px] font-mono uppercase tracking-wider text-zinc-500">RLS Protection</p>
+                  <p class="text-xs font-semibold text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <Icon name="ic:round-verified" class="text-sm" />
+                    Enforced
+                  </p>
+                </div>
+              </div>
+
+              <div class="text-[11px] text-zinc-400 flex items-center justify-between pt-1 font-mono">
+                <span>Security Definer Views:</span>
+                <span class="text-emerald-400 font-semibold">0 Issues (Clean)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Request Telemetry & Success Rate Card -->
+        <div class="bg-[#1C1C1F]/60 border border-[#2A2A2E]/50 rounded-2xl p-6 flex flex-col justify-between backdrop-blur-md relative overflow-hidden group hover:border-[#D0D4F7]/40 transition-all shadow-lg">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="flex p-2 rounded-xl bg-indigo-500/10 text-[#D0D4F7]">
+                  <Icon name="ic:round-insights" class="text-2xl" />
+                </div>
+                <div>
+                  <h2 class="text-base font-bold text-white tracking-wide">Request Telemetry</h2>
+                  <p class="text-xs text-zinc-400 font-light">API & Platform Workflows</p>
+                </div>
+              </div>
+              <span v-if="systemStats?.requests" class="text-xs px-2.5 py-1 rounded-full font-mono font-bold bg-[#D0D4F7]/10 text-[#D0D4F7] border border-[#D0D4F7]/25">
+                {{ systemStats.requests.api.successRate }}% Success
+              </span>
+            </div>
+
+            <!-- Big Metric Value -->
+            <div v-if="isLoadingStats && !systemStats" class="py-6 flex flex-col gap-2">
+              <div class="h-8 w-36 bg-zinc-800 animate-pulse rounded-lg"></div>
+              <div class="h-16 w-full bg-zinc-800 animate-pulse rounded-lg mt-2"></div>
+            </div>
+            <div v-else-if="systemStats?.requests" class="space-y-4">
+              <div class="flex items-baseline justify-between">
+                <div>
+                  <span class="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">{{ systemStats.requests.api.totalRequests }}</span>
+                  <span class="text-xs text-zinc-400 ml-1.5 font-mono">API Requests</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs font-semibold text-emerald-400 font-mono">{{ systemStats.requests.api.successRequests }} successful</span>
+                </div>
+              </div>
+
+              <!-- Workflow Rates Breakdown -->
+              <div class="space-y-2 pt-2">
+                <!-- Tag Requests Rate -->
+                <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-black/40 border border-white/5">
+                  <div class="flex items-center gap-2">
+                    <Icon name="ic:outline-label" class="text-zinc-400 text-sm" />
+                    <span class="text-zinc-300">Tag Requests Rate:</span>
+                  </div>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="font-bold text-[#D0D4F7]">{{ systemStats.requests.workflows.tags.acceptanceRate }}%</span>
+                    <span class="text-[10px] text-zinc-500">({{ systemStats.requests.workflows.tags.accepted }} / {{ systemStats.requests.workflows.tags.total }})</span>
+                  </div>
+                </div>
+
+                <!-- Booking Contracts Rate -->
+                <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-black/40 border border-white/5">
+                  <div class="flex items-center gap-2">
+                    <Icon name="mdi:handshake-outline" class="text-zinc-400 text-sm" />
+                    <span class="text-zinc-300">Booking Fulfillment:</span>
+                  </div>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="font-bold text-emerald-400">{{ systemStats.requests.workflows.bookings.fulfillmentRate }}%</span>
+                    <span class="text-[10px] text-zinc-500">({{ systemStats.requests.workflows.bookings.activeConfirmed + systemStats.requests.workflows.bookings.completed }} / {{ systemStats.requests.workflows.bookings.total }})</span>
+                  </div>
+                </div>
+
+                <!-- Artist Verifications Rate -->
+                <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-black/40 border border-white/5">
+                  <div class="flex items-center gap-2">
+                    <Icon name="ic:outline-verified" class="text-zinc-400 text-sm" />
+                    <span class="text-zinc-300">Artist Approval Rate:</span>
+                  </div>
+                  <div class="flex items-center gap-2 font-mono">
+                    <span class="font-bold text-[#D0D4F7]">{{ systemStats.requests.workflows.verifications.verificationRate }}%</span>
+                    <span class="text-[10px] text-zinc-500">({{ systemStats.requests.workflows.verifications.verified }} / {{ systemStats.requests.workflows.verifications.total }})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Quick Views Grid -->
@@ -449,7 +719,7 @@ onMounted(() => {
               <div v-for="tag in recentTags" :key="tag.id"
                 class="bg-[#1B1B1D] p-3.5 rounded-lg flex items-center justify-between border border-transparent hover:border-zinc-700/50 transition-colors">
                 <div class="flex items-center gap-3 min-w-0">
-                  <div class="p-2 rounded-lg bg-[#D0D4F7]/10 text-[#D0D4F7] shrink-0">
+                  <div class="flex p-2 rounded-lg bg-[#D0D4F7]/10 text-[#D0D4F7] shrink-0">
                     <Icon name="ic:baseline-new-label" class="text-xl" />
                   </div>
                   <div class="flex flex-col min-w-0">

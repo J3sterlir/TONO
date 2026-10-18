@@ -104,6 +104,8 @@ watch(
     closeMobileSidebar()
   }
 )
+
+useModalScrollLock(isMobileSidebarOpen)
 </script>
 
 <template>
@@ -194,35 +196,35 @@ watch(
     <!-- Sidebar Drawer -->
     <aside
       id="logo-sidebar"
-      class="fixed top-0 left-0 z-50 w-64 h-full transition-transform duration-300 ease-in-out bg-[#201F21]"
+      class="fixed top-0 left-0 z-50 w-64 h-dvh transition-transform duration-300 ease-in-out bg-[#201F21]"
       :class="isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full sm:translate-x-0'"
       aria-label="Sidebar"
     >
-      <div class="h-full flex flex-col justify-between w-64 p-6 overflow-y-auto bg-neutral-primary-soft border-e border-[#46464D]">
-        <div>
-          <!-- Logo & Mobile Close Button -->
-          <div class="flex items-center justify-between mb-8 sm:mb-12">
-            <div class="flex items-center gap-2 cursor-pointer" @click="navigateTo('/businessdash'); closeMobileSidebar()">
-              <img src="/TONO_LOGO.svg" alt="Logo" class="h-10 w-10 rounded-full" />
-              <div>
-                <h1 class="text-xl font-bold">TONO</h1>
-                <h2 class="text-md font-light text-[#D0D4F7]">BUSINESS SUITE</h2>
-              </div>
+      <div class="h-full flex flex-col justify-between w-64 p-5 sm:p-6 bg-neutral-primary-soft border-e border-[#46464D] select-none">
+        <!-- Logo & Mobile Close Button (shrink-0) -->
+        <div class="shrink-0 flex items-center justify-between mb-6">
+          <div class="flex items-center gap-2 cursor-pointer" @click="navigateTo('/businessdash'); closeMobileSidebar()">
+            <img src="/TONO_LOGO.svg" alt="Logo" class="h-10 w-10 rounded-full" />
+            <div>
+              <h1 class="text-xl font-bold">TONO</h1>
+              <h2 class="text-xs font-light text-[#D0D4F7] tracking-wider uppercase">BUSINESS SUITE</h2>
             </div>
-
-            <!-- Close button for mobile -->
-            <button
-              type="button"
-              @click="closeMobileSidebar"
-              class="sm:hidden p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
-              aria-label="Close sidebar"
-            >
-              <Icon name="ic:round-close" class="text-2xl" />
-            </button>
           </div>
 
-          <!-- Nav Items -->
-          <ul class="space-y-2">
+          <!-- Close button for mobile -->
+          <button
+            type="button"
+            @click="closeMobileSidebar"
+            class="sm:hidden p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <Icon name="ic:round-close" class="text-2xl" />
+          </button>
+        </div>
+
+        <!-- Nav Items & Actions Container -->
+        <div class="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1 custom-scrollbar flex flex-col">
+          <ul class="space-y-1.5 sm:space-y-2">
             <li v-for="item in navItems" :key="item.path">
               <NuxtLink
                 :to="item.path"
@@ -241,25 +243,25 @@ watch(
               </NuxtLink>
             </li>
           </ul>
-        </div>
 
-        <!-- Footer Actions (Personal Mode Switch & Logout) -->
-        <div class="space-y-2 pt-6 border-t border-[#46464D]/50">
-          <button
-            @click="navigateTo('/userhome'); closeMobileSidebar()"
-            class="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-[#D0D4F7] hover:bg-[#D0D4F7]/10 w-full text-left rounded-xl transition-colors cursor-pointer sm:hidden"
-          >
-            <Icon name="ic:outline-explore" class="text-xl" />
-            <span>Switch to Personal Mode</span>
-          </button>
+          <!-- Actions: Aligned with tabs with mt-6 and border-t on mobile; sm:mt-auto on desktop -->
+          <div class="space-y-1.5 mt-6 pt-4 border-t border-[#46464D]/50 sm:mt-auto">
+            <button
+              @click="navigateTo('/userhome'); closeMobileSidebar()"
+              class="flex items-center px-3 py-2.5 text-[#D0D4F7] hover:bg-[#D0D4F7]/10 w-full text-left rounded-xl transition-colors cursor-pointer sm:hidden"
+            >
+              <Icon name="ic:outline-explore" class="text-2xl" />
+              <span class="ms-3 text-sm font-medium">Switch to Personal Mode</span>
+            </button>
 
-          <button
-            @click="handleLogout"
-            class="flex items-center gap-3 px-3 py-2 text-xs font-medium text-[#C7C5CE] hover:text-red-300 hover:bg-red-500/10 w-full text-left rounded-xl transition-colors cursor-pointer"
-          >
-            <Icon name="ic:baseline-logout" class="text-xl" />
-            <span>Logout</span>
-          </button>
+            <button
+              @click="handleLogout"
+              class="flex items-center px-3 py-2.5 text-[#C7C5CE] hover:text-red-300 hover:bg-red-500/10 w-full text-left rounded-xl transition-colors cursor-pointer"
+            >
+              <Icon name="ic:baseline-logout" class="text-2xl text-red-400" />
+              <span class="ms-3 text-sm font-medium">Logout</span>
+            </button>
+          </div>
         </div>
       </div>
     </aside>

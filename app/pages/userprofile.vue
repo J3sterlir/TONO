@@ -6,6 +6,10 @@ definePageMeta({
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
+
+useHead({
+  title: 'User Profile | TONO'
+})
 import { useTonoReviews } from '~/composables/useTonoReviews'
 import { useTonoEvents } from '~/composables/useTonoEvents'
 
@@ -21,6 +25,9 @@ const currentAccountId = ref('')
 const usertype = ref('')
 const userGenres = ref<string[]>([])
 const userInstruments = ref<string[]>([])
+const userCity = ref('')
+const userBarangay = ref('')
+const isEditDetailsOpen = ref(false)
 const profilePicture = ref<string | null>(null)
 const coverPicture = ref<string | null>(null)
 const globalAvatarUrl = useState<string | null>('tono_user_avatar', () => null)
@@ -47,6 +54,22 @@ const isBookingsLoading = ref(true)
 const isWarningModalOpen = ref(false)
 const selectedContractForCancel = ref<any>(null)
 const userToast = ref('')
+
+const onProfileDetailsSaved = (data: {
+  username: string
+  city: string
+  barangay: string
+  genres: string[]
+  instruments: string[]
+}) => {
+  username.value = data.username
+  userCity.value = data.city
+  userBarangay.value = data.barangay
+  userGenres.value = data.genres
+  userInstruments.value = data.instruments
+  userToast.value = 'Profile details updated successfully!'
+  setTimeout(() => { userToast.value = '' }, 4000)
+}
 
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const coverInputRef = ref<HTMLInputElement | null>(null)
@@ -151,6 +174,8 @@ onMounted(async () => {
       usertype.value = resolveUserType(profile)
       userGenres.value = profile.genres || []
       userInstruments.value = profile.instruments || []
+      userCity.value = profile.account.City || ''
+      userBarangay.value = profile.account.Barangay || ''
 
       await fetchUserBookings()
       setupRealtimeUserContracts()
@@ -463,7 +488,6 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <title>User Profile | TONO</title>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16 overflow-x-hidden">
     <!-- Media Cropper Modal -->
     <MediaCropperModal
@@ -482,6 +506,18 @@ const handleLogout = async () => {
       :start-date="selectedContractForCancel?.Start_Date || selectedContractForCancel?.Event_Date || ''"
       @close="isWarningModalOpen = false"
       @confirm="handleConfirmWarningCancellation" />
+
+    <!-- User Edit Details Modal -->
+    <UserEditDetailsModal
+      :is-open="isEditDetailsOpen"
+      :account-id="currentAccountId"
+      :initial-username="username"
+      :initial-city="userCity"
+      :initial-barangay="userBarangay"
+      :initial-genres="userGenres"
+      :initial-instruments="userInstruments"
+      @close="isEditDetailsOpen = false"
+      @saved="onProfileDetailsSaved" />
 
     <!-- Hidden File Inputs -->
     <input
@@ -583,6 +619,16 @@ const handleLogout = async () => {
               </span>
             </div>
           </div>
+
+          <!-- Update Profile Details Button -->
+          <button
+            @click="isEditDetailsOpen = true"
+            class="mt-2.5 flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1E1E24] hover:bg-[#2A2A32] border border-[#46464D]/60 hover:border-[#D0D4F7]/60 text-xs sm:text-sm font-medium text-gray-200 hover:text-white transition-all cursor-pointer shadow-md group">
+            <Icon
+              name="ic:outline-edit"
+              class="text-base text-[#C7C5CE] group-hover:text-[#D0D4F7] transition-colors" />
+            <span>Update Profile Details</span>
+          </button>
 
           <!-- Error Alert if Upload Fails -->
           <p v-if="uploadError" class="text-xs sm:text-sm text-red-400 mt-2 bg-red-950/40 border border-red-800/40 px-3 py-1 rounded-md">

@@ -17,6 +17,10 @@ definePageMeta({
   middleware: 'admin'
 })
 
+useHead({
+  title: 'Tag Management | Admin TONO'
+})
+
 interface TagItem {
     id: string
     name: string
@@ -142,7 +146,7 @@ const closeModal = () => {
 }
 
 const saveModal = async () => {
-    const trimmedName = formTagName.value.trim()
+    const trimmedName = formTagName.value.trim().toUpperCase()
     if (modalType.value !== 'delete' && !trimmedName) return
 
     isSavingTag.value = true
@@ -157,14 +161,18 @@ const saveModal = async () => {
             const list = targetTagType.value === 'Genre' ? genres.value : instruments.value
             const existsLocally = list.some(t => t.name.toLowerCase() === trimmedName.toLowerCase())
             if (existsLocally) {
-                formErrorMessage.value = `A ${targetTagType.value.toLowerCase()} tag with this name already exists.`
+                formErrorMessage.value = 'Tag is already present'
                 isSavingTag.value = false
                 return
             }
 
             const { data, error } = await db
                 .from(tableName)
-                .insert({ Name: trimmedName, Is_active: formTagActive.value })
+                .insert({ 
+                    Name: trimmedName, 
+                    Normalized_Name: trimmedName.toLowerCase().replace(/\s+/g, ' '),
+                    Is_active: formTagActive.value 
+                })
                 .select()
                 .single()
 
@@ -195,14 +203,18 @@ const saveModal = async () => {
             const list = editingTag.value.type === 'Genre' ? genres.value : instruments.value
             const duplicate = list.find(t => t.id !== editingTag.value!.id && t.name.toLowerCase() === trimmedName.toLowerCase())
             if (duplicate) {
-                formErrorMessage.value = `Another ${editingTag.value.type.toLowerCase()} tag with this name already exists.`
+                formErrorMessage.value = 'Tag is already present'
                 isSavingTag.value = false
                 return
             }
 
             const { error } = await db
                 .from(tableName)
-                .update({ Name: trimmedName, Is_active: formTagActive.value })
+                .update({ 
+                    Name: trimmedName, 
+                    Normalized_Name: trimmedName.toLowerCase().replace(/\s+/g, ' '),
+                    Is_active: formTagActive.value 
+                })
                 .eq(idCol, editingTag.value.id)
 
             if (error) throw error
@@ -235,31 +247,51 @@ const saveModal = async () => {
         }
     } catch (err: any) {
         console.error('Error saving tag:', err)
-        formErrorMessage.value = err.message || 'Operation failed. Please try again.'
+        if (err.message?.includes('duplicate') || err.code === '23505') {
+            formErrorMessage.value = 'Tag is already present'
+        } else {
+            formErrorMessage.value = err.message || 'Operation failed. Please try again.'
+        }
     } finally {
         isSavingTag.value = false
     }
 }
 
-// User Submissions / Suggested Tags State
-interface SuggestedTag {
+// User Submissions / Suggested Tags State with Grouping
+export interface RequesterInfo {
     id: string
-    tag: string
-    type: 'Genre' | 'Instrument'
-    user: {
-        id?: string
-        name: string
-        email: string
-        avatar: string
-    }
+    name: string
+    email: string
+    avatar: string | null
+    initials: string
     dateRequested: string
-    status: 'Pending' | 'Accepted' | 'Rejected'
+    requestId: string
 }
 
-const suggestedTags = ref<SuggestedTag[]>([])
+export interface GroupedTagRequest {
+    key: string
+    tagId: string | null
+    tagName: string
+    normalizedName: string
+    type: 'Genre' | 'Instrument'
+    requestCount: number
+    requesters: RequesterInfo[]
+    status: 'Pending' | 'Accepted' | 'Rejected'
+    latestDate: string
+    requestIds: string[]
+}
+
+const groupedRequests = ref<GroupedTagRequest[]>([])
 const isLoadingRequests = ref(true)
 const isProcessingAction = ref<string | null>(null)
-const selectedIds = ref<string[]>([])
+const selectedGroupKeys = ref<string[]>([])
+
+// Edit Spelling Modal for Requested Tags
+const showEditSpellingModal = ref(false)
+const editingSpellingTag = ref<GroupedTagRequest | null>(null)
+const formSpellingNewName = ref('')
+const isSavingSpelling = ref(false)
+const spellingErrorMessage = ref<string | null>(null)
 
 // Pagination State for User Submissions
 const submissionsPage = ref(1)
@@ -267,7 +299,7 @@ const submissionsPageSize = ref(10)
 
 const paginatedSubmissions = computed(() => {
     const start = (submissionsPage.value - 1) * submissionsPageSize.value
-    return suggestedTags.value.slice(start, start + submissionsPageSize.value)
+    return groupedRequests.value.slice(start, start + submissionsPageSize.value)
 })
 
 watch(submissionsPageSize, () => {
@@ -283,9 +315,12 @@ const fetchSuggestedTags = async () => {
             .select(`
                 Request_ID,
                 Tag_Name,
+                Normalized_Name,
                 Type,
                 Status,
                 Created_at,
+                Genre_ID,
+                Instrument_ID,
                 USER_ACCOUNT (
                     ACCOUNT_ID,
                     Username,
@@ -296,35 +331,66 @@ const fetchSuggestedTags = async () => {
             .order('Created_at', { ascending: false })
 
         if (error) {
-            // Note: If TAG_REQUEST table has not been migrated yet in Supabase, catch gracefully
             console.warn('TAG_REQUEST query info:', error.message)
             return
         }
 
         if (data) {
-            suggestedTags.value = data.map((item: any) => {
+            const groupsMap = new Map<string, GroupedTagRequest>()
+
+            for (const item of data) {
+                const type = (item.Type || 'Genre') as 'Genre' | 'Instrument'
+                const tagId = (type === 'Genre' ? item.Genre_ID : item.Instrument_ID) || null
+                const rawName = item.Tag_Name || 'Untitled Tag'
+                const normalized = (item.Normalized_Name || rawName.trim().toLowerCase().replace(/\s+/g, ' '))
+                const groupKey = `${type}_${tagId || normalized}`
+
                 const user = item.USER_ACCOUNT
-                const initials = (user?.Username || 'U').slice(0, 2).toUpperCase()
-                const avatar = user?.Profile_Picture || `https://placehold.co/100x100/2A2F4A/FFF?text=${initials}`
+                const userName = user?.Username || 'Anonymous User'
+                const initials = userName.slice(0, 2).toUpperCase()
+                const avatar = user?.Profile_Picture || null
                 const formatDate = (dateStr: string) => {
                     if (!dateStr) return 'Recent'
                     return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                 }
 
-                return {
-                    id: item.Request_ID,
-                    tag: item.Tag_Name,
-                    type: item.Type as 'Genre' | 'Instrument',
-                    user: {
-                        id: user?.ACCOUNT_ID,
-                        name: user?.Username || 'Anonymous User',
-                        email: user?.Email || 'No email',
-                        avatar
-                    },
+                const requester: RequesterInfo = {
+                    id: user?.ACCOUNT_ID || item.Request_ID,
+                    name: userName,
+                    email: user?.Email || 'No email',
+                    avatar,
+                    initials,
                     dateRequested: formatDate(item.Created_at),
-                    status: item.Status as 'Pending' | 'Accepted' | 'Rejected'
+                    requestId: item.Request_ID
                 }
-            })
+
+                if (!groupsMap.has(groupKey)) {
+                    groupsMap.set(groupKey, {
+                        key: groupKey,
+                        tagId,
+                        tagName: rawName,
+                        normalizedName: normalized,
+                        type,
+                        requestCount: 1,
+                        requesters: [requester],
+                        status: (item.Status as any) || 'Pending',
+                        latestDate: formatDate(item.Created_at),
+                        requestIds: [item.Request_ID]
+                    })
+                } else {
+                    const existing = groupsMap.get(groupKey)!
+                    existing.requestCount += 1
+                    existing.requestIds.push(item.Request_ID)
+                    if (!existing.requesters.some(r => r.id === requester.id)) {
+                        existing.requesters.push(requester)
+                    }
+                    if (item.Status === 'Pending' && existing.status !== 'Pending') {
+                        existing.status = 'Pending'
+                    }
+                }
+            }
+
+            groupedRequests.value = Array.from(groupsMap.values())
         }
     } catch (err: any) {
         console.error('Error fetching suggested tags:', err)
@@ -334,119 +400,160 @@ const fetchSuggestedTags = async () => {
 }
 
 const pendingCount = computed(() => {
-    return suggestedTags.value.filter(t => t.status === 'Pending').length
+    return groupedRequests.value.filter(g => g.status === 'Pending').length
 })
 
 const isAllSelected = computed(() => {
-    const pending = suggestedTags.value.filter(t => t.status === 'Pending')
-    return pending.length > 0 && selectedIds.value.length === pending.length
+    const pending = groupedRequests.value.filter(g => g.status === 'Pending')
+    return pending.length > 0 && selectedGroupKeys.value.length === pending.length
 })
 
 const toggleSelectAll = () => {
-    const pending = suggestedTags.value.filter(t => t.status === 'Pending')
-    if (selectedIds.value.length === pending.length) {
-        selectedIds.value = []
+    const pending = groupedRequests.value.filter(g => g.status === 'Pending')
+    if (selectedGroupKeys.value.length === pending.length) {
+        selectedGroupKeys.value = []
     } else {
-        selectedIds.value = pending.map(t => t.id)
+        selectedGroupKeys.value = pending.map(g => g.key)
     }
 }
 
-const acceptTag = async (id: string) => {
-    const item = suggestedTags.value.find(t => t.id === id)
-    if (!item) return
-    isProcessingAction.value = id
+// Open Edit Spelling Modal
+const openEditSpellingModal = (group: GroupedTagRequest) => {
+    editingSpellingTag.value = group
+    formSpellingNewName.value = group.tagName
+    spellingErrorMessage.value = null
+    showEditSpellingModal.value = true
+}
+
+const closeEditSpellingModal = () => {
+    showEditSpellingModal.value = false
+    editingSpellingTag.value = null
+    spellingErrorMessage.value = null
+}
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    try {
+        const session = (await supabase.auth.getSession()).data.session
+        const headers: Record<string, string> = {}
+        if (session?.access_token) {
+            headers.Authorization = `Bearer ${session.access_token}`
+        }
+        return headers
+    } catch {
+        return {}
+    }
+}
+
+const saveEditSpelling = async () => {
+    if (!editingSpellingTag.value || !formSpellingNewName.value.trim()) return
+    const trimmed = formSpellingNewName.value.trim().toUpperCase()
+    isSavingSpelling.value = true
+    spellingErrorMessage.value = null
 
     try {
-        const tableName = item.type === 'Genre' ? 'TAG_GENRE' : 'TAG_INSTRUMENT'
-        const idCol = item.type === 'Genre' ? 'Genre_ID' : 'Instrument_ID'
-        const targetList = item.type === 'Genre' ? genres.value : instruments.value
-        const existing = targetList.find(t => t.name.toLowerCase() === item.tag.toLowerCase())
-
-        // Insert into TAG_GENRE / TAG_INSTRUMENT if not already present
-        if (!existing) {
-            const { data: newTag, error: insertError } = await db
-                .from(tableName)
-                .insert({ Name: item.tag.trim(), Is_active: true })
-                .select()
-                .single()
-
-            if (insertError && !insertError.message?.includes('duplicate')) {
-                throw insertError
-            }
-
-            if (newTag) {
-                targetList.push({
-                    id: newTag[idCol],
-                    name: newTag.Name,
-                    active: true,
-                    type: item.type
+        const headers = await getAuthHeaders()
+        if (editingSpellingTag.value.tagId) {
+            await $fetch('/api/tags/edit-spelling', {
+                method: 'POST',
+                headers,
+                body: {
+                    tagId: editingSpellingTag.value.tagId,
+                    tagType: editingSpellingTag.value.type,
+                    newName: trimmed
+                }
+            })
+        } else {
+            await db
+                .from('TAG_REQUEST')
+                .update({
+                    Tag_Name: trimmed,
+                    Normalized_Name: trimmed.toLowerCase().replace(/\s+/g, ' ')
                 })
-                targetList.sort((a, b) => a.name.localeCompare(b.name))
-            }
+                .in('Request_ID', editingSpellingTag.value.requestIds)
         }
 
-        // Update status in TAG_REQUEST
-        const { error: updateError } = await db
-            .from('TAG_REQUEST')
-            .update({
-                Status: 'Accepted',
-                Reviewed_at: new Date().toISOString(),
-                Reviewed_by: adminProfile?.ADMIN_ID || null
-            })
-            .eq('Request_ID', id)
+        showNotification(`Updated tag spelling to "${trimmed}"`)
+        closeEditSpellingModal()
+        await Promise.all([fetchTags(), fetchSuggestedTags()])
+    } catch (err: any) {
+        console.error('Error saving spelling:', err)
+        spellingErrorMessage.value = err.data?.statusMessage || err.message || 'Tag is already present'
+    } finally {
+        isSavingSpelling.value = false
+    }
+}
 
-        if (updateError) throw updateError
+const acceptGroup = async (group: GroupedTagRequest) => {
+    isProcessingAction.value = group.key
+    try {
+        const headers = await getAuthHeaders()
+        await $fetch('/api/tags/accept', {
+            method: 'POST',
+            headers,
+            body: {
+                tagId: group.tagId,
+                tagType: group.type,
+                requestId: group.requestIds[0],
+                requestIds: group.requestIds
+            }
+        })
 
-        item.status = 'Accepted'
-        selectedIds.value = selectedIds.value.filter(selectedId => selectedId !== id)
-        showNotification(`Accepted "${item.tag}" and added to ${item.type} tags`)
+        group.status = 'Accepted'
+        selectedGroupKeys.value = selectedGroupKeys.value.filter(k => k !== group.key)
+        showNotification(`Accepted "${group.tagName}" and added to ${group.type} tags`)
+        await Promise.all([fetchTags(), fetchSuggestedTags()])
     } catch (err: any) {
         console.error('Error accepting tag:', err)
-        showNotification(err.message || 'Failed to accept tag', 'error')
+        showNotification(err.data?.statusMessage || err.message || 'Failed to accept tag', 'error')
     } finally {
         isProcessingAction.value = null
     }
 }
 
-const rejectTag = async (id: string) => {
-    const item = suggestedTags.value.find(t => t.id === id)
-    if (!item) return
-    isProcessingAction.value = id
-
+const rejectGroup = async (group: GroupedTagRequest) => {
+    isProcessingAction.value = group.key
     try {
-        const { error } = await db
-            .from('TAG_REQUEST')
-            .update({
-                Status: 'Rejected',
-                Reviewed_at: new Date().toISOString(),
-                Reviewed_by: adminProfile?.ADMIN_ID || null
-            })
-            .eq('Request_ID', id)
+        const headers = await getAuthHeaders()
+        await $fetch('/api/tags/reject', {
+            method: 'POST',
+            headers,
+            body: {
+                tagId: group.tagId,
+                tagType: group.type,
+                requestId: group.requestIds[0],
+                requestIds: group.requestIds
+            }
+        })
 
-        if (error) throw error
-
-        item.status = 'Rejected'
-        selectedIds.value = selectedIds.value.filter(selectedId => selectedId !== id)
-        showNotification(`Rejected "${item.tag}"`)
+        group.status = 'Rejected'
+        selectedGroupKeys.value = selectedGroupKeys.value.filter(k => k !== group.key)
+        showNotification(`Rejected "${group.tagName}"`)
+        await Promise.all([fetchTags(), fetchSuggestedTags()])
     } catch (err: any) {
         console.error('Error rejecting tag:', err)
-        showNotification(err.message || 'Failed to reject tag', 'error')
+        showNotification(err.data?.statusMessage || err.message || 'Failed to reject tag', 'error')
     } finally {
         isProcessingAction.value = null
     }
 }
 
 const acceptSelected = async () => {
-    const ids = [...selectedIds.value]
-    for (const id of ids) {
-        await acceptTag(id)
+    const keys = [...selectedGroupKeys.value]
+    for (const key of keys) {
+        const grp = groupedRequests.value.find(g => g.key === key)
+        if (grp && grp.status === 'Pending') {
+            await acceptGroup(grp)
+        }
     }
 }
 
 const rejectSelected = async () => {
-    const ids = [...selectedIds.value]
-    for (const id of ids) {
-        await rejectTag(id)
+    const keys = [...selectedGroupKeys.value]
+    for (const key of keys) {
+        const grp = groupedRequests.value.find(g => g.key === key)
+        if (grp && grp.status === 'Pending') {
+            await rejectGroup(grp)
+        }
     }
 }
 
@@ -738,11 +845,11 @@ onMounted(async () => {
                 <div class="bg-[#2A2A2C]/40 px-6 py-5 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <h1 class="font-bold text-lg text-white">User Submissions</h1>
-                        <h2 class="text-zinc-400 text-sm font-light">Review community submitted tags</h2>
+                        <h2 class="text-zinc-400 text-sm font-light">Review community submitted tags and request volume</h2>
                     </div>
 
-                    <div v-if="selectedIds.length > 0" class="flex items-center gap-3">
-                        <span class="text-xs text-zinc-300 font-medium">{{ selectedIds.length }} selected</span>
+                    <div v-if="selectedGroupKeys.length > 0" class="flex items-center gap-3">
+                        <span class="text-xs text-zinc-300 font-medium">{{ selectedGroupKeys.length }} tag(s) selected</span>
                         <button 
                             @click="acceptSelected" 
                             class="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 rounded-lg text-xs font-semibold cursor-pointer transition">
@@ -770,13 +877,15 @@ onMounted(async () => {
                                         class="w-4 h-4 rounded bg-[#18181b] border-zinc-700 text-[#D0D4F7] accent-[#D0D4F7] cursor-pointer" /> 
                                 </th>
                                 <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-                                    SUGGESTED TAG</th>
+                                    TAG NAME</th>
                                 <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
                                     TYPE</th>
                                 <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-                                    USER</th>
+                                    REQUEST COUNT</th>
                                 <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-                                    DATE REQUESTED</th>
+                                    REQUESTED BY</th>
+                                <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
+                                    LATEST REQUEST</th>
                                 <th class="px-6 py-4 text-xs font-semibold tracking-wider text-zinc-400 uppercase text-right">
                                     ACTIONS</th>
                             </tr>
@@ -785,46 +894,48 @@ onMounted(async () => {
                         <!-- Loading State -->
                         <tbody v-if="isLoadingRequests" class="bg-[#18181b]">
                             <tr v-for="n in 3" :key="n" class="border-t border-zinc-800">
-                                <td colspan="6" class="px-6 py-4">
+                                <td colspan="7" class="px-6 py-4">
                                     <div class="h-8 bg-zinc-800/40 rounded animate-pulse"></div>
                                 </td>
                             </tr>
                         </tbody>
 
                         <!-- Empty State -->
-                        <tbody v-else-if="suggestedTags.length === 0" class="bg-[#18181b]">
+                        <tbody v-else-if="groupedRequests.length === 0" class="bg-[#18181b]">
                             <tr class="border-t border-zinc-800">
-                                <td colspan="6" class="px-6 py-12 text-center text-zinc-500">
+                                <td colspan="7" class="px-6 py-12 text-center text-zinc-500">
                                     <Icon name="ic:baseline-inbox" class="text-3xl text-zinc-600 mb-2 mx-auto" />
                                     <p class="text-sm font-medium">No user tag submissions yet.</p>
-                                    <p class="text-xs text-zinc-600 mt-1">When users request new tags after signing up, they will appear here for your review.</p>
+                                    <p class="text-xs text-zinc-600 mt-1">When artists or users request custom tags from their profile details, they will appear here grouped with counter statistics.</p>
                                 </td>
                             </tr>
                         </tbody>
 
                         <!-- Table Body -->
                         <tbody v-else class="bg-[#18181b]">
-                            <tr v-for="item in paginatedSubmissions" :key="item.id"
+                            <tr v-for="item in paginatedSubmissions" :key="item.key"
                                 class="border-t border-zinc-800 hover:bg-[#1f1f23] transition-colors"
-                                :class="{ 'bg-[#222228]/70': selectedIds.includes(item.id) }">
+                                :class="{ 'bg-[#222228]/70': selectedGroupKeys.includes(item.key) }">
 
                                 <!-- Checkbox -->
-                                <td class="px-6 py-4">
+                                <td class="px-6 py-4 align-top">
                                     <input 
                                         type="checkbox" 
-                                        :value="item.id" 
-                                        v-model="selectedIds"
+                                        :value="item.key" 
+                                        v-model="selectedGroupKeys"
                                         :disabled="item.status !== 'Pending'"
-                                        class="w-4 h-4 rounded bg-[#18181b] border-zinc-700 text-[#D0D4F7] accent-[#D0D4F7] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" />
+                                        class="w-4 h-4 rounded bg-[#18181b] border-zinc-700 text-[#D0D4F7] accent-[#D0D4F7] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed mt-1" />
                                 </td>
 
-                                <!-- Suggested Tag -->
-                                <td class="px-6 py-4">
-                                    <span class="text-base font-semibold text-zinc-100">{{ item.tag }}</span>
+                                <!-- Tag Name -->
+                                <td class="px-6 py-4 align-top">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-base font-semibold text-zinc-100">{{ item.tagName }}</span>
+                                    </div>
                                 </td>
 
                                 <!-- Type -->
-                                <td class="px-6 py-4">
+                                <td class="px-6 py-4 align-top">
                                     <span
                                         class="inline-flex items-center justify-center px-3 py-1 text-xs font-medium rounded-full"
                                         :class="item.type === 'Genre' 
@@ -834,43 +945,68 @@ onMounted(async () => {
                                     </span>
                                 </td>
 
-                                <!-- User Profile -->
-                                <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <img :src="item.user.avatar" :alt="item.user.name"
-                                            class="w-10 h-10 rounded-lg object-cover shadow-sm shrink-0" />
-                                        <div class="flex flex-col min-w-0">
-                                            <span class="text-sm font-medium text-zinc-100 truncate">{{ item.user.name }}</span>
-                                            <span class="text-xs text-zinc-400 truncate">{{ item.user.email }}</span>
+                                <!-- Universal Request Count -->
+                                <td class="px-6 py-4 align-top">
+                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#D0D4F7]/15 text-[#D0D4F7] border border-[#D0D4F7]/30">
+                                        <Icon name="ic:baseline-people" class="text-sm" />
+                                        <span>{{ item.requestCount }} request{{ item.requestCount === 1 ? '' : 's' }}</span>
+                                    </span>
+                                </td>
+
+                                <!-- Requesters: flex col with name and email -->
+                                <td class="px-6 py-4 align-top">
+                                    <div class="flex flex-col gap-2.5 max-h-36 overflow-y-auto pr-1">
+                                        <div v-for="user in item.requesters" :key="user.id" class="flex items-center gap-2.5">
+                                            <!-- Initials fallback (No placeholder image URL) -->
+                                            <img v-if="user.avatar" :src="user.avatar" :alt="user.name"
+                                                class="w-8 h-8 rounded-full object-cover shrink-0 border border-zinc-700" />
+                                            <div v-else class="w-8 h-8 rounded-full bg-[#2A2F4A] border border-[#D0D4F7]/30 text-[#D0D4F7] flex items-center justify-center font-bold text-xs shrink-0">
+                                                {{ user.initials }}
+                                            </div>
+                                            <!-- Artist/User Name and Email in flex col -->
+                                            <div class="flex flex-col min-w-0">
+                                                <span class="text-sm font-medium text-zinc-100 truncate">{{ user.name }}</span>
+                                                <span class="text-xs text-zinc-400 truncate">{{ user.email }}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
 
-                                <!-- Date Requested -->
-                                <td class="px-6 py-4 text-sm text-zinc-300 whitespace-nowrap">
-                                    {{ item.dateRequested }}
+                                <!-- Latest Date Requested -->
+                                <td class="px-6 py-4 align-top text-sm text-zinc-300 whitespace-nowrap">
+                                    {{ item.latestDate }}
                                 </td>
 
                                 <!-- Actions -->
-                                <td class="px-6 py-4 text-right">
-                                    <div v-if="item.status === 'Pending'" class="flex items-center justify-end gap-2">
+                                <td class="px-6 py-4 align-top text-right">
+                                    <div v-if="item.status === 'Pending'" class="flex items-center justify-end gap-2 flex-wrap">
+                                        <!-- Edit Spelling Button -->
                                         <button 
-                                            @click="acceptTag(item.id)"
-                                            :disabled="isProcessingAction === item.id"
-                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-                                            title="Accept tag">
-                                            <Icon :name="isProcessingAction === item.id ? 'ic:baseline-sync' : 'ic:baseline-check'" 
-                                                class="text-base" 
-                                                :class="{ 'animate-spin': isProcessingAction === item.id }" />
-                                            Accept
+                                            @click="openEditSpellingModal(item)"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#2A2A2E] hover:bg-[#343438] text-zinc-300 hover:text-white border border-zinc-700 rounded-lg text-xs font-semibold transition cursor-pointer"
+                                            title="Edit tag spelling">
+                                            <Icon name="ic:baseline-edit" class="text-sm text-[#D0D4F7]" />
+                                            <span>Edit</span>
                                         </button>
+                                        <!-- Accept Tag Button -->
                                         <button 
-                                            @click="rejectTag(item.id)"
-                                            :disabled="isProcessingAction === item.id"
+                                            @click="acceptGroup(item)"
+                                            :disabled="isProcessingAction === item.key"
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                                            title="Accept and activate tag">
+                                            <Icon :name="isProcessingAction === item.key ? 'ic:baseline-sync' : 'ic:baseline-check'" 
+                                                class="text-base" 
+                                                :class="{ 'animate-spin': isProcessingAction === item.key }" />
+                                            <span>Accept</span>
+                                        </button>
+                                        <!-- Reject Tag Button -->
+                                        <button 
+                                            @click="rejectGroup(item)"
+                                            :disabled="isProcessingAction === item.key"
                                             class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-                                            title="Reject tag">
+                                            title="Reject request">
                                             <Icon name="ic:baseline-close" class="text-base" />
-                                            Reject
+                                            <span>Reject</span>
                                         </button>
                                     </div>
                                     <div v-else class="flex items-center justify-end">
@@ -893,8 +1029,8 @@ onMounted(async () => {
                 <AdminPagination 
                     v-model:currentPage="submissionsPage" 
                     v-model:pageSize="submissionsPageSize" 
-                    :totalItems="suggestedTags.length" 
-                    itemLabel="submitted tags" 
+                    :totalItems="groupedRequests.length" 
+                    itemLabel="requested tags" 
                 />
             </div>
         </main>
@@ -920,8 +1056,8 @@ onMounted(async () => {
                         <input 
                             v-model="formTagName"
                             type="text" 
-                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
-                            placeholder="e.g. Dream Pop - Midi Controller"
+                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg px-4 py-2.5 text-zinc-100 uppercase focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
+                            placeholder="e.g. DREAM POP • MIDI CONTROLLER"
                             @keydown.enter.prevent="saveModal"
                         />
                     </div>
@@ -990,6 +1126,63 @@ onMounted(async () => {
                         class="px-4 py-2 bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 rounded-lg text-sm font-semibold transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50">
                         <Icon v-if="isSavingTag" name="ic:baseline-sync" class="animate-spin text-base" />
                         <span>{{ isSavingTag ? 'Deleting...' : 'Delete' }}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Spelling Modal for Requested / Custom Tags -->
+        <div v-if="showEditSpellingModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div class="bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+                <!-- Header -->
+                <div class="px-6 py-4 border-b border-[#2A2A2E] flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-zinc-100">
+                        Correct Tag Spelling
+                    </h2>
+                    <button @click="closeEditSpellingModal" class="text-zinc-400 hover:text-white transition cursor-pointer">
+                        <Icon name="ic:baseline-close" class="text-xl" />
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="p-6 flex flex-col gap-4">
+                    <div class="p-3 bg-[#242428] border border-zinc-700/60 rounded-lg text-xs text-zinc-300">
+                        <span class="font-semibold text-[#D0D4F7]">Persistent Unique ID Notice:</span>
+                        Correcting this tag's spelling maintains its unique ID so all {{ editingSpellingTag?.requestCount || 1 }} artist/user requester(s) remain seamlessly linked without breaking.
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label class="text-sm font-medium text-zinc-300">Correct Tag Name</label>
+                        <input 
+                            v-model="formSpellingNewName"
+                            type="text" 
+                            class="w-full bg-[#141416] border border-[#2A2A2E] rounded-lg px-4 py-2.5 text-zinc-100 uppercase focus:outline-none focus:border-[#D0D4F7] transition-colors placeholder:text-zinc-600"
+                            placeholder="ENTER CORRECTED TAG NAME..."
+                            @keydown.enter.prevent="saveEditSpelling"
+                        />
+                    </div>
+
+                    <!-- Error Alert -->
+                    <div v-if="spellingErrorMessage" class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs flex items-center gap-2">
+                        <Icon name="ic:baseline-warning" class="text-base shrink-0" />
+                        <span>{{ spellingErrorMessage }}</span>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-6 py-4 bg-[#141416]/50 border-t border-[#2A2A2E] flex justify-end gap-3">
+                    <button 
+                        @click="closeEditSpellingModal"
+                        :disabled="isSavingSpelling"
+                        class="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer disabled:opacity-50">
+                        Cancel
+                    </button>
+                    <button 
+                        @click="saveEditSpelling"
+                        :disabled="!formSpellingNewName.trim() || isSavingSpelling"
+                        class="px-4 py-2 bg-[#D0D4F7] text-[#2A2F4A] hover:bg-[#B0B4D7] rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2">
+                        <Icon v-if="isSavingSpelling" name="ic:baseline-sync" class="animate-spin text-base" />
+                        <span>{{ isSavingSpelling ? 'Saving...' : 'Update Spelling' }}</span>
                     </button>
                 </div>
             </div>

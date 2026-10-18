@@ -6,6 +6,10 @@ definePageMeta({
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
+
+useHead({
+  title: 'Artist Profile | TONO'
+})
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
 import { resolveSocialLink } from '~/utils/linkResolver'
 import { useTonoEvents } from '~/composables/useTonoEvents'
@@ -1188,9 +1192,6 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <head>
-    <title>Artist Profile | TONO</title>
-  </head>
   <div class="h-full bg-[#0E0E10] text-white flex flex-col min-h-screen pb-16 overflow-x-hidden">
 
     <!-- Media Cropper Modal -->

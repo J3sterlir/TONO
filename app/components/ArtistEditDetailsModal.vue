@@ -35,6 +35,7 @@ const emit = defineEmits<{
 
 const supabase = useSupabaseClient()
 const db = supabase as any
+const user = useSupabaseUser()
 
 // Form State
 const name = ref('')
@@ -106,8 +107,8 @@ const removeLink = (index: number) => {
 }
 
 // Reference Options
-const allGenres = ref<{ id: string; name: string }[]>([])
-const allInstruments = ref<{ id: string; name: string }[]>([])
+const allGenres = ref<{ id: string; name: string; isPending?: boolean }[]>([])
+const allInstruments = ref<{ id: string; name: string; isPending?: boolean }[]>([])
 const isLoadingTags = ref(false)
 const isSaving = ref(false)
 const errorMessage = ref<string | null>(null)
@@ -116,36 +117,233 @@ const errorMessage = ref<string | null>(null)
 const genreSearch = ref('')
 const instrumentSearch = ref('')
 
+// Custom Tag Inputs & Errors
+const customGenreInput = ref('')
+const isSubmittingCustomGenre = ref(false)
+const customGenreError = ref<string | null>(null)
+
+const customInstrumentInput = ref('')
+const isSubmittingCustomInstrument = ref(false)
+const customInstrumentError = ref<string | null>(null)
+
+// Request Custom Genre
+const requestCustomGenre = async () => {
+  const trimmed = customGenreInput.value.trim().toUpperCase()
+  if (!trimmed) return
+  customGenreError.value = null
+
+  // Local duplicate check
+  const duplicate = allGenres.value.some(
+    (g) => g.name.trim().toLowerCase() === trimmed.toLowerCase()
+  ) || selectedGenres.value.some(
+    (gName) => gName.trim().toLowerCase() === trimmed.toLowerCase()
+  )
+
+  if (duplicate) {
+    customGenreError.value = 'Tag is already present'
+    return
+  }
+
+  isSubmittingCustomGenre.value = true
+  try {
+    const res: any = await $fetch('/api/tags/request-custom', {
+      method: 'POST',
+      body: {
+        tagName: trimmed,
+        tagType: 'Genre'
+      }
+    })
+
+    if (res?.tag) {
+      if (!allGenres.value.some((g) => g.id === res.tag.id)) {
+        allGenres.value.push({
+          id: res.tag.id,
+          name: res.tag.name,
+          isPending: true
+        })
+        allGenres.value.sort((a, b) => a.name.localeCompare(b.name))
+      }
+      if (!selectedGenres.value.includes(res.tag.name)) {
+        selectedGenres.value.push(res.tag.name)
+      }
+      customGenreInput.value = ''
+      customGenreError.value = null
+    }
+  } catch (err: any) {
+    customGenreError.value = err.data?.statusMessage || err.message || 'Tag is already present'
+  } finally {
+    isSubmittingCustomGenre.value = false
+  }
+}
+
+// Request Custom Instrument
+const requestCustomInstrument = async () => {
+  const trimmed = customInstrumentInput.value.trim().toUpperCase()
+  if (!trimmed) return
+  customInstrumentError.value = null
+
+  // Local duplicate check
+  const duplicate = allInstruments.value.some(
+    (i) => i.name.trim().toLowerCase() === trimmed.toLowerCase()
+  ) || selectedInstruments.value.some(
+    (iName) => iName.trim().toLowerCase() === trimmed.toLowerCase()
+  )
+
+  if (duplicate) {
+    customInstrumentError.value = 'Tag is already present'
+    return
+  }
+
+  isSubmittingCustomInstrument.value = true
+  try {
+    const res: any = await $fetch('/api/tags/request-custom', {
+      method: 'POST',
+      body: {
+        tagName: trimmed,
+        tagType: 'Instrument'
+      }
+    })
+
+    if (res?.tag) {
+      if (!allInstruments.value.some((i) => i.id === res.tag.id)) {
+        allInstruments.value.push({
+          id: res.tag.id,
+          name: res.tag.name,
+          isPending: true
+        })
+        allInstruments.value.sort((a, b) => a.name.localeCompare(b.name))
+      }
+      if (!selectedInstruments.value.includes(res.tag.name)) {
+        selectedInstruments.value.push(res.tag.name)
+      }
+      customInstrumentInput.value = ''
+      customInstrumentError.value = null
+    }
+  } catch (err: any) {
+    customInstrumentError.value = err.data?.statusMessage || err.message || 'Tag is already present'
+  } finally {
+    isSubmittingCustomInstrument.value = false
+  }
+}
+
 // Load tags from database
 const loadTags = async () => {
-  if (allGenres.value.length > 0) return
   isLoadingTags.value = true
   try {
+    // 1. Fetch only ACTIVE genres & instruments (globally approved for all accounts)
     const { data: genresData, error: genreError } = await db
       .from('TAG_GENRE')
-      .select('Genre_ID, Name')
+      .select('Genre_ID, Name, Is_active')
       .eq('Is_active', true)
       .order('Name', { ascending: true })
 
     if (genreError) throw genreError
-    allGenres.value = (genresData ?? []).map((row: any) => ({
+
+    const loadedGenres = (genresData ?? []).map((row: any) => ({
       id: row.Genre_ID,
       name: row.Name,
+      isPending: false
     }))
 
+    const loadedInstruments: { id: string; name: string; isPending?: boolean }[] = []
     if (props.artistType === 'Solo') {
       const { data: instData, error: instError } = await db
         .from('TAG_INSTRUMENT')
-        .select('Instrument_ID, Name')
+        .select('Instrument_ID, Name, Is_active')
         .eq('Is_active', true)
         .order('Name', { ascending: true })
 
       if (instError) throw instError
-      allInstruments.value = (instData ?? []).map((row: any) => ({
-        id: row.Instrument_ID,
-        name: row.Name,
-      }))
+      for (const row of instData ?? []) {
+        loadedInstruments.push({
+          id: row.Instrument_ID,
+          name: row.Name,
+          isPending: false
+        })
+      }
     }
+
+    // 2. Fetch pending tag requests ONLY for the current account
+    const userId = user.value?.id || (await supabase.auth.getUser()).data.user?.id
+    if (userId) {
+      const { data: userPendingRequests, error: reqError } = await db
+        .from('TAG_REQUEST')
+        .select('Request_ID, Tag_Name, Type, Genre_ID, Instrument_ID, Status')
+        .eq('ACCOUNT_ID', userId)
+        .eq('Status', 'Pending')
+
+      if (!reqError && userPendingRequests?.length) {
+        for (const req of userPendingRequests) {
+          if (req.Type === 'Genre' && req.Genre_ID) {
+            if (!loadedGenres.some((g: any) => g.id === req.Genre_ID || g.name.toLowerCase() === (req.Tag_Name || '').toLowerCase())) {
+              loadedGenres.push({
+                id: req.Genre_ID,
+                name: req.Tag_Name,
+                isPending: true
+              })
+            }
+          } else if (req.Type === 'Instrument' && req.Instrument_ID && props.artistType === 'Solo') {
+            if (!loadedInstruments.some((i: any) => i.id === req.Instrument_ID || i.name.toLowerCase() === (req.Tag_Name || '').toLowerCase())) {
+              loadedInstruments.push({
+                id: req.Instrument_ID,
+                name: req.Tag_Name,
+                isPending: true
+              })
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Fallback: If initialGenres has any tag not yet in loadedGenres (e.g. artist's own pending tag), include it
+    if (props.initialGenres?.length) {
+      const missingGenres = props.initialGenres.filter(
+        (name: string) => !loadedGenres.some((g: { id: string; name: string }) => g.name.toLowerCase() === name.toLowerCase())
+      )
+      if (missingGenres.length > 0) {
+        const { data: missingRows } = await db
+          .from('TAG_GENRE')
+          .select('Genre_ID, Name, Is_active')
+          .in('Name', missingGenres)
+        for (const row of missingRows || []) {
+          if (!loadedGenres.some((g: { id: string; name: string }) => g.id === row.Genre_ID)) {
+            loadedGenres.push({
+              id: row.Genre_ID,
+              name: row.Name,
+              isPending: !row.Is_active
+            })
+          }
+        }
+      }
+    }
+
+    // 4. Fallback: If initialInstruments has any tag not yet in loadedInstruments, include it
+    if (props.artistType === 'Solo' && props.initialInstruments?.length) {
+      const missingInst = props.initialInstruments.filter(
+        (name: string) => !loadedInstruments.some((i: { id: string; name: string }) => i.name.toLowerCase() === name.toLowerCase())
+      )
+      if (missingInst.length > 0) {
+        const { data: missingRows } = await db
+          .from('TAG_INSTRUMENT')
+          .select('Instrument_ID, Name, Is_active')
+          .in('Name', missingInst)
+        for (const row of missingRows || []) {
+          if (!loadedInstruments.some((i: { id: string; name: string }) => i.id === row.Instrument_ID)) {
+            loadedInstruments.push({
+              id: row.Instrument_ID,
+              name: row.Name,
+              isPending: !row.Is_active
+            })
+          }
+        }
+      }
+    }
+
+    loadedGenres.sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+    loadedInstruments.sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+
+    allGenres.value = loadedGenres
+    allInstruments.value = loadedInstruments
   } catch (err: any) {
     console.error('Error fetching tags:', err)
   } finally {
@@ -454,16 +652,42 @@ const handleSave = async () => {
                 :key="genre.id"
                 type="button"
                 @click="toggleGenre(genre.name)"
-                class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border"
+                class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border flex items-center gap-1.5"
                 :class="selectedGenres.includes(genre.name)
                   ? 'bg-[#D0D4F7] text-black border-[#D0D4F7] font-semibold shadow-xs'
                   : 'bg-[#1E1E24] text-gray-300 border-[#46464D]/50 hover:border-[#D0D4F7]/60 hover:text-white'">
-                {{ genre.name }}
+                <span>{{ genre.name }}</span>
+                <span v-if="genre.isPending" class="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-normal">
+                  Pending Review
+                </span>
               </button>
               <span v-if="filteredGenres.length === 0" class="text-xs text-gray-500 py-1">
                 No matching genres found.
               </span>
             </div>
+
+            <!-- Custom Genre Request Bar -->
+            <div class="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                v-model="customGenreInput"
+                @keydown.enter.prevent="requestCustomGenre"
+                placeholder="Can't find your genre? Request custom tag..."
+                class="flex-1 px-3 py-1.5 bg-[#141416] border border-[#46464D]/50 rounded-lg text-xs text-white uppercase placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7]"
+              />
+              <button
+                type="button"
+                @click="requestCustomGenre"
+                :disabled="!customGenreInput.trim() || isSubmittingCustomGenre"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#282830] text-gray-200 hover:bg-[#D0D4F7] hover:text-[#2A2F4A] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 border border-[#46464D]/40 shrink-0">
+                <Icon v-if="isSubmittingCustomGenre" name="ic:baseline-sync" class="animate-spin text-sm" />
+                <Icon v-else name="ic:round-add" class="text-sm" />
+                <span>Request Custom</span>
+              </button>
+            </div>
+            <p v-if="customGenreError" class="text-[11px] text-rose-400 font-medium">
+              {{ customGenreError }}
+            </p>
           </div>
 
           <!-- Instrument Tags Section (Solo Artists Only) -->
@@ -495,16 +719,42 @@ const handleSave = async () => {
                 :key="inst.id"
                 type="button"
                 @click="toggleInstrument(inst.name)"
-                class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border"
+                class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border flex items-center gap-1.5"
                 :class="selectedInstruments.includes(inst.name)
                   ? 'bg-[#D0D4F7] text-black border-[#D0D4F7] font-semibold shadow-xs'
                   : 'bg-[#1E1E24] text-gray-300 border-[#46464D]/50 hover:border-[#D0D4F7]/60 hover:text-white'">
-                {{ inst.name }}
+                <span>{{ inst.name }}</span>
+                <span v-if="inst.isPending" class="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-normal">
+                  Pending Review
+                </span>
               </button>
               <span v-if="filteredInstruments.length === 0" class="text-xs text-gray-500 py-1">
                 No matching instruments found.
               </span>
             </div>
+
+            <!-- Custom Instrument Request Bar -->
+            <div class="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                v-model="customInstrumentInput"
+                @keydown.enter.prevent="requestCustomInstrument"
+                placeholder="Can't find your instrument? Request custom tag..."
+                class="flex-1 px-3 py-1.5 bg-[#141416] border border-[#46464D]/50 rounded-lg text-xs text-white uppercase placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7]"
+              />
+              <button
+                type="button"
+                @click="requestCustomInstrument"
+                :disabled="!customInstrumentInput.trim() || isSubmittingCustomInstrument"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#282830] text-gray-200 hover:bg-[#D0D4F7] hover:text-[#2A2F4A] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 border border-[#46464D]/40 shrink-0">
+                <Icon v-if="isSubmittingCustomInstrument" name="ic:baseline-sync" class="animate-spin text-sm" />
+                <Icon v-else name="ic:round-add" class="text-sm" />
+                <span>Request Custom</span>
+              </button>
+            </div>
+            <p v-if="customInstrumentError" class="text-[11px] text-rose-400 font-medium">
+              {{ customInstrumentError }}
+            </p>
           </div>
 
           <!-- Social & External Media Links -->
