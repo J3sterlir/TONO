@@ -143,9 +143,6 @@ const filteredArtists = computed(() => {
           <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-[#E5E1E4]">
             Discover Artists
           </h1>
-          <p class="text-sm text-gray-400 mt-2">
-            Explore verified Filipino musicians, solo artists, and indie bands across the country.
-          </p>
         </div>
 
         <!-- Search Bar -->

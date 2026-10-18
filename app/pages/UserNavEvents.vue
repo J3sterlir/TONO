@@ -5,10 +5,12 @@ definePageMeta({
 })
 
 import { ref, computed, onMounted } from 'vue'
+import { useTonoEvents } from '~/composables/useTonoEvents'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile } = useTonoAuth()
+const { isEventHappeningNow, isEventFinished } = useTonoEvents()
 
 const currentAccountId = ref('')
 const eventsLoading = ref(true)
@@ -115,15 +117,19 @@ const fetchUserEvents = async () => {
           Job_ID,
           Job_Code,
           Event_Title,
-          Location
+          Location,
+          Is_Public
         )
       `)
       .in('Status', ['Confirmed', 'Active'])
       .lte('Start_Date', todayStr)
       .gte('End_Date', todayStr)
-      .limit(6)
+      .limit(18)
 
-    liveEvents.value = liveData || []
+    // Filter by Is_Public: only public gigs are broadcast to the live events feed
+    liveEvents.value = (liveData || [])
+      .filter((e: any) => !e.JOB_LISTING || e.JOB_LISTING.Is_Public !== false)
+      .slice(0, 6)
   } catch (e) {
     console.error('Failed to load user events:', e)
   } finally {
@@ -143,7 +149,7 @@ const fetchUserEvents = async () => {
             Events Hub &amp; Gigs
           </h1>
           <p class="text-sm text-gray-400 mt-2 font-Sora">
-            Catch live performances, track your booked events, and discover gigs across TONO partner venues.
+            Catch live performances
           </p>
         </div>
       </div>
@@ -155,9 +161,6 @@ const fetchUserEvents = async () => {
         <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
           <div>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Events</h2>
-            <p class="text-xs text-gray-400 mt-0.5">
-              Confirmed gigs from accepted job listings and direct client bookings.
-            </p>
           </div>
           <span class="text-xs font-mono text-[#D0D4F7] px-2.5 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
             {{ yourEvents.length }} {{ yourEvents.length === 1 ? 'event' : 'events' }}
@@ -171,7 +174,6 @@ const fetchUserEvents = async () => {
         <div v-else-if="yourEvents.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
           <Icon name="ic:outline-event-busy" class="text-3xl text-gray-500 mx-auto" />
           <p class="text-sm font-semibold text-white">No Confirmed Events Yet</p>
-          <p class="text-xs text-gray-400">Discover local talent on TONO and book live musical acts to fill your schedule.</p>
         </div>
 
         <!-- Deduplicated Event Cards Grid -->
@@ -197,7 +199,14 @@ const fetchUserEvents = async () => {
                   <Icon name="ic:baseline-bolt" class="text-xs" />
                   <span>Rush</span>
                 </span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span v-if="isEventHappeningNow(event)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span>Happening Now</span>
+                </span>
+                <span v-else-if="isEventFinished(event)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/30">
+                  Ended
+                </span>
+                <span v-else class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Confirmed
                 </span>
               </div>

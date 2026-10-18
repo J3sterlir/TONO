@@ -5,6 +5,7 @@ definePageMeta({
 })
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useTonoReviews } from '~/composables/useTonoReviews'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
@@ -19,8 +20,39 @@ const currentAccountId = ref('')
 const businessName = ref('Business Account')
 const businessId = ref('')
 
+// Review & Feedback
+const { hasUserReviewed } = useTonoReviews()
+const isReviewModalOpen = ref(false)
+const selectedReviewBooking = ref<any>(null)
+const reviewedBookingIds = ref<Set<string>>(new Set())
+
+const openReviewForContract = (contract: any) => {
+  selectedReviewBooking.value = contract
+  isReviewModalOpen.value = true
+}
+
+const handleReviewSubmitted = () => {
+  if (selectedReviewBooking.value) {
+    reviewedBookingIds.value.add(selectedReviewBooking.value.Booking_ID)
+  }
+  isReviewModalOpen.value = false
+  feedbackMessage.value = {
+    status: 'success',
+    message: 'Review submitted successfully! Thank you for rating the performer.'
+  }
+}
+
 // Contracts from Supabase
 const contracts = ref<any[]>([])
+
+// Contract Details Modal
+const isDetailsModalOpen = ref(false)
+const selectedContractForDetails = ref<any>(null)
+
+const openContractDetails = (contract: any) => {
+  selectedContractForDetails.value = contract
+  isDetailsModalOpen.value = true
+}
 
 // Booking Completion
 const completingBookingId = ref<string | null>(null)
@@ -117,6 +149,17 @@ const fetchContracts = async () => {
       if (!error && data) {
         contracts.value = data
         checkQueryTriggers()
+
+        // Check if any completed contracts have already been reviewed
+        for (const c of data) {
+          if (c.Status === 'Completed' && currentAccountId.value) {
+            hasUserReviewed(c.Booking_ID, currentAccountId.value).then((already: boolean) => {
+              if (already) {
+                reviewedBookingIds.value.add(c.Booking_ID)
+              }
+            })
+          }
+        }
       }
     }
   } catch (e) {
@@ -141,6 +184,7 @@ const checkQueryTriggers = () => {
     } else {
       activeTab.value = 'history'
     }
+    openContractDetails(target)
   }
 }
 
@@ -174,6 +218,13 @@ const setupRealtimeSync = () => {
 // Cancellation & 5-Day Proximity Interception
 // -----------------------------------------------------------------------------
 const initiateCancelContract = (contract: any) => {
+  if (canCompleteContract(contract) || contract.Status === 'Completed') {
+    feedbackMessage.value = {
+      status: 'error',
+      message: 'This booking has already concluded and cannot be cancelled. Please mark it as completed.'
+    }
+    return
+  }
   targetContractForCancellation.value = contract
   isWarningModalOpen.value = true
 }
@@ -181,6 +232,16 @@ const initiateCancelContract = (contract: any) => {
 const handleConfirmCancellation = async (reason: string, isLateParam?: boolean) => {
   if (!targetContractForCancellation.value) return
   const contract = targetContractForCancellation.value
+
+  if (canCompleteContract(contract) || contract.Status === 'Completed') {
+    feedbackMessage.value = {
+      status: 'error',
+      message: 'This booking has already concluded and cannot be cancelled. Please mark it as completed.'
+    }
+    isWarningModalOpen.value = false
+    targetContractForCancellation.value = null
+    return
+  }
 
   const targetDate = contract.Start_Date || contract.Event_Date
   const now = new Date()
@@ -441,16 +502,14 @@ onBeforeUnmount(() => {
         <div v-if="activeContracts.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
           <Icon name="ic:outline-assignment" class="text-4xl text-gray-500 mx-auto" />
           <h3 class="text-base font-semibold text-white">No Active Contracts</h3>
-          <p class="text-xs text-gray-400 max-w-sm mx-auto">
-            When you accept applicants from your job listings or book performers directly, active agreements will appear here.
-          </p>
         </div>
 
         <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div
             v-for="contract in activeContracts"
             :key="contract.Booking_ID"
-            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-4 transition-all shadow-lg group"
+            @click="openContractDetails(contract)"
+            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-4 transition-all shadow-lg group cursor-pointer"
           >
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -495,30 +554,47 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Footer Actions -->
-            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E] text-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E] text-xs">
               <span class="text-[10px] font-mono text-gray-400">
                 Type: {{ contract.Booking_Type || 'Direct' }}
               </span>
 
-              <div class="flex flex-wrap items-center gap-2">
-                <!-- Completion is available only after the scheduled end time. -->
+              <!-- For Direct Bookings: Show completion & cancellation controls -->
+              <div v-if="!contract.Job_ID" class="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                <!-- If finished/ended: ONLY Mark as Completed -->
                 <button
+                  v-if="canCompleteContract(contract)"
                   type="button"
-                  :disabled="!canCompleteContract(contract) || completingBookingId !== null"
-                  @click="handleCompleteContract(contract)"
-                  class="px-3.5 py-1.5 rounded-full border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="completingBookingId !== null"
+                  @click.stop="handleCompleteContract(contract)"
+                  class="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 font-semibold shadow-sm"
                 >
-                  {{ completingBookingId === contract.Booking_ID ? 'Completing...' : 'Mark as Completed' }}
+                  <Icon name="ic:round-check-circle" class="text-sm text-emerald-400" />
+                  <span>{{ completingBookingId === contract.Booking_ID ? 'Completing...' : 'Mark as Completed' }}</span>
                 </button>
 
-                <!-- Existing cancellation functionality remains unchanged. -->
+                <!-- If NOT finished: Show Cancel Contract -->
                 <button
+                  v-else
                   type="button"
-                  @click="initiateCancelContract(contract)"
-                  class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
+                  @click.stop="initiateCancelContract(contract)"
+                  class="w-full sm:w-auto px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer flex items-center justify-center"
                 >
                   Cancel Contract
                 </button>
+              </div>
+
+              <!-- For Job-Tied Bookings: Managed centrally via Job Listings -->
+              <div v-else class="flex items-center gap-2">
+                <span class="text-[11px] text-gray-400 italic">Managed via Job Listing</span>
+                <NuxtLink
+                  to="/businessjoblist"
+                  @click.stop
+                  class="px-3 py-1 rounded-full text-xs font-medium border border-[#3A3A3C] text-[#D0D4F7] hover:bg-white/5 transition-colors flex items-center gap-1"
+                >
+                  <span>View Job</span>
+                  <Icon name="ic:round-arrow-forward" class="text-xs" />
+                </NuxtLink>
               </div>
             </div>
           </div>
@@ -530,21 +606,19 @@ onBeforeUnmount(() => {
         <div v-if="pendingContracts.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
           <Icon name="ic:outline-pending-actions" class="text-4xl text-gray-500 mx-auto" />
           <h3 class="text-base font-semibold text-white">No Pending Contract Offers</h3>
-          <p class="text-xs text-gray-400 max-w-sm mx-auto">
-            When you accept an applicant, an official contract offer is sent to the artist for setlist additions and agreement confirmation.
-          </p>
         </div>
 
         <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div
             v-for="contract in pendingContracts"
             :key="contract.Booking_ID"
-            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg hover:border-[#46464D] transition-all"
+            @click="openContractDetails(contract)"
+            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg hover:border-[#46464D] transition-all cursor-pointer group"
           >
             <div class="flex items-start justify-between gap-3">
               <div>
                 <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider">{{ contract.Contract_Code }}</span>
-                <h3 class="text-base font-bold text-white mt-0.5">{{ getArtistName(contract) }}</h3>
+                <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ getArtistName(contract) }}</h3>
                 <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
                   Gig: {{ contract.JOB_LISTING.Event_Title }}
                 </p>
@@ -573,12 +647,22 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
               <span class="text-[10px] text-gray-500 italic">Artist reviewing contract &amp; setlist</span>
               <button
+                v-if="!contract.Job_ID"
                 type="button"
-                @click="initiateCancelContract(contract)"
+                @click.stop="initiateCancelContract(contract)"
                 class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
               >
                 Withdraw Offer
               </button>
+              <NuxtLink
+                v-else
+                to="/businessjoblist"
+                @click.stop
+                class="text-[11px] text-[#D0D4F7] hover:underline flex items-center gap-1"
+              >
+                <span>Managed in Job Listings</span>
+                <Icon name="ic:round-arrow-forward" class="text-xs" />
+              </NuxtLink>
             </div>
           </div>
         </div>
@@ -595,7 +679,8 @@ onBeforeUnmount(() => {
           <div
             v-for="contract in historyContracts"
             :key="contract.Booking_ID"
-            class="bg-[#1C1C1F]/40 border border-[#2A2A2E]/50 rounded-2xl p-5 sm:p-6 space-y-3 opacity-80"
+            @click="openContractDetails(contract)"
+            class="bg-[#1C1C1F]/40 border border-[#2A2A2E]/50 rounded-2xl p-5 sm:p-6 space-y-3 opacity-90 hover:border-[#46464D] transition-all cursor-pointer group"
           >
             <div class="flex items-center justify-between">
               <span class="text-[10px] font-mono text-gray-400 uppercase">{{ contract.Contract_Code }}</span>
@@ -606,16 +691,55 @@ onBeforeUnmount(() => {
                 {{ contract.Status }}
               </span>
             </div>
-            <h3 class="text-base font-bold text-white">{{ getArtistName(contract) }}</h3>
+            <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors">{{ getArtistName(contract) }}</h3>
             <p class="text-xs text-gray-400">📅 {{ contract.Start_Date || contract.Event_Date }} • 📍 {{ contract.Venue_Location }}</p>
             <p v-if="contract.Cancellation_Reason" class="text-xs text-red-300">
               Reason: {{ contract.Cancellation_Reason }}
             </p>
+
+            <!-- Review Action for Completed Contracts -->
+            <div v-if="contract.Status === 'Completed'" class="pt-2 border-t border-[#2A2A2E]/60 flex items-center justify-between">
+              <span class="text-[11px] text-gray-400">Performance completed</span>
+              <button
+                type="button"
+                :disabled="reviewedBookingIds.has(contract.Booking_ID)"
+                @click.stop="openReviewForContract(contract)"
+                class="px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                :class="reviewedBookingIds.has(contract.Booking_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
+              >
+                <Icon :name="reviewedBookingIds.has(contract.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
+                <span>{{ reviewedBookingIds.has(contract.Booking_ID) ? 'Reviewed' : 'Rate Performer' }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
     </div>
+
+    <!-- Contract Details Modal (Accessible for all statuses: Active, Pending, Completed, Cancelled) -->
+    <ContractDetailsModal
+      :is-open="isDetailsModalOpen"
+      :contract="selectedContractForDetails"
+      :can-complete="selectedContractForDetails ? canCompleteContract(selectedContractForDetails) : false"
+      :is-completing="completingBookingId === selectedContractForDetails?.Booking_ID"
+      :is-reviewed="selectedContractForDetails ? reviewedBookingIds.has(selectedContractForDetails.Booking_ID) : false"
+      @close="isDetailsModalOpen = false"
+      @complete="(c) => { isDetailsModalOpen = false; handleCompleteContract(c) }"
+      @cancel="(c) => { isDetailsModalOpen = false; initiateCancelContract(c) }"
+      @rate="(c) => { isDetailsModalOpen = false; openReviewForContract(c) }"
+    />
+
+    <!-- Review Modal for Rating Performers -->
+    <ReviewModal
+      :is-open="isReviewModalOpen"
+      :booking="selectedReviewBooking"
+      :reviewer-account-id="currentAccountId"
+      :target-artist-id="selectedReviewBooking?.Provider_Artist_ID"
+      target-name="Performing Artist"
+      @close="isReviewModalOpen = false"
+      @submitted="handleReviewSubmitted"
+    />
 
   </div>
 </template>

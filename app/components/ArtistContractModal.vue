@@ -10,12 +10,15 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'accepted'): void
   (e: 'rejected'): void
+  (e: 'updated'): void
 }>()
 
 const supabase = useSupabaseClient()
 const db = supabase as any
 
 const isSubmitting = ref(false)
+const isSavingSetlist = ref(false)
+const setlistSaveSuccess = ref(false)
 const feedbackMessage = ref('')
 
 // Disable background scroll while modal is open
@@ -44,6 +47,11 @@ const isContractAccepted = computed(() => {
 const isContractPendingApproval = computed(() => {
   if (!props.contract) return false
   return ['Pending_Artist_Approval', 'Pending', 'Draft'].includes(props.contract.Status)
+})
+
+const isSetlistEditable = computed(() => {
+  if (!props.contract) return false
+  return !['Completed', 'Cancelled', 'Declined'].includes(props.contract.Status)
 })
 
 watch(
@@ -83,29 +91,33 @@ watch(
 )
 
 const addArtistSong = () => {
-  if (isContractAccepted.value) return
+  if (!isSetlistEditable.value) return
   songLineup.value.push({
     id: `artist_song_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     title: '',
     duration: '',
     source: 'artist'
   })
-  triggerDraftAutoSave()
+  if (isContractPendingApproval.value) {
+    triggerDraftAutoSave()
+  }
 }
 
 const removeArtistSong = (index: number) => {
-  if (isContractAccepted.value) return
+  if (!isSetlistEditable.value) return
   // Strict rule: Artists CANNOT remove business-requested songs!
   const song = songLineup.value[index]
   if (song && song.source === 'business') {
     return // Block deletion
   }
   songLineup.value.splice(index, 1)
-  triggerDraftAutoSave()
+  if (isContractPendingApproval.value) {
+    triggerDraftAutoSave()
+  }
 }
 
 const triggerDraftAutoSave = () => {
-  if (typeof window === 'undefined' || isContractAccepted.value) return
+  if (typeof window === 'undefined' || !isContractPendingApproval.value) return
   isArtistDraftSaving.value = true
   setTimeout(() => {
     try {
@@ -114,6 +126,38 @@ const triggerDraftAutoSave = () => {
     } catch (e) {}
     isArtistDraftSaving.value = false
   }, 500)
+}
+
+const handleSaveSetlist = async () => {
+  if (!props.contract || !isSetlistEditable.value) return
+  isSavingSetlist.value = true
+  feedbackMessage.value = ''
+  setlistSaveSuccess.value = false
+
+  try {
+    const bookingId = props.contract.Booking_ID
+    const { error } = await db
+      .from('BOOKING_CONTRACT')
+      .update({
+        Song_Lineup: JSON.stringify(songLineup.value),
+        Song_Lineup_JSON: songLineup.value
+      })
+      .eq('Booking_ID', bookingId)
+
+    if (error) throw error
+
+    setlistSaveSuccess.value = true
+    setTimeout(() => {
+      setlistSaveSuccess.value = false
+    }, 3500)
+
+    emit('updated')
+  } catch (err: any) {
+    console.error('Failed to update setlist:', err)
+    feedbackMessage.value = err.message || 'Failed to update setlist.'
+  } finally {
+    isSavingSetlist.value = false
+  }
 }
 
 const handleArtistAccept = async () => {
@@ -248,6 +292,24 @@ const handleArtistReject = async () => {
 
           <!-- Actions & Close -->
           <div class="flex items-center gap-2 ml-auto">
+            <!-- When contract is confirmed/active: Allow saving setlist changes -->
+            <template v-if="isContractAccepted && isSetlistEditable">
+              <span v-if="setlistSaveSuccess" class="text-xs font-mono text-emerald-400 flex items-center gap-1">
+                <Icon name="ic:round-check-circle" class="text-sm" />
+                <span>Saved!</span>
+              </span>
+              <button
+                type="button"
+                @click="handleSaveSetlist"
+                :disabled="isSavingSetlist"
+                class="text-[11px] sm:text-xs font-bold text-[#131315] bg-[#D0D4F7] hover:bg-white px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full transition-all cursor-pointer shadow disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Icon v-if="isSavingSetlist" name="ic:baseline-sync" class="animate-spin text-xs sm:text-sm" />
+                <Icon v-else name="ic:outline-save" class="text-xs sm:text-sm" />
+                <span>{{ isSavingSetlist ? 'Saving...' : 'Save Setlist Changes' }}</span>
+              </button>
+            </template>
+
             <!-- When pending approval: Show Reject and Accept buttons -->
             <template v-if="isContractPendingApproval">
               <button
@@ -437,14 +499,14 @@ const handleArtistReject = async () => {
                       Business Requested
                     </span>
                   </div>
-                  <!-- If Artist Added and Contract Accepted: Title is Locked -->
-                  <div v-else-if="isContractAccepted" class="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+                  <!-- If Artist Added and Setlist Locked (e.g. Completed or Cancelled): Title is Locked -->
+                  <div v-else-if="!isSetlistEditable" class="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
                     <span class="text-xs font-medium text-[#D0D4F7] truncate">{{ song.title || 'Artist Added Song' }}</span>
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-[#D0D4F7]/10 text-[#D0D4F7] border border-[#D0D4F7]/20 shrink-0">
-                      Confirmed
+                      Finalized
                     </span>
                   </div>
-                  <!-- If Artist Added and Pending Approval: Title is Editable -->
+                  <!-- If Artist Added and Setlist is Editable: Title is Editable -->
                   <input
                     v-else
                     type="text"
@@ -455,9 +517,9 @@ const handleArtistReject = async () => {
                 </div>
               </div>
 
-              <!-- Right: Duration & Delete (Locked if business song or accepted contract) -->
+              <!-- Right: Duration & Delete (Locked if business song or setlist is finalized) -->
               <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <span v-if="song.source === 'business' || isContractAccepted" class="text-[11px] sm:text-xs font-mono text-gray-400">
+                <span v-if="song.source === 'business' || !isSetlistEditable" class="text-[11px] sm:text-xs font-mono text-gray-400">
                   {{ song.duration || '03:30' }}
                 </span>
                 <input
@@ -468,8 +530,8 @@ const handleArtistReject = async () => {
                   class="bg-transparent border-0 outline-none text-gray-400 text-xs font-mono text-right w-12 sm:w-14"
                 />
 
-                <!-- Remove button: ONLY for artist added songs when pending approval! -->
-                <template v-if="!isContractAccepted">
+                <!-- Remove button: ONLY for artist added songs when setlist is editable! -->
+                <template v-if="isSetlistEditable">
                   <button
                     v-if="song.source === 'artist'"
                     type="button"
@@ -489,9 +551,9 @@ const handleArtistReject = async () => {
               </div>
             </div>
 
-            <!-- Add Song CTA: Only visible if contract is not yet accepted -->
+            <!-- Add Song CTA: Visible if setlist is editable -->
             <button
-              v-if="!isContractAccepted"
+              v-if="isSetlistEditable"
               type="button"
               @click="addArtistSong"
               class="w-full flex items-center justify-center gap-2 p-2 sm:p-2.5 rounded-xl border border-dashed border-[#46464D] hover:border-[#D0D4F7] text-xs text-gray-300 hover:text-white transition-all cursor-pointer"

@@ -10,6 +10,7 @@ const supabase = useSupabaseClient()
 const db = supabase as any
 const route = useRoute()
 const { fetchCurrentUserProfile } = useTonoAuth()
+const { isEventFinished } = useTonoEvents()
 
 const isLoading = ref(true)
 const businessId = ref('')
@@ -143,6 +144,9 @@ const handleAcceptApplicant = async (app: any) => {
   try {
     const job = app.JOB_LISTING
     if (!job) throw new Error('Job listing data missing.')
+    if (isEventFinished(job) || job.Status === 'Completed') {
+      throw new Error('This gig has already concluded and cannot accept applicants or issue new contracts.')
+    }
 
     // Format business requested songs with source: 'business'
     let songs = []
@@ -394,26 +398,9 @@ onBeforeUnmount(() => {
   <div class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-8 sm:py-10 space-y-8 font-Sora">
 
     <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
       <div>
         <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">Job Applications</h1>
-        <p class="text-xs sm:text-sm text-gray-400 mt-1">
-          Review artist auditions, manage applicant rosters, and accept performers to spawn official contracts.
-        </p>
-      </div>
-
-      <!-- Job Filter Selector -->
-      <div v-if="myJobListings.length > 0" class="flex items-center gap-2 self-start sm:self-auto">
-        <span class="text-xs text-gray-400 shrink-0">Filter Gig:</span>
-        <select
-          v-model="selectedJobFilter"
-          class="bg-[#1C1C1F] border border-[#3A3A3C] rounded-xl px-3 py-1.5 text-xs text-white outline-none cursor-pointer focus:border-[#D0D4F7]"
-        >
-          <option value="all">All Gigs ({{ myJobListings.length }})</option>
-          <option v-for="job in myJobListings" :key="job.Job_ID" :value="job.Job_ID">
-            {{ job.Event_Title }} ({{ job.Job_Code || 'JB' }})
-          </option>
-        </select>
       </div>
     </div>
 
@@ -456,9 +443,6 @@ onBeforeUnmount(() => {
       <div v-if="filteredApplications.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
         <Icon name="ic:outline-people" class="text-4xl text-gray-500 mx-auto" />
         <h3 class="text-base font-semibold text-white">No {{ activeStatusTab }} Applications</h3>
-        <p class="text-xs text-gray-400 max-w-sm mx-auto">
-          When artists apply to your open job listings, their portfolios and proposed setlists will appear here.
-        </p>
       </div>
 
       <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -563,7 +547,7 @@ onBeforeUnmount(() => {
                 <span>Edit</span>
               </button>
 
-              <template v-if="app.Status === 'Pending' || app.Status === 'Shortlisted'">
+              <template v-if="(app.Status === 'Pending' || app.Status === 'Shortlisted') && !isEventFinished(app.JOB_LISTING) && app.JOB_LISTING?.Status !== 'Completed'">
                 <button
                   v-if="app.Status === 'Pending'"
                   type="button"

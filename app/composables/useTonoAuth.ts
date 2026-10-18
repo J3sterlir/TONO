@@ -23,6 +23,7 @@ export type TonoBusinessProfile = {
   Profile_Picture?: string | null
   Cover_Picture?: string | null
   Links?: Array<{ url: string; label?: string }> | Record<string, unknown> | null
+  Is_Contact_Hidden?: boolean | null
 }
 
 export type TonoArtistProfile = {
@@ -325,6 +326,7 @@ export const useTonoAuth = () => {
         Business_Address: payload.businessProfile.businessAddress || null,
         Contact_Information: payload.businessProfile.cellphone ? payload.businessProfile.cellphone.toString() : null,
         Business_Service: payload.businessProfile.businessService || null,
+        Is_Contact_Hidden: true,
       })
       if (businessInsertError) throw businessInsertError
     }

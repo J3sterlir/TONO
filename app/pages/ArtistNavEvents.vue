@@ -5,11 +5,14 @@ definePageMeta({
 })
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useTonoEvents } from '~/composables/useTonoEvents'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile } = useTonoAuth()
+const { isEventHappeningNow, isEventFinished } = useTonoEvents()
 
+const currentAccountId = ref('')
 const artistId = ref('')
 const artistName = ref('')
 const eventsLoading = ref(true)
@@ -29,96 +32,12 @@ const selectedContractForForm2 = ref<any>(null)
 const isJobDetailsModalOpen = ref(false)
 const selectedJobForDetails = ref<any>(null)
 
-// Booking Completion
-const completingBookingId = ref<string | null>(null)
-const completionFeedback = ref<{ status: 'success' | 'error'; message: string } | null>(null)
-const currentTime = ref(Date.now())
-let completionClock: ReturnType<typeof setInterval> | null = null
-
-// Allow completion 30 minutes after the scheduled end time (Philippine time).
-const canCompleteContract = (contract: any): boolean => {
-  if (!['Confirmed', 'Active'].includes(contract.Status)) return false
-
-  const endDate = contract.End_Date || contract.Start_Date || contract.Event_Date
-  const endTime = contract.End_Time
-
-  if (!endDate || !endTime) return false
-
-  const scheduledEnd = new Date(`${endDate}T${endTime}+08:00`)
-  const completionAvailableAt = scheduledEnd.getTime() + 30 * 60 * 1000
-
-  return (
-    !Number.isNaN(scheduledEnd.getTime()) &&
-    currentTime.value >= completionAvailableAt
-  )
-}
-
-// Complete a confirmed booking after the 30-minute allowance.
-const handleCompleteContract = async (contract: any) => {
-  if (completingBookingId.value || !canCompleteContract(contract)) return
-
-  const confirmed = window.confirm(
-    `Mark contract ${contract.Contract_Code || ''} as completed? This will remove it from your confirmed events.`
-  )
-
-  if (!confirmed) return
-
-  completingBookingId.value = contract.Booking_ID
-
-  try {
-    // Use the current session to authenticate the API request.
-    const { data, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) throw sessionError
-
-    const accessToken = data.session?.access_token
-    if (!accessToken) {
-      throw new Error('Your session has expired. Please log in again.')
-    }
-
-    // The backend verifies the artist, status, and scheduled end time.
-    await $fetch('/api/bookings/complete', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: {
-        bookingId: contract.Booking_ID
-      }
-    })
-
-    completionFeedback.value = {
-      status: 'success',
-      message: `Contract ${contract.Contract_Code} marked as completed successfully.`
-    }
-
-    // Refresh the artist's events and contracts.
-    await fetchArtistEvents()
-  } catch (err: any) {
-    console.error('Failed to complete artist booking:', err)
-
-    completionFeedback.value = {
-      status: 'error',
-      message:
-        err.data?.statusMessage ||
-        err.statusMessage ||
-        err.message ||
-        'Failed to complete booking.'
-    }
-  } finally {
-    completingBookingId.value = null
-  }
-}
-
 onMounted(async () => {
-  // Update the current time every 30 seconds.
-  // This allows the completion button to become enabled
-  // once 30 minutes have passed after the event's scheduled end time.
-  completionClock = setInterval(() => {
-    currentTime.value = Date.now()
-  }, 30_000)
-
   try {
     const profile = await fetchCurrentUserProfile()
+    if (profile?.account) {
+      currentAccountId.value = profile.account.ACCOUNT_ID
+    }
     if (profile?.artistProfile) {
       artistId.value = profile.artistProfile.ARTIST_ID
       artistName.value = profile.artistProfile.StageName || profile.account?.Username || 'Artist'
@@ -131,11 +50,11 @@ onMounted(async () => {
   }
 })
 
-const fetchArtistEvents = async () => {
+async function fetchArtistEvents() {
   if (!artistId.value) return
   eventsLoading.value = true
   try {
-    // 1. Fetch Confirmed Events (Section 1)
+    // 1. Fetch Confirmed & Completed Events (Section 1)
     const { data: confirmedData, error: confirmedErr } = await db
       .from('BOOKING_CONTRACT')
       .select(`
@@ -152,10 +71,14 @@ const fetchArtistEvents = async () => {
         Agreed_Fee,
         Status,
         Is_Rush_Booking,
+        Provider_Business_ID,
+        Requester_Account_ID,
         BUSINESS_PROFILE:Provider_Business_ID (
+          BUSINESS_ID,
           Business_Name
         ),
         USER_ACCOUNT:Requester_Account_ID (
+          ACCOUNT_ID,
           Username
         ),
         JOB_LISTING (
@@ -164,11 +87,17 @@ const fetchArtistEvents = async () => {
           Event_Title,
           Location,
           Compensation_Fee,
-          Description
+          Description,
+          Is_Public,
+          Posted_By_BUSINESS_ID,
+          BUSINESS_PROFILE:Posted_By_BUSINESS_ID (
+            BUSINESS_ID,
+            Business_Name
+          )
         )
       `)
       .eq('Provider_Artist_ID', artistId.value)
-      .in('Status', ['Confirmed', 'Active'])
+      .in('Status', ['Confirmed', 'Active', 'Completed'])
       .order('Start_Date', { ascending: true })
 
     if (!confirmedErr && confirmedData) {
@@ -343,11 +272,15 @@ const fetchArtistEvents = async () => {
   }
 }
 
-// Compute live events happening today
+// Compute live events happening today (exclude private listings)
 const liveEvents = computed(() => {
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   return yourEvents.value.filter(e => {
+    if (e.Status !== 'Confirmed' && e.Status !== 'Active') return false
+    if (e.Job_ID && e.JOB_LISTING && e.JOB_LISTING.Is_Public === false) {
+      return false
+    }
     const start = e.Start_Date || e.Event_Date
     const end = e.End_Date || start
     if (!start) return false
@@ -441,12 +374,6 @@ onBeforeUnmount(() => {
     supabase.removeChannel(contractSyncChannel)
     contractSyncChannel = null
   }
-
-  // Stop the completion timer when leaving this page.
-  if (completionClock) {
-    clearInterval(completionClock)
-    completionClock = null
-  }
 })
 </script>
 
@@ -462,169 +389,16 @@ onBeforeUnmount(() => {
           <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-[#E5E1E4] font-Sora">
             Events Hub &amp; Gigs
           </h1>
-          <p class="text-sm text-gray-400 mt-2">
-            Browse casting calls, audition for open gigs, and track your confirmed performances.
-          </p>
         </div>
       </div>
-
-      <!-- Booking Completion Feedback -->
-      <div
-        v-if="completionFeedback"
-        class="p-4 rounded-xl border flex items-center justify-between gap-3 text-xs"
-        :class="completionFeedback.status === 'success'
-          ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
-          : 'bg-red-950/30 border-red-500/40 text-red-200'"
-      >
-        <span>{{ completionFeedback.message }}</span>
-
-        <button
-          type="button"
-          @click="completionFeedback = null"
-          class="text-gray-400 hover:text-white cursor-pointer"
-        >
-          <Icon name="ic:round-close" />
-        </button>
-      </div>
-
-      <!-- PENDING OFFERS ALERT BANNER (Triggers Form 2 Artist Approval) -->
-      <div
-        v-if="pendingOffers.length > 0"
-        class="p-5 rounded-2xl bg-amber-950/25 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in font-Sora"
-      >
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-            <Icon name="ic:baseline-assignment-late" class="text-2xl text-amber-400 animate-pulse" />
-          </div>
-          <div>
-            <h4 class="text-sm font-bold text-white">
-              You have {{ pendingOffers.length }} Booking Contract {{ pendingOffers.length === 1 ? 'Offer' : 'Offers' }} Pending!
-            </h4>
-            <p class="text-xs text-amber-300/80">
-              Review terms, customize your song lineup, and confirm your performance agreement.
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          @click="openForm2Modal(pendingOffers[0])"
-          class="px-5 py-2.5 rounded-full text-xs font-bold bg-amber-400 hover:bg-amber-300 text-black transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto shadow-md"
-        >
-          Review Booking Contract
-        </button>
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- SECTION 1: "YOUR EVENTS" (Deduplicated Job Listings vs Contracts) -->
-      <!-- ================================================================= -->
-      <section class="space-y-4 font-Sora">
-        <div class="flex flex-col sm:flex-row sm:items-center items-end sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
-          <div>
-            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Events</h2>
-            <p class="text-xs text-gray-400 mt-0.5">
-              Confirmed gigs from accepted job listings and direct client bookings.
-            </p>
-          </div>
-          <span class="text-xs font-mono text-[#D0D4F7] px-2.5 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
-            {{ yourEvents.length }} {{ yourEvents.length === 1 ? 'event' : 'events' }}
-          </span>
-        </div>
-
-        <div v-if="eventsLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
-          <div v-for="i in 2" :key="i" class="h-36 bg-[#1C1C1F] rounded-2xl border border-[#2A2A2E]"></div>
-        </div>
-
-        <div v-else-if="yourEvents.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
-          <Icon name="ic:outline-event-busy" class="text-3xl text-gray-500 mx-auto" />
-          <p class="text-sm font-semibold text-white">No Confirmed Events Yet</p>
-          <p class="text-xs text-gray-400">Apply to open gigs below or accept client booking requests to fill your calendar.</p>
-        </div>
-
-        <!-- Deduplicated Event Cards Grid -->
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div
-            v-for="event in yourEvents"
-            :key="event.Booking_ID"
-            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-3 transition-all shadow-lg"
-          >
-            <!-- DEDUPLICATION LOGIC: If event has Job_ID, show Job Listing Card. Else show Contract Card -->
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <span class="text-[10px] font-mono uppercase tracking-wider text-[#D0D4F7]">
-                  {{ event.Job_ID ? 'JOB LISTING GIG' : 'DIRECT BOOKING CONTRACT' }}
-                </span>
-                <h3 class="text-base sm:text-lg font-bold text-white mt-0.5">
-                  {{ event.Job_ID ? event.JOB_LISTING?.Event_Title : 'Direct Booking Performance' }}
-                </h3>
-              </div>
-
-              <div class="flex items-center gap-1.5">
-                <span v-if="event.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
-                  <Icon name="ic:baseline-bolt" class="text-xs" />
-                  <span>Rush</span>
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Confirmed
-                </span>
-              </div>
-            </div>
-
-            <!-- Necessary Details Only -->
-            <div class="space-y-1.5 text-xs text-gray-300">
-              <div class="flex items-center gap-2">
-                <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span>
-                  {{ event.Start_Date || event.Event_Date }}
-                  <span v-if="event.End_Date && event.End_Date !== event.Start_Date"> to {{ event.End_Date }}</span>
-                  <span v-if="event.Start_Time"> • {{ formatTimeRange12(event.Start_Time, event.End_Time) }}</span>
-                </span>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span class="truncate">{{ event.Job_ID ? (event.JOB_LISTING?.Location || event.Venue_Location) : event.Venue_Location }}</span>
-              </div>
-
-              <div v-if="!event.Job_ID && event.USER_ACCOUNT?.Username" class="flex items-center gap-2 text-gray-400">
-                <Icon name="ic:baseline-person" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span>Booked by: {{ event.USER_ACCOUNT.Username }}</span>
-              </div>
-              <div v-else-if="event.BUSINESS_PROFILE?.Business_Name" class="flex items-center gap-2 text-gray-400">
-                <Icon name="ic:baseline-storefront" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span>Host: {{ event.BUSINESS_PROFILE.Business_Name }}</span>
-              </div>
-            </div>
-
-            <!-- Booking Completion Action -->
-            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E]">
-              <span class="text-[10px] text-gray-400">
-                Available 30 minutes after the scheduled end time
-              </span>
-
-              <button
-                type="button"
-                :disabled="!canCompleteContract(event) || completingBookingId !== null"
-                @click="handleCompleteContract(event)"
-                class="px-3.5 py-2 rounded-full border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-              >
-                {{ completingBookingId === event.Booking_ID ? 'Completing...' : 'Mark as Completed' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <!-- ================================================================= -->
       <!-- SECTION 3: "OPEN JOBS / GIGS" (Casting Call with Details Modal) -->
       <!-- ================================================================= -->
       <section class="space-y-4 font-Sora">
-        <div class="flex flex-col sm:flex-row sm:items-center items-end sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center items-end sm:gap-0 gap-1 justify-between pb-1">
           <div>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Open Jobs / Gigs</h2>
-            <p class="text-xs text-gray-400 mt-0.5">
-              Browse casting calls and open performance auditions from verified TONO partner venues.
-            </p>
           </div>
           <span class="text-xs font-mono text-gray-400">
             {{ openJobs.length }} open
@@ -634,7 +408,6 @@ onBeforeUnmount(() => {
         <div v-if="openJobs.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
           <Icon name="ic:outline-work-outline" class="text-3xl text-gray-500 mx-auto" />
           <p class="text-sm font-semibold text-white">No Open Gigs Available Right Now</p>
-          <p class="text-xs text-gray-400">Check back soon as venue managers post new weekend casting calls.</p>
         </div>
 
         <!-- Open Jobs Cards Grid (Minimal Details + "Details" Button) -->
@@ -697,7 +470,7 @@ onBeforeUnmount(() => {
       <!-- SECTION 3: "LIVE EVENTS / GIGS" (Happening Today) -->
       <!-- ================================================================= -->
       <section class="space-y-4 font-Sora">
-        <div class="flex flex-col sm:flex-row sm:items-center items-start sm:gap-0 gap-1 justify-between border-b border-[#2A2A2E] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center items-start sm:gap-0 gap-1 justify-between pb-1">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
             <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Live Events / Gigs</h2>

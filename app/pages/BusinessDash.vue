@@ -255,6 +255,7 @@ const onDetailsSaved = (data: {
   address: string
   contact: string
   links: any[]
+  isContactHidden?: boolean
 }) => {
   if (businessProfile.value) {
     businessProfile.value.Business_Name = data.name
@@ -262,8 +263,49 @@ const onDetailsSaved = (data: {
     businessProfile.value.Business_Address = data.address
     businessProfile.value.Contact_Information = data.contact
     businessProfile.value.Links = data.links
+    if (data.isContactHidden !== undefined) {
+      businessProfile.value.Is_Contact_Hidden = data.isContactHidden
+    }
   }
   showToast('Public business details updated successfully!')
+}
+
+// -----------------------------------------------------------------------------
+// Contact Information Visibility Toggle (Public vs Private)
+// -----------------------------------------------------------------------------
+const isUpdatingContactVisibility = ref(false)
+const isContactHidden = computed(() => businessProfile.value?.Is_Contact_Hidden ?? true)
+
+const handleToggleContactVisibility = async () => {
+  if (!businessId.value || !businessProfile.value) return
+  if (isUpdatingContactVisibility.value) return
+
+  const currentHidden = businessProfile.value.Is_Contact_Hidden ?? true
+  const nextHidden = !currentHidden
+
+  isUpdatingContactVisibility.value = true
+  businessProfile.value.Is_Contact_Hidden = nextHidden
+
+  try {
+    const { error } = await db
+      .from('BUSINESS_PROFILE')
+      .update({ Is_Contact_Hidden: nextHidden })
+      .eq('BUSINESS_ID', businessId.value)
+
+    if (error) throw error
+
+    showToast(
+      nextHidden
+        ? 'Contact information is now Private (hidden from public profile).'
+        : 'Contact information is now Public (visible on your public profile).'
+    )
+  } catch (err: any) {
+    console.error('Failed to update contact visibility:', err)
+    businessProfile.value.Is_Contact_Hidden = currentHidden
+    showToast('Failed to update contact visibility. Please try again.')
+  } finally {
+    isUpdatingContactVisibility.value = false
+  }
 }
 
 // Formatted social links for display
@@ -372,6 +414,7 @@ const handleShareProfile = async () => {
     :initial-address="businessProfile?.Business_Address || ''"
     :initial-contact="businessProfile?.Contact_Information || ''"
     :initial-links="businessProfile?.Links || []"
+    :initial-is-contact-hidden="businessProfile?.Is_Contact_Hidden ?? true"
     @close="isEditDetailsOpen = false"
     @saved="onDetailsSaved"
   />
@@ -515,60 +558,81 @@ const handleShareProfile = async () => {
       <div
         class="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 md:px-16 py-8 sm:py-10 min-h-75 md:min-h-85 flex flex-col-reverse md:flex-row items-center md:items-end justify-between gap-6"
       >
-        <!-- Left Details -->
-        <div class="flex flex-col items-center md:items-start text-center md:text-left gap-2 min-w-0 max-w-2xl">
-          <span class="text-xs font-mono uppercase tracking-widest text-[#D0D4F7]/90 font-medium bg-[#D0D4F7]/10 px-2.5 py-1 rounded-md border border-[#D0D4F7]/20 w-fit">
-            {{ businessProfile?.Business_Service || 'Live Music & Entertainment' }}
-          </span>
-          <h1 class="text-2xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-md">
-            {{ businessProfile?.Business_Name || 'Business Suite' }}
-          </h1>
-          <p v-if="businessProfile?.Business_Address" class="text-xs sm:text-sm font-light text-gray-300 flex items-center gap-1.5">
-            <Icon name="ic:baseline-location-on" class="text-sm text-[#D0D4F7]" />
-            <span>{{ businessProfile.Business_Address }}</span>
-          </p>
-        </div>
-
-        <!-- Right: Avatar with Hover Camera Overlay -->
-        <div class="flex flex-col justify-center items-center shrink-0">
-          <div
-            class="relative w-28 h-28 sm:w-34 sm:h-34 rounded-full bg-[#1E1E24] flex items-center justify-center text-gray-300 overflow-hidden shadow-2xl border-4 border-white/80 shrink-0 group/avatar cursor-pointer"
-            @click="triggerAvatarUpload"
-            title="Click to change profile picture"
-          >
-            <!-- Avatar Image or Initials Fallback -->
-            <img
-              v-if="profilePicture"
-              :src="profilePicture"
-              alt="Business Profile"
-              class="w-full h-full object-cover object-center"
-            />
-            <div
-              v-else
-              class="w-full h-full bg-[#1E1E24] text-[#D0D4F7] font-bold text-3xl font-Sora flex items-center justify-center uppercase"
-            >
-              {{ getBusinessInitials(businessProfile?.Business_Name) }}
-            </div>
-
-            <!-- Hover Camera Overlay -->
-            <div
-              class="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center gap-1 text-white transition-opacity duration-200"
-            >
-              <Icon name="ic:outline-camera-alt" class="text-2xl text-[#D0D4F7]" />
-              <span class="text-[10px] font-semibold tracking-wide">CHANGE</span>
-            </div>
+        <!-- Skeleton when isLoading -->
+        <template v-if="isLoading">
+          <!-- Left Details Skeleton -->
+          <div class="flex flex-col items-center md:items-start text-center md:text-left gap-3 min-w-0 max-w-2xl w-full animate-pulse">
+            <div class="h-6 w-32 rounded-md bg-white/10"></div>
+            <div class="h-9 sm:h-11 w-64 sm:w-80 rounded-lg bg-white/10"></div>
+            <div class="h-4 w-48 rounded bg-white/10"></div>
           </div>
-          <!-- Reposition Avatar Button -->
-          <button
-            v-if="profilePicture"
-            type="button"
-            @click.stop="repositionAvatar"
-            class="mt-1 text-[11px] text-gray-400 hover:text-[#D0D4F7] flex items-center gap-1 transition-colors cursor-pointer"
-          >
-            <Icon name="mdi:crop" class="text-xs" />
-            <span>Reposition</span>
-          </button>
-        </div>
+
+          <!-- Right: Avatar Skeleton -->
+          <div class="flex flex-col justify-center items-center shrink-0 animate-pulse">
+            <div class="w-28 h-28 sm:w-34 sm:h-34 rounded-full bg-white/10 border-4 border-white/20"></div>
+          </div>
+        </template>
+
+        <!-- Loaded Content -->
+        <template v-else>
+          <!-- Left Details -->
+          <div class="flex flex-col items-center md:items-start text-center md:text-left gap-2 min-w-0 max-w-2xl">
+            <span
+              v-if="businessProfile?.Business_Service"
+              class="text-xs font-mono uppercase tracking-widest text-[#D0D4F7]/90 font-medium bg-[#D0D4F7]/10 px-2.5 py-1 rounded-md border border-[#D0D4F7]/20 w-fit"
+            >
+              {{ businessProfile.Business_Service }}
+            </span>
+            <h1 class="text-2xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-md">
+              {{ businessProfile?.Business_Name || '' }}
+            </h1>
+            <p v-if="businessProfile?.Business_Address" class="text-xs sm:text-sm font-light text-gray-300 flex items-center gap-1.5">
+              <Icon name="ic:baseline-location-on" class="text-sm text-[#D0D4F7]" />
+              <span>{{ businessProfile.Business_Address }}</span>
+            </p>
+          </div>
+
+          <!-- Right: Avatar with Hover Camera Overlay -->
+          <div class="flex flex-col justify-center items-center shrink-0">
+            <div
+              class="relative w-28 h-28 sm:w-34 sm:h-34 rounded-full bg-[#1E1E24] flex items-center justify-center text-gray-300 overflow-hidden shadow-2xl border-4 border-white/80 shrink-0 group/avatar cursor-pointer"
+              @click="triggerAvatarUpload"
+              title="Click to change profile picture"
+            >
+              <!-- Avatar Image or Initials Fallback -->
+              <img
+                v-if="profilePicture"
+                :src="profilePicture"
+                alt="Business Profile"
+                class="w-full h-full object-cover object-center"
+              />
+              <div
+                v-else
+                class="w-full h-full bg-[#1E1E24] text-[#D0D4F7] font-bold text-3xl font-Sora flex items-center justify-center uppercase"
+              >
+                {{ getBusinessInitials(businessProfile?.Business_Name) }}
+              </div>
+
+              <!-- Hover Camera Overlay -->
+              <div
+                class="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center gap-1 text-white transition-opacity duration-200"
+              >
+                <Icon name="ic:outline-camera-alt" class="text-2xl text-[#D0D4F7]" />
+                <span class="text-[10px] font-semibold tracking-wide">CHANGE</span>
+              </div>
+            </div>
+            <!-- Reposition Avatar Button -->
+            <button
+              v-if="profilePicture"
+              type="button"
+              @click.stop="repositionAvatar"
+              class="mt-1 text-[11px] text-gray-400 hover:text-[#D0D4F7] flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Icon name="mdi:crop" class="text-xs" />
+              <span>Reposition</span>
+            </button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -698,35 +762,129 @@ const handleShareProfile = async () => {
             </div>
           </div>
 
-          <!-- Details Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 font-Geist text-sm">
+          <!-- Skeleton Loading State for Details Grid -->
+          <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
+            <div class="space-y-2.5 p-4 rounded-2xl bg-[#18181B] border border-[#26262B]">
+              <div class="h-3 w-24 bg-white/10 rounded"></div>
+              <div class="h-6 w-48 bg-white/10 rounded"></div>
+              <div class="h-3.5 w-32 bg-white/10 rounded"></div>
+            </div>
+            <div class="space-y-2.5 p-4 rounded-2xl bg-[#18181B] border border-[#26262B]">
+              <div class="h-3 w-28 bg-white/10 rounded"></div>
+              <div class="h-5 w-56 bg-white/10 rounded mt-1"></div>
+            </div>
+            <div class="space-y-2.5 p-4 rounded-2xl bg-[#18181B] border border-[#26262B] md:col-span-2">
+              <div class="flex items-center justify-between">
+                <div class="h-3 w-32 bg-white/10 rounded"></div>
+                <div class="h-5 w-24 bg-white/10 rounded-full"></div>
+              </div>
+              <div class="h-5 w-48 bg-white/10 rounded mt-1"></div>
+            </div>
+            <div class="space-y-3 p-4 rounded-2xl bg-[#18181B] border border-[#26262B] md:col-span-2">
+              <div class="h-3 w-40 bg-white/10 rounded"></div>
+              <div class="flex gap-2">
+                <div class="h-9 w-28 bg-white/10 rounded-xl"></div>
+                <div class="h-9 w-28 bg-white/10 rounded-xl"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loaded Details Grid -->
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6 font-Geist text-sm">
             <!-- Business Name & Service -->
             <div class="space-y-1 p-4 rounded-2xl bg-[#18181B] border border-[#26262B]">
               <span class="text-xs font-mono uppercase tracking-wider text-gray-400 font-medium">Business Name</span>
               <p class="text-base font-semibold text-white font-Sora">
                 {{ businessProfile?.Business_Name || 'Not Set' }}
               </p>
-              <span class="text-xs text-[#D0D4F7] font-medium block pt-1">
-                {{ businessProfile?.Business_Service || 'No primary service defined' }}
+              <span v-if="businessProfile?.Business_Service" class="text-xs text-[#D0D4F7] font-medium block pt-1">
+                {{ businessProfile.Business_Service }}
               </span>
             </div>
 
             <!-- Address -->
             <div class="space-y-1 p-4 rounded-2xl bg-[#18181B] border border-[#26262B]">
               <span class="text-xs font-mono uppercase tracking-wider text-gray-400 font-medium">Physical Address</span>
-              <p class="text-sm text-gray-200 flex items-center gap-1.5 pt-1">
+              <p v-if="businessProfile?.Business_Address" class="text-sm text-gray-200 flex items-center gap-1.5 pt-1">
                 <Icon name="ic:baseline-location-on" class="text-base text-[#D0D4F7] shrink-0" />
-                <span>{{ businessProfile?.Business_Address || 'No address provided yet' }}</span>
+                <span>{{ businessProfile.Business_Address }}</span>
               </p>
+              <p v-else class="text-sm text-gray-500 italic pt-1">No address provided yet</p>
             </div>
 
-            <!-- Contact Information -->
-            <div class="space-y-1 p-4 rounded-2xl bg-[#18181B] border border-[#26262B] md:col-span-2">
-              <span class="text-xs font-mono uppercase tracking-wider text-gray-400 font-medium">Contact & Inquiries</span>
-              <p class="text-sm text-gray-200 flex items-center gap-2 pt-1">
-                <Icon name="ic:outline-phone" class="text-base text-[#D0D4F7] shrink-0" />
-                <span>{{ businessProfile?.Contact_Information || 'No contact details listed' }}</span>
-              </p>
+            <!-- Contact Information with Public / Private Toggle Switch -->
+            <div class="p-4.5 rounded-2xl bg-[#18181B] border border-[#26262B] md:col-span-2 space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-[#26262B]">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="text-xs font-mono uppercase tracking-wider text-gray-400 font-medium">Contact & Inquiries</span>
+                  <!-- Visibility Badge -->
+                  <span
+                    class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium transition-all"
+                    :class="isContactHidden
+                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/25'
+                      : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/25'"
+                  >
+                    <Icon :name="isContactHidden ? 'material-symbols:lock-outline' : 'material-symbols:public'" class="text-xs" />
+                    <span>{{ isContactHidden ? 'Private (Hidden)' : 'Public (Visible)' }}</span>
+                  </span>
+                </div>
+
+                <!-- Switch Control -->
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-gray-400 select-none font-medium">
+                    {{ isContactHidden ? 'Set to Public' : 'Set to Private' }}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="!isContactHidden"
+                    :disabled="isUpdatingContactVisibility"
+                    @click="handleToggleContactVisibility"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:ring-offset-2 focus:ring-offset-[#18181B] disabled:opacity-50 select-none shadow-inner"
+                    :class="isContactHidden ? 'bg-[#2A2A30]' : 'bg-[#D0D4F7]'"
+                    :title="isContactHidden ? 'Click to make Public' : 'Click to make Private'"
+                  >
+                    <span class="sr-only">Toggle contact visibility</span>
+                    <span
+                      aria-hidden="true"
+                      class="pointer-events-none inline-flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                      :class="isContactHidden ? 'translate-x-0 text-gray-700' : 'translate-x-5 text-[#0E0E10]'"
+                    >
+                      <Icon
+                        v-if="isUpdatingContactVisibility"
+                        name="svg-spinners:ring-resize"
+                        class="text-xs text-[#0E0E10]"
+                      />
+                      <Icon
+                        v-else-if="isContactHidden"
+                        name="material-symbols:lock-outline"
+                        class="text-[11px] text-gray-600"
+                      />
+                      <Icon
+                        v-else
+                        name="material-symbols:public"
+                        class="text-[11px] text-[#0E0E10]"
+                      />
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contact Value & Helper -->
+              <div class="space-y-1.5">
+                <p v-if="businessProfile?.Contact_Information" class="text-sm text-gray-200 flex items-center gap-2 pt-0.5">
+                  <Icon name="ic:outline-phone" class="text-base text-[#D0D4F7] shrink-0" />
+                  <span class="font-medium text-white">{{ businessProfile.Contact_Information }}</span>
+                </p>
+                <p v-else class="text-sm text-gray-500 italic pt-0.5">No contact details listed yet</p>
+
+                <p v-if="isContactHidden" class="text-xs text-gray-400 font-light">
+                  <span class="text-amber-300 font-medium">Private:</span> This contact number is hidden from visitors on your public business page. Switch to Public if you want visitors and artists to see it directly.
+                </p>
+                <p v-else class="text-xs text-gray-400 font-light">
+                  <span class="text-emerald-400 font-medium">Public:</span> This contact number is visible to everyone on your public profile header and contact tab.
+                </p>
+              </div>
             </div>
 
             <!-- Social Media & Web Links -->
@@ -803,9 +961,6 @@ const handleShareProfile = async () => {
             <div class="flex flex-col items-center gap-3 text-center p-6">
               <Icon name="lucide:megaphone-off" class="text-3xl sm:text-5xl text-[#D0D4F7]" />
               <h3 class="text-base sm:text-lg font-semibold text-white">No Posts Published Yet</h3>
-              <p class="text-xs text-gray-400 max-w-sm font-Geist">
-                Share business updates, equipment announcements, studio sessions, and promos with the music community.
-              </p>
             </div>
           </article>
 

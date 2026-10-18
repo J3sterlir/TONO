@@ -6,23 +6,36 @@ definePageMeta({
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
+import { useTonoReviews } from '~/composables/useTonoReviews'
+import { useTonoEvents } from '~/composables/useTonoEvents'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile, resolveUserType } = useTonoAuth()
 const { uploadAvatar, uploadCover, isUploadingAvatar, isUploadingCover, uploadError } = useMediaUpload()
+const { isEventFinished } = useTonoEvents()
+const completingBookingId = ref<string | null>(null)
 
 const username = ref('')
 const currentAccountId = ref('')
 const usertype = ref('')
-const userTags = ref<string[]>([])
+const userGenres = ref<string[]>([])
+const userInstruments = ref<string[]>([])
 const profilePicture = ref<string | null>(null)
 const coverPicture = ref<string | null>(null)
 const globalAvatarUrl = useState<string | null>('tono_user_avatar', () => null)
 const isLoading = ref(true)
 
 // Navigation Tabs
-const activeTab = ref<'active' | 'requests'>('active')
+const activeTab = ref<'active' | 'requests' | 'reviews'>('active')
+
+// Review & Rating State
+const { hasUserReviewed } = useTonoReviews()
+const isReviewModalOpen = ref(false)
+const selectedBookingForReview = ref<any>(null)
+const selectedTargetArtistId = ref<string | null>(null)
+const selectedTargetArtistName = ref('Performing Artist')
+const reviewedBookingIds = ref<Set<string>>(new Set())
 
 // User Events & Requests State
 const activeBookings = ref<any[]>([])
@@ -43,10 +56,29 @@ const isCropperOpen = ref(false)
 const cropperMode = ref<'avatar' | 'cover'>('avatar')
 const cropperImageSource = ref<string | File | Blob | null>(null)
 
-const tagsDisplay = computed(() => {
-  if (userTags.value.length === 0) return 'No tags selected'
-  return userTags.value.join(', ')
+const genresDisplay = computed(() => {
+  return userGenres.value.length > 0 ? userGenres.value.join(', ') : 'None selected'
 })
+
+const instrumentsDisplay = computed(() => {
+  return userInstruments.value.length > 0 ? userInstruments.value.join(', ') : 'None selected'
+})
+
+const openReviewForBooking = (booking: any) => {
+  selectedBookingForReview.value = booking
+  selectedTargetArtistId.value = booking.Provider_Artist_ID
+  selectedTargetArtistName.value = getArtistDisplayName(booking.ARTIST)
+  isReviewModalOpen.value = true
+}
+
+const handleUserReviewSubmitted = () => {
+  if (selectedBookingForReview.value) {
+    reviewedBookingIds.value.add(selectedBookingForReview.value.Booking_ID)
+  }
+  isReviewModalOpen.value = false
+  userToast.value = 'Your review has been submitted successfully! Thank you for rating the artist.'
+  setTimeout(() => { userToast.value = '' }, 4000)
+}
 
 const route = useRoute()
 
@@ -117,7 +149,8 @@ onMounted(async () => {
         globalAvatarUrl.value = profile.account.Profile_Picture
       }
       usertype.value = resolveUserType(profile)
-      userTags.value = [...(profile.genres || []), ...(profile.instruments || [])]
+      userGenres.value = profile.genres || []
+      userInstruments.value = profile.instruments || []
 
       await fetchUserBookings()
       setupRealtimeUserContracts()
@@ -185,6 +218,17 @@ const fetchUserBookings = async () => {
     if (!contractsErr && contractsData) {
       activeBookings.value = contractsData.filter((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status))
       pendingRequests.value = contractsData.filter((c: any) => ['Pending_Artist_Approval', 'Pending'].includes(c.Status))
+
+      // Check review status for completed events
+      for (const c of contractsData) {
+        if (c.Status === 'Completed' && currentAccountId.value) {
+          hasUserReviewed(c.Booking_ID, currentAccountId.value).then((already: boolean) => {
+            if (already) {
+              reviewedBookingIds.value.add(c.Booking_ID)
+            }
+          })
+        }
+      }
     }
 
     // 2. Fetch live events happening today
@@ -236,6 +280,10 @@ const getArtistAvatar = (artist: any) => {
 
 // 5-Day Cancellation Logic & Sanction Warning Modal Check
 const initiateCancelBooking = (contract: any) => {
+  if (isEventFinished(contract) || contract.Status === 'Completed') {
+    alert('This booking has already concluded and cannot be cancelled. If finished, please mark it as complete.')
+    return
+  }
   selectedContractForCancel.value = contract
   const targetDateStr = contract.Start_Date || contract.Event_Date
   if (targetDateStr) {
@@ -264,8 +312,16 @@ const handleConfirmWarningCancellation = async (reason: string) => {
 
 const executeCancellation = async (reason: string, isLate = false) => {
   if (!selectedContractForCancel.value) return
-  const contractId = selectedContractForCancel.value.Booking_ID
-  const code = selectedContractForCancel.value.Contract_Code
+  const contract = selectedContractForCancel.value
+
+  if (isEventFinished(contract) || contract.Status === 'Completed') {
+    alert('This booking has already concluded and cannot be cancelled.')
+    selectedContractForCancel.value = null
+    return
+  }
+
+  const contractId = contract.Booking_ID
+  const code = contract.Contract_Code
 
   try {
     const { error } = await db
@@ -287,6 +343,38 @@ const executeCancellation = async (reason: string, isLate = false) => {
     alert(err.message || 'Failed to cancel booking')
   } finally {
     selectedContractForCancel.value = null
+  }
+}
+
+const handleCompleteBooking = async (contract: any) => {
+  if (completingBookingId.value) return
+  if (!window.confirm(`Mark booking ${contract.Contract_Code || ''} as completed? This will allow you to rate the artist.`)) {
+    return
+  }
+
+  completingBookingId.value = contract.Booking_ID
+  try {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+
+    await $fetch('/api/bookings/complete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: {
+        bookingId: contract.Booking_ID
+      }
+    })
+
+    userToast.value = `Booking ${contract.Contract_Code || ''} marked as completed! You can now rate the artist.`
+    setTimeout(() => { userToast.value = '' }, 4000)
+    await fetchUserBookings()
+  } catch (err: any) {
+    console.error('Failed to complete booking:', err)
+    alert(err.data?.statusMessage || err.statusMessage || err.message || 'Failed to complete booking')
+  } finally {
+    completingBookingId.value = null
   }
 }
 
@@ -469,16 +557,31 @@ const handleLogout = async () => {
           <span class="font-Geist font-medium text-xs sm:text-[14px] text-[#D0D4F7]/90 tracking-wider uppercase">
             {{ usertype || 'User' }}
           </span>
-          <h1 class="font-Sora font-bold text-3xl sm:text-5xl lg:text-[64px] tracking-tight text-white leading-tight wrap-break-word max-w-full">
-            {{ username || 'User' }}
-          </h1>
-          <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 bg-black/50 backdrop-blur-xs px-3 py-1.5 rounded-lg max-w-full border border-white/5 mt-1">
-            <span class="font-HankenGrotesk text-xs sm:text-[15px] text-gray-400 font-bold shrink-0">
-              User Tags:
-            </span>
-            <span class="text-xs sm:text-[15px] text-[#D0D4F7] font-medium wrap-break-word">
-              {{ tagsDisplay }}
-            </span>
+          <div class="flex flex-col md:flex-row items-center md:items-baseline gap-2 sm:gap-4 flex-wrap">
+            <h1 class="font-Sora font-bold text-3xl sm:text-5xl lg:text-[64px] tracking-tight text-white leading-tight wrap-break-word max-w-full">
+              {{ username || 'User' }}
+            </h1>
+            <RatingStars :target-account-id="currentAccountId" :inline="true" />
+          </div>
+
+          <!-- Categorized Tags: Genre Tags & Instrument Tags -->
+          <div class="flex flex-col gap-1.5 mt-2 w-full max-w-xl">
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 bg-black/40 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-white/5">
+              <span class="font-HankenGrotesk text-xs sm:text-[14px] text-gray-400 font-bold shrink-0">
+                Genre Tags:
+              </span>
+              <span class="text-xs sm:text-[14px] text-[#D0D4F7] font-medium wrap-break-word">
+                {{ genresDisplay }}
+              </span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 bg-black/40 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-white/5">
+              <span class="font-HankenGrotesk text-xs sm:text-[14px] text-gray-400 font-bold shrink-0">
+                Instrument Tags:
+              </span>
+              <span class="text-xs sm:text-[14px] text-[#D0D4F7] font-medium wrap-break-word">
+                {{ instrumentsDisplay }}
+              </span>
+            </div>
           </div>
 
           <!-- Error Alert if Upload Fails -->
@@ -580,6 +683,16 @@ const handleLogout = async () => {
             </span>
             <span v-if="pendingRequests.length" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono">
               {{ pendingRequests.length }}
+            </span>
+          </button>
+          <button
+            @click="activeTab = 'reviews'"
+            class="font-Sora cursor-pointer transition-colors flex items-center gap-2"
+            :class="activeTab === 'reviews' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+            <span
+              class="inline-block py-4 sm:py-5"
+              :class="activeTab === 'reviews' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+              Reviews
             </span>
           </button>
         </div>
@@ -690,14 +803,43 @@ const handleLogout = async () => {
               </div>
 
               <!-- Action Footer -->
-              <div class="pt-3 border-t border-[#2A2A2E]/70 flex items-center justify-between">
+              <div class="pt-3 border-t border-[#2A2A2E]/70 flex items-center justify-between flex-wrap gap-2">
                 <span class="text-[11px] text-gray-500 font-mono">Protected by TONO Guarantee</span>
-                <button
-                  type="button"
-                  @click="initiateCancelBooking(booking)"
-                  class="px-3.5 py-1.5 rounded-full border border-red-500/30 hover:border-red-500/60 hover:bg-red-500/10 text-red-300 text-xs font-medium transition-all cursor-pointer">
-                  Cancel Booking
-                </button>
+                <div class="flex items-center gap-2">
+                  <!-- Case 1: Concluded / Finished and not completed -> Mark as Complete -->
+                  <button
+                    v-if="booking.Status !== 'Completed' && isEventFinished(booking)"
+                    type="button"
+                    :disabled="completingBookingId === booking.Booking_ID"
+                    @click="handleCompleteBooking(booking)"
+                    class="px-3.5 py-1.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 transition-all cursor-pointer text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Icon name="ic:round-check-circle" class="text-xs text-emerald-400" />
+                    <span>{{ completingBookingId === booking.Booking_ID ? 'Completing...' : 'Mark as Complete' }}</span>
+                  </button>
+
+                  <!-- Case 2: Completed -> Rate Artist -->
+                  <button
+                    v-else-if="booking.Status === 'Completed'"
+                    type="button"
+                    :disabled="reviewedBookingIds.has(booking.Booking_ID)"
+                    @click="openReviewForBooking(booking)"
+                    class="px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                    :class="reviewedBookingIds.has(booking.Booking_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
+                  >
+                    <Icon :name="reviewedBookingIds.has(booking.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
+                    <span>{{ reviewedBookingIds.has(booking.Booking_ID) ? 'Reviewed' : 'Rate Artist' }}</span>
+                  </button>
+
+                  <!-- Case 3: Active / Upcoming -> Cancel Booking -->
+                  <button
+                    v-else
+                    type="button"
+                    @click="initiateCancelBooking(booking)"
+                    class="px-3.5 py-1.5 rounded-full border border-red-500/30 hover:border-red-500/60 hover:bg-red-500/10 text-red-300 text-xs font-medium transition-all cursor-pointer">
+                    Cancel Booking
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -785,7 +927,30 @@ const handleLogout = async () => {
           </div>
         </div>
       </div>
+
+      <!-- TAB 3: REVIEWS -->
+      <div v-else-if="activeTab === 'reviews'" class="space-y-6 font-Sora">
+        <div class="border-b border-[#2A2A2E] pb-3">
+          <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Reviews &amp; Ratings</h2>
+          <p class="text-xs text-gray-400 mt-0.5">
+            Verified ratings and reviews submitted by hired performers and collaborators.
+          </p>
+        </div>
+
+        <ReviewsList :target-account-id="currentAccountId" />
+      </div>
     </main>
+
+    <!-- Review Modal for Rating Artists -->
+    <ReviewModal
+      :is-open="isReviewModalOpen"
+      :booking="selectedBookingForReview"
+      :reviewer-account-id="currentAccountId"
+      :target-artist-id="selectedTargetArtistId || undefined"
+      :target-name="selectedTargetArtistName"
+      @close="isReviewModalOpen = false"
+      @submitted="handleUserReviewSubmitted"
+    />
 
     <!-- Toast Notification -->
     <Teleport to="body">

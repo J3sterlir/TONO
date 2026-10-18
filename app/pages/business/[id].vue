@@ -25,7 +25,7 @@ const currentUserId = ref<string | null>(null)
 const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 
 // Tab Navigation State
-const activeTab = ref<'posts' | 'jobs' | 'contact'>('posts')
+const activeTab = ref<'posts' | 'jobs' | 'reviews' | 'contact'>('posts')
 
 // Toasts
 const isCopied = ref(false)
@@ -471,8 +471,8 @@ const scrollToTop = () => {
                 @{{ business.USER_ACCOUNT.Username }}
               </span>
 
-              <!-- Contact Information Box (L863-L871) -->
-              <div v-if="business.Contact_Information"
+              <!-- Contact Information Box -->
+              <div v-if="business.Contact_Information && (!business.Is_Contact_Hidden || isOwner)"
                 class="flex flex-wrap items-center justify-start gap-2 bg-black/40 backdrop-blur-md p-3 py-1.5 rounded-xl max-w-fit border border-white/10 mt-1">
                 <span
                   class="font-HankenGrotesk text-xs sm:text-[15px] text-gray-300 font-bold shrink-0 flex items-center gap-1.5">
@@ -482,13 +482,22 @@ const scrollToTop = () => {
                 <span class="text-xs sm:text-[15px] text-[#D0D4F7] font-medium wrap-break-word">
                   {{ business.Contact_Information }}
                 </span>
+                <span v-if="business.Is_Contact_Hidden && isOwner"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 ml-1"
+                  title="Only you can see this because you are the owner. This contact number is hidden from the public.">
+                  <Icon name="material-symbols:lock-outline" class="text-xs" />
+                  <span>Private</span>
+                </span>
               </div>
 
-              <!-- Business Address Location (L873-L876) -->
-              <div v-if="business.Business_Address"
-                class="flex items-center gap-1.5 text-xs sm:text-sm text-gray-300 mt-0.5">
-                <Icon name="ic:baseline-location-on" class="text-base text-[#D0D4F7]" />
-                <span>{{ business.Business_Address }}</span>
+              <!-- Business Address Location & Review Rating -->
+              <div class="flex items-center gap-2 text-xs sm:text-sm text-gray-300 mt-0.5 flex-wrap">
+                <div v-if="business.Business_Address" class="flex items-center gap-1.5">
+                  <Icon name="ic:baseline-location-on" class="text-base text-[#D0D4F7]" />
+                  <span>{{ business.Business_Address }}</span>
+                </div>
+                <span v-if="business.Business_Address" class="text-gray-500">•</span>
+                <RatingStars :target-business-id="business.BUSINESS_ID" :inline="true" />
               </div>
 
               <!-- Actions Row: Message Button & Share Button -->
@@ -551,6 +560,14 @@ const scrollToTop = () => {
                   class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono">
                   {{ openJobs.length }}
                 </span>
+              </span>
+            </button>
+
+            <button type="button" @click="activeTab = 'reviews'" class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'reviews' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+              <span class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'reviews' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+                Reviews
               </span>
             </button>
 
@@ -675,9 +692,6 @@ const scrollToTop = () => {
             class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#46464D]/25">
             <div>
               <h2 class="text-xl sm:text-2xl font-bold font-Sora text-white">Active Gigs & Opportunities</h2>
-              <p class="text-xs sm:text-sm text-gray-400 font-Geist">Live listings posted by {{ business.Business_Name
-              }}
-              </p>
             </div>
             <span
               class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-semibold w-fit">
@@ -693,10 +707,6 @@ const scrollToTop = () => {
               <Icon name="mdi:briefcase-outline" class="text-3xl" />
             </div>
             <h3 class="font-Sora text-lg font-semibold text-white mb-1">No Active Listings Right Now</h3>
-            <p class="text-xs sm:text-sm text-gray-400 font-Geist max-w-md">
-              {{ business.Business_Name }} has no open gigs or jobs posted currently. You can reach out directly via
-              chat!
-            </p>
             <button v-if="!isOwner" type="button" @click="handleInitiateChat"
               class="mt-4 px-5 py-2.5 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs font-bold transition-all shadow-md cursor-pointer">
               Direct Message Business
@@ -761,11 +771,7 @@ const scrollToTop = () => {
                 <Icon name="ic:outline-alternate-email" />
               </div>
 
-              <h3 class="font-Sora text-xl font-bold text-white mb-2">Connect & Direct Booking</h3>
-              <p class="text-sm text-gray-400 max-w-md mb-6 font-Geist">
-                Interested in collaborating, booking sound services, studio recording, or renting equipment from
-                <span class="text-white font-semibold">{{ business.Business_Name }}</span>? Chat directly inside TONO.
-              </p>
+              <h3 class="font-Sora text-xl font-bold text-white mb-2">Connect</h3>
 
               <!-- Direct Chat Button in TONO -->
               <div class="flex flex-wrap items-center justify-center gap-3">
@@ -775,6 +781,18 @@ const scrollToTop = () => {
                   <Icon v-else name="mdi:message-text-outline" class="text-base" />
                   <span>Chat Now in TONO</span>
                 </button>
+              </div>
+
+              <!-- Direct Contact Information (if public or owner) -->
+              <div v-if="business.Contact_Information && (!business.Is_Contact_Hidden || isOwner)"
+                class="mt-4 flex flex-wrap items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-xs sm:text-sm text-gray-300">
+                <Icon name="ic:outline-phone" class="text-[#D0D4F7] text-base shrink-0" />
+                <span>Direct Contact: <strong class="text-white">{{ business.Contact_Information }}</strong></span>
+                <span v-if="business.Is_Contact_Hidden && isOwner"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <Icon name="material-symbols:lock-outline" class="text-xs" />
+                  <span>Private</span>
+                </span>
               </div>
             </div>
 
@@ -817,6 +835,16 @@ const scrollToTop = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- TAB 4: REVIEWS -->
+        <!-- ===================================================================== -->
+        <div v-else-if="activeTab === 'reviews'" class="space-y-6">
+          <div class="pb-1">
+          </div>
+
+          <ReviewsList :target-business-id="business.BUSINESS_ID" />
         </div>
       </main>
 

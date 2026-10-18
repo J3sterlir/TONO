@@ -11,6 +11,7 @@ const props = withDefaults(
     initialAddress?: string
     initialContact?: string
     initialLinks?: any
+    initialIsContactHidden?: boolean
   }>(),
   {
     initialName: '',
@@ -18,6 +19,7 @@ const props = withDefaults(
     initialAddress: '',
     initialContact: '',
     initialLinks: () => [],
+    initialIsContactHidden: true,
   }
 )
 
@@ -29,6 +31,7 @@ const emit = defineEmits<{
     address: string
     contact: string
     links: Array<{ url: string; label: string }>
+    isContactHidden?: boolean
   }): void
 }>()
 
@@ -40,6 +43,7 @@ const name = ref('')
 const service = ref('')
 const address = ref('')
 const contact = ref('')
+const isContactHidden = ref(true)
 
 interface LinkItem {
   url: string
@@ -103,6 +107,7 @@ watch(
       service.value = props.initialService || ''
       address.value = props.initialAddress || ''
       contact.value = props.initialContact || ''
+      isContactHidden.value = props.initialIsContactHidden ?? true
       links.value = parseInitialLinks(props.initialLinks)
       newUrlInput.value = ''
       errorMessage.value = null
@@ -194,6 +199,7 @@ const handleSubmit = async () => {
       Business_Address: address.value.trim() || null,
       Contact_Information: contact.value.trim() || null,
       Links: links.value,
+      Is_Contact_Hidden: isContactHidden.value,
     }
 
     const { error } = await db
@@ -209,6 +215,7 @@ const handleSubmit = async () => {
       address: payload.Business_Address || '',
       contact: payload.Contact_Information || '',
       links: links.value,
+      isContactHidden: isContactHidden.value,
     })
 
     emit('close')
@@ -334,9 +341,24 @@ const handleSubmit = async () => {
 
             <!-- Field 4: Contact Information -->
             <div class="space-y-1.5">
-              <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 font-Sora">
-                Contact Information
-              </label>
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-gray-300 font-Sora">
+                  Contact Information
+                </label>
+                <!-- Quick Visibility Toggle inside modal -->
+                <button
+                  type="button"
+                  @click="isContactHidden = !isContactHidden"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium transition-all cursor-pointer select-none"
+                  :class="isContactHidden
+                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/25 hover:bg-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/20'"
+                  :title="isContactHidden ? 'Click to set Public' : 'Click to set Private'"
+                >
+                  <Icon :name="isContactHidden ? 'material-symbols:lock-outline' : 'material-symbols:public'" class="text-xs" />
+                  <span>{{ isContactHidden ? 'Private (Hidden)' : 'Public (Visible)' }}</span>
+                </button>
+              </div>
               <div class="relative">
                 <Icon name="ic:outline-phone" class="absolute left-3.5 top-3.5 text-base text-[#D0D4F7]" />
                 <input
@@ -347,7 +369,10 @@ const handleSubmit = async () => {
                 />
               </div>
               <p class="text-[11px] text-gray-400">
-                This appears prominently in your hero contact badge and on the Contact tab.
+                {{ isContactHidden
+                  ? 'Currently set to Private. It will not be shown on your public profile page.'
+                  : 'Currently set to Public. It will be visible on your public profile page.'
+                }}
               </p>
             </div>
 

@@ -5,6 +5,8 @@ definePageMeta({
 })
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useTonoEvents } from '~/composables/useTonoEvents'
+import { useTonoReviews } from '~/composables/useTonoReviews'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
@@ -24,6 +26,16 @@ const businessId = ref('')
 
 // Job Listings State from Supabase
 const jobListings = ref<any[]>([])
+
+// Event Lifecycle & Review Integration
+const { isEventHappeningNow, isEventFinished, markJobListingCompleted } = useTonoEvents()
+const { hasUserReviewed } = useTonoReviews()
+const completingJobId = ref<string | null>(null)
+const isReviewModalOpen = ref(false)
+const selectedBookingForReview = ref<any>(null)
+const selectedTargetArtistId = ref<string | null>(null)
+const selectedTargetName = ref<string>('Performing Artist')
+const reviewedJobIds = ref<Set<string>>(new Set())
 
 // 5-Day Proximity Sanction Modal State
 const isWarningModalOpen = ref(false)
@@ -67,6 +79,7 @@ const jobListingForm = reactive({
   endTime: '22:00',
   compensationFee: null as number | null,
   description: '',
+  isPublic: true,
 })
 
 const refreshJobCode = async () => {
@@ -123,6 +136,7 @@ const resetJobForm = async () => {
   jobListingForm.endTime = '22:00'
   jobListingForm.compensationFee = null
   jobListingForm.description = ''
+  jobListingForm.isPublic = true
   jobSongLineupList.value = []
   isCreatingListing.value = false
   await refreshJobCode()
@@ -177,6 +191,7 @@ const fetchBusinessAndJobs = async () => {
           Status,
           Created_at,
           Requested_Song_Lineup,
+          Is_Public,
           APPLICATION (count)
         `)
         .eq('Posted_By_BUSINESS_ID', businessId.value)
@@ -184,6 +199,27 @@ const fetchBusinessAndJobs = async () => {
 
       if (!error && data) {
         jobListings.value = data
+
+        // Check if any completed jobs have already been reviewed
+        for (const job of data) {
+          if (job.Status === 'Completed' && currentAccountId.value) {
+            db.from('BOOKING_CONTRACT')
+              .select('Booking_ID')
+              .eq('Job_ID', job.Job_ID)
+              .not('Status', 'in', '("Cancelled","Declined")')
+              .limit(1)
+              .maybeSingle()
+              .then(({ data: c }: any) => {
+                if (c?.Booking_ID) {
+                  hasUserReviewed(c.Booking_ID, currentAccountId.value).then((already: boolean) => {
+                    if (already) {
+                      reviewedJobIds.value.add(job.Job_ID)
+                    }
+                  })
+                }
+              })
+          }
+        }
       }
     }
 
@@ -289,7 +325,8 @@ const handleSaveDraft = async () => {
       Description: jobListingForm.description || null,
       Requested_Song_Lineup: jobSongLineupList.value,
       Status: 'Draft',
-      Is_Rush_Booking: false
+      Is_Rush_Booking: false,
+      Is_Public: jobListingForm.isPublic
     }
 
     if (editingJobId.value) {
@@ -367,6 +404,18 @@ const handlePostJobListing = async () => {
 
     const isEditingActiveListing = !!editingJobId.value && editingJobStatus.value !== 'Draft'
 
+    if (isEditingActiveListing) {
+      const existingJob = jobListings.value.find(j => j.Job_ID === editingJobId.value)
+      if (existingJob && (isEventFinished(existingJob) || existingJob.Status === 'Completed')) {
+        submissionFeedback.value = {
+          status: 'error',
+          message: 'This gig has already ended/finished and cannot be edited. It must be marked as complete.'
+        }
+        isSubmittingJob.value = false
+        return
+      }
+    }
+
     const payload: any = {
       Posted_By_BUSINESS_ID: businessId.value,
       Job_Code: jobListingForm.jobId,
@@ -380,7 +429,8 @@ const handlePostJobListing = async () => {
       Description: jobListingForm.description,
       Requested_Song_Lineup: jobSongLineupList.value,
       Is_Rush_Booking: isRush,
-      Is_Late_Modification: isLateMod
+      Is_Late_Modification: isLateMod,
+      Is_Public: jobListingForm.isPublic
     }
 
     // Only set Status to Open if this is a new post or publishing a saved draft
@@ -496,6 +546,14 @@ const handlePostJobListing = async () => {
 
 // Edit an Active Listing
 const handleEditJobListing = (job: any) => {
+  if (isEventFinished(job) || job.Status === 'Completed') {
+    submissionFeedback.value = {
+      status: 'error',
+      message: 'This gig has already ended/finished and cannot be edited. Please mark it as complete.'
+    }
+    return
+  }
+
   editingJobId.value = job.Job_ID
   editingJobStatus.value = job.Status
   jobListingForm.jobId = job.Job_Code || generateFallbackJobCode()
@@ -507,6 +565,7 @@ const handleEditJobListing = (job: any) => {
   jobListingForm.endTime = job.End_Time || '22:00'
   jobListingForm.compensationFee = job.Compensation_Fee ? Number(job.Compensation_Fee) : null
   jobListingForm.description = job.Description || ''
+  jobListingForm.isPublic = job.Is_Public !== false
   jobSongLineupList.value = Array.isArray(job.Requested_Song_Lineup) ? [...job.Requested_Song_Lineup] : []
 
   isCreatingListing.value = true
@@ -528,6 +587,7 @@ const resumeDraft = (job: any) => {
   jobListingForm.endTime = job.End_Time || '22:00'
   jobListingForm.compensationFee = job.Compensation_Fee ? Number(job.Compensation_Fee) : null
   jobListingForm.description = job.Description || ''
+  jobListingForm.isPublic = job.Is_Public !== false
   jobSongLineupList.value = Array.isArray(job.Requested_Song_Lineup) ? [...job.Requested_Song_Lineup] : []
 
   isCreatingListing.value = true
@@ -566,9 +626,94 @@ const handleDeleteDraft = async (job: any) => {
 }
 
 // -----------------------------------------------------------------------------
+// Gig Completion & Mutual Reviews
+// -----------------------------------------------------------------------------
+const handleCompleteJobListing = async (job: any) => {
+  if (completingJobId.value) return
+  if (!window.confirm(`Mark gig "${job.Event_Title}" as completed? This will move it to your completed gigs and allow you and the performer to rate each other.`)) {
+    return
+  }
+
+  completingJobId.value = job.Job_ID
+  try {
+    await markJobListingCompleted(job.Job_ID)
+    submissionFeedback.value = {
+      status: 'success',
+      message: `Gig "${job.Event_Title}" marked as complete! You can now rate and review the performer.`
+    }
+    await fetchBusinessAndJobs()
+  } catch (err: any) {
+    console.error('Failed to complete job listing:', err)
+    submissionFeedback.value = {
+      status: 'error',
+      message: err.message || 'Failed to complete job listing.'
+    }
+  } finally {
+    completingJobId.value = null
+  }
+}
+
+const openReviewForJob = async (job: any) => {
+  try {
+    const { data: contract } = await db
+      .from('BOOKING_CONTRACT')
+      .select(`
+        Booking_ID,
+        Contract_Code,
+        Provider_Artist_ID,
+        Job_ID,
+        ARTIST:Provider_Artist_ID (
+          ARTIST_ID,
+          Artist_Type,
+          StageName:SOLO_ARTIST(Artist_Name),
+          BandName:BAND(Band_Name)
+        )
+      `)
+      .eq('Job_ID', job.Job_ID)
+      .not('Status', 'in', '("Cancelled","Declined")')
+      .order('Created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (contract) {
+      selectedBookingForReview.value = contract
+      selectedTargetArtistId.value = contract.Provider_Artist_ID
+      const artist = contract.ARTIST
+      selectedTargetName.value = artist?.StageName?.[0]?.Artist_Name || artist?.BandName?.[0]?.Band_Name || 'Performing Artist'
+      isReviewModalOpen.value = true
+    } else {
+      submissionFeedback.value = {
+        status: 'error',
+        message: 'No active contract or hired performer was found for this gig.'
+      }
+    }
+  } catch (e: any) {
+    console.error('Error opening review modal for job:', e)
+  }
+}
+
+const handleJobReviewSubmitted = () => {
+  if (selectedBookingForReview.value) {
+    reviewedJobIds.value.add(selectedBookingForReview.value.Job_ID)
+  }
+  isReviewModalOpen.value = false
+  submissionFeedback.value = {
+    status: 'success',
+    message: 'Your review has been submitted successfully!'
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Cancellation & 5-Day Proximity Warning Interception
 // -----------------------------------------------------------------------------
 const initiateCancelJob = (job: any) => {
+  if (isEventFinished(job) || job.Status === 'Completed') {
+    submissionFeedback.value = {
+      status: 'error',
+      message: 'This gig has already ended/finished and cannot be cancelled. Please mark it as complete.'
+    }
+    return
+  }
   targetListingForCancellation.value = job
   isWarningModalOpen.value = true
 }
@@ -576,6 +721,16 @@ const initiateCancelJob = (job: any) => {
 const handleConfirmCancellation = async (reason: string, isLateParam?: boolean) => {
   if (!targetListingForCancellation.value) return
   const job = targetListingForCancellation.value
+
+  if (isEventFinished(job) || job.Status === 'Completed') {
+    submissionFeedback.value = {
+      status: 'error',
+      message: 'This gig has already ended/finished and cannot be cancelled. Please mark it as complete.'
+    }
+    isWarningModalOpen.value = false
+    targetListingForCancellation.value = null
+    return
+  }
 
   const now = new Date()
   now.setHours(0, 0, 0, 0)
@@ -643,12 +798,9 @@ onMounted(() => {
     />
 
     <!-- Top Action Banner -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
       <div>
         <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">Business Job Listings</h1>
-        <p class="text-xs sm:text-sm text-gray-400 mt-1">
-          Post casting calls, manage open gig opportunities, and review applicant setlists for {{ businessName }}.
-        </p>
       </div>
 
       <button
@@ -815,6 +967,42 @@ onMounted(() => {
                 placeholder="e.g., Calle Z Bar & Grill, BGC, Taguig"
                 class="bg-transparent border-0 outline-none text-white text-sm font-medium placeholder-gray-500 w-full"
               />
+            </div>
+
+            <!-- Event Visibility (Public vs Private) -->
+            <div class="flex flex-col gap-2 p-3.5 bg-[#141416] border border-[#46464D]/60 rounded-xl">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">EVENT VISIBILITY</span>
+                <span
+                  class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full"
+                  :class="jobListingForm.isPublic ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-zinc-500/10 text-zinc-300 border border-zinc-500/20'"
+                >
+                  {{ jobListingForm.isPublic ? 'Broadcast to Live Gigs' : 'Private to Applicants' }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  @click="jobListingForm.isPublic = true"
+                  class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  :class="jobListingForm.isPublic ? 'bg-[#D0D4F7] text-[#0E0E10] shadow' : 'bg-white/5 text-gray-400 hover:text-white border border-[#3A3A3C]'"
+                >
+                  <Icon name="ic:baseline-public" class="text-sm" />
+                  <span>Public Event</span>
+                </button>
+                <button
+                  type="button"
+                  @click="jobListingForm.isPublic = false"
+                  class="px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  :class="!jobListingForm.isPublic ? 'bg-[#D0D4F7] text-[#0E0E10] shadow' : 'bg-white/5 text-gray-400 hover:text-white border border-[#3A3A3C]'"
+                >
+                  <Icon name="ic:baseline-lock" class="text-sm" />
+                  <span>Private Event</span>
+                </button>
+              </div>
+              <p class="text-[11px] text-gray-400 leading-normal">
+                {{ jobListingForm.isPublic ? 'Public events will show up in "Live Events / Gigs" under TONO discover and user/artist pages.' : 'Private events are only visible to your venue and applicant performers.' }}
+              </p>
             </div>
 
             <!-- Start Date & End Date -->
@@ -1064,10 +1252,19 @@ onMounted(() => {
           >
             <div class="flex items-start justify-between gap-3">
               <div>
-                <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">{{ job.Job_Code || 'JOB-LISTING' }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">{{ job.Job_Code || 'JOB-LISTING' }}</span>
+                  <span
+                    class="px-2 py-0.5 rounded-full text-[9px] font-mono font-medium flex items-center gap-1"
+                    :class="job.Is_Public !== false ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'"
+                  >
+                    <Icon :name="job.Is_Public !== false ? 'ic:baseline-public' : 'ic:baseline-lock'" class="text-xs" />
+                    <span>{{ job.Is_Public !== false ? 'Public' : 'Private' }}</span>
+                  </span>
+                </div>
                 <h3 class="text-lg font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ job.Event_Title }}</h3>
               </div>
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-wrap justify-end">
                 <span
                   v-if="job.Is_Rush_Booking"
                   class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1"
@@ -1075,12 +1272,34 @@ onMounted(() => {
                   <Icon name="ic:baseline-bolt" class="text-xs" />
                   <span>Rush</span>
                 </span>
+
+                <!-- Happening Now / Ongoing Badge -->
                 <span
+                  v-if="job.Status !== 'Completed' && isEventHappeningNow(job)"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 animate-pulse"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>Happening Now</span>
+                </span>
+
+                <!-- Finished / Ended Badge -->
+                <span
+                  v-else-if="job.Status !== 'Completed' && isEventFinished(job)"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1"
+                >
+                  <Icon name="ic:baseline-schedule" class="text-xs" />
+                  <span>Ended / Finished</span>
+                </span>
+
+                <!-- Regular Status Badge -->
+                <span
+                  v-else
                   class="px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold"
                   :class="{
                     'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': job.Status === 'Open',
                     'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20': job.Status === 'Filled',
-                    'bg-purple-500/10 text-purple-300 border border-purple-500/20': job.Status === 'Closed'
+                    'bg-purple-500/10 text-purple-300 border border-purple-500/20': job.Status === 'Closed',
+                    'bg-blue-500/10 text-blue-300 border border-blue-500/20': job.Status === 'Completed'
                   }"
                 >
                   {{ job.Status === 'Closed' ? 'Closed (Contract Active)' : job.Status }}
@@ -1109,37 +1328,65 @@ onMounted(() => {
             </div>
 
             <!-- Applicants Summary & Actions -->
-            <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 border-t border-[#2A2A2E] text-xs">
               <NuxtLink
                 :to="`/businessjobapp?jobId=${job.Job_ID}`"
-                class="flex items-center gap-1.5 text-[#D0D4F7] hover:text-white font-medium transition-colors"
+                class="inline-flex items-center gap-1.5 text-[#D0D4F7] hover:text-white font-medium transition-colors w-fit"
               >
                 <Icon name="ic:baseline-people" class="text-base" />
-                <span>{{ job.APPLICATION?.[0]?.count || 0 }} Applicants</span>
+                <span>{{ job.APPLICATION?.[0]?.count || 0 }} {{ (job.APPLICATION?.[0]?.count || 0) === 1 ? 'Applicant' : 'Applicants' }}</span>
               </NuxtLink>
 
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                <!-- Case 1: Ended / Finished and not completed -> ONLY "Mark as Complete" -->
                 <button
+                  v-if="job.Status !== 'Completed' && isEventFinished(job)"
                   type="button"
-                  @click="handleEditJobListing(job)"
-                  class="px-3.5 py-1.5 rounded-full text-xs font-medium border border-[#46464D] text-gray-300 hover:text-white hover:border-[#D0D4F7] hover:bg-white/5 transition-all cursor-pointer flex items-center gap-1.5"
+                  :disabled="completingJobId === job.Job_ID"
+                  @click="handleCompleteJobListing(job)"
+                  class="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-full text-xs font-semibold border border-emerald-500/40 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                 >
-                  <Icon name="ic:baseline-edit" class="text-xs text-[#D0D4F7]" />
-                  <span>Edit Listing</span>
+                  <Icon name="ic:round-check-circle" class="text-sm text-emerald-400" />
+                  <span>{{ completingJobId === job.Job_ID ? 'Completing...' : 'Mark as Complete' }}</span>
                 </button>
+
+                <!-- Case 2: Completed -> "Rate Performer" -->
                 <button
+                  v-else-if="job.Status === 'Completed'"
                   type="button"
-                  @click="initiateCancelJob(job)"
-                  class="px-3.5 py-1.5 rounded-full text-xs border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
+                  @click="openReviewForJob(job)"
+                  class="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-full text-xs font-semibold border border-amber-400/40 text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                 >
-                  Cancel Gig
+                  <Icon :name="reviewedJobIds.has(job.Job_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm text-amber-400" />
+                  <span>{{ reviewedJobIds.has(job.Job_ID) ? 'Reviewed' : 'Rate Performer' }}</span>
                 </button>
-                <NuxtLink
-                  :to="`/businessjobapp?jobId=${job.Job_ID}`"
-                  class="px-4 py-1.5 rounded-full text-xs font-bold bg-[#D0D4F7] hover:bg-white text-[#131315] transition-all cursor-pointer"
-                >
-                  View Applicants
-                </NuxtLink>
+
+                <!-- Case 3: Active / Upcoming / Ongoing (NOT finished) -> Edit, Cancel, View Applicants -->
+                <template v-else>
+                  <button
+                    type="button"
+                    @click="handleEditJobListing(job)"
+                    class="flex-1 sm:flex-initial justify-center px-3.5 py-1.5 rounded-full text-xs font-medium border border-[#46464D] text-gray-300 hover:text-white hover:border-[#D0D4F7] hover:bg-white/5 transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Icon name="ic:baseline-edit" class="text-xs text-[#D0D4F7]" />
+                    <span>Edit</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    @click="initiateCancelJob(job)"
+                    class="flex-1 sm:flex-initial justify-center px-3.5 py-1.5 rounded-full text-xs border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer flex items-center"
+                  >
+                    Cancel
+                  </button>
+
+                  <NuxtLink
+                    :to="`/businessjobapp?jobId=${job.Job_ID}`"
+                    class="w-full sm:w-auto justify-center px-4 py-1.5 rounded-full text-xs font-bold bg-[#D0D4F7] hover:bg-white text-[#131315] transition-all cursor-pointer inline-flex items-center text-center"
+                  >
+                    View Applicants
+                  </NuxtLink>
+                </template>
               </div>
             </div>
           </div>
@@ -1253,11 +1500,37 @@ onMounted(() => {
             </div>
             <h3 class="text-base font-bold text-white">{{ job.Event_Title }}</h3>
             <p class="text-xs text-gray-400">📅 {{ job.Start_Date }} • 📍 {{ job.Location }}</p>
+
+            <!-- Review Action for Completed Gigs in History -->
+            <div v-if="job.Status === 'Completed'" class="pt-2 border-t border-[#2A2A2E]/60 flex items-center justify-between">
+              <span class="text-[11px] text-gray-400">Gig completed</span>
+              <button
+                type="button"
+                :disabled="reviewedJobIds.has(job.Job_ID)"
+                @click="openReviewForJob(job)"
+                class="px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                :class="reviewedJobIds.has(job.Job_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
+              >
+                <Icon :name="reviewedJobIds.has(job.Job_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
+                <span>{{ reviewedJobIds.has(job.Job_ID) ? 'Reviewed' : 'Rate Performer' }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
     </div>
+
+    <!-- Review Modal for Rating Performers -->
+    <ReviewModal
+      :is-open="isReviewModalOpen"
+      :booking="selectedBookingForReview"
+      :reviewer-account-id="currentAccountId"
+      :target-artist-id="selectedTargetArtistId || undefined"
+      :target-name="selectedTargetName"
+      @close="isReviewModalOpen = false"
+      @submitted="handleJobReviewSubmitted"
+    />
 
   </div>
 </template>

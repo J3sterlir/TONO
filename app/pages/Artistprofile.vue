@@ -8,10 +8,15 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { validateImageFile } from '~/utils/imageOptimizer'
 import { getMilestoneInitials } from '~/utils/milestoneHelper'
 import { resolveSocialLink } from '~/utils/linkResolver'
+import { useTonoEvents } from '~/composables/useTonoEvents'
+import { useTonoReviews } from '~/composables/useTonoReviews'
+import { formatTimeRange12 } from '~/utils/formatTime'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile, resolveUserType } = useTonoAuth()
 const { uploadAvatar, uploadCover, isUploadingAvatar, isUploadingCover, uploadError } = useMediaUpload()
+const { isEventHappeningNow, isEventFinished } = useTonoEvents()
+const { hasUserReviewed } = useTonoReviews()
 
 const artistName = ref('Artist')
 const artistBio = ref('')
@@ -176,6 +181,10 @@ watch(
 onMounted(() => {
   if (import.meta.client) {
     window.addEventListener('click', closePostMenu)
+    // Update current time every 30s for gig completion allowance
+    completionClock = setInterval(() => {
+      currentTime.value = Date.now()
+    }, 30_000)
   }
 })
 
@@ -183,6 +192,10 @@ onBeforeUnmount(() => {
   unsubscribeFromPostsRealtime()
   if (import.meta.client) {
     window.removeEventListener('click', closePostMenu)
+    if (completionClock) {
+      clearInterval(completionClock)
+      completionClock = null
+    }
   }
 })
 
@@ -190,9 +203,211 @@ onBeforeUnmount(() => {
 const eventsLoading = ref(false)
 const yourEvents = ref<any[]>([])
 const pendingOffers = ref<any[]>([])
-const allArtistContracts = ref<any[]>([])
-const contractFilter = ref<'all' | 'pending' | 'confirmed' | 'cancelled'>('all')
-const gigsSubTab = ref<'all' | 'gigs' | 'contracts'>('all')
+
+// Search and Filter State
+const gigSearchQuery = ref('')
+const gigTypeFilter = ref<'all' | 'job' | 'direct'>('all')
+const gigStatusFilter = ref<'all' | 'active' | 'completed' | 'cancelled'>('all')
+const gigDateFilter = ref<'all' | 'upcoming' | 'past'>('all')
+const isFilterDropdownOpen = ref(false)
+
+const activeGigsCount = computed(() => {
+  return (yourEvents.value || []).filter((e: any) => ['Confirmed', 'Active'].includes(e.Status)).length
+})
+
+const completedGigsCount = computed(() => {
+  return (yourEvents.value || []).filter((e: any) => e.Status === 'Completed').length
+})
+
+const cancelledGigsCount = computed(() => {
+  return (yourEvents.value || []).filter((e: any) => ['Cancelled', 'Declined'].includes(e.Status)).length
+})
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (gigTypeFilter.value !== 'all') count++
+  if (gigStatusFilter.value !== 'all') count++
+  if (gigDateFilter.value !== 'all') count++
+  return count
+})
+
+const gigsContainerRef = ref<HTMLElement | null>(null)
+const gigsContainerMinHeight = ref<number>(500)
+
+// Helper to preserve scroll position and freeze container height during filter updates
+const preserveScrollOnFilter = () => {
+  if (typeof window === 'undefined') return
+  const currentScrollY = window.scrollY
+
+  if (gigsContainerRef.value) {
+    const currentHeight = gigsContainerRef.value.offsetHeight
+    if (currentHeight > 200) {
+      gigsContainerMinHeight.value = Math.max(gigsContainerMinHeight.value, currentHeight)
+    }
+  }
+
+  nextTick(() => {
+    window.scrollTo({ top: currentScrollY, behavior: 'instant' })
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: currentScrollY, behavior: 'instant' })
+    })
+  })
+}
+
+// Watch filters to preserve current scrolled viewport
+watch([gigTypeFilter, gigStatusFilter, gigDateFilter, gigSearchQuery], () => {
+  preserveScrollOnFilter()
+})
+
+// Reset min-height when switching away from gigs tab
+watch(activeTab, (newTab) => {
+  if (newTab !== 'gigs') {
+    gigsContainerMinHeight.value = 500
+  }
+})
+
+const hasActiveFilters = computed(() => {
+  return (
+    gigSearchQuery.value.trim() !== '' ||
+    gigTypeFilter.value !== 'all' ||
+    gigStatusFilter.value !== 'all' ||
+    gigDateFilter.value !== 'all'
+  )
+})
+
+const resetGigFilters = () => {
+  const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0
+  gigSearchQuery.value = ''
+  gigTypeFilter.value = 'all'
+  gigStatusFilter.value = 'all'
+  gigDateFilter.value = 'all'
+  nextTick(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: currentScrollY, behavior: 'instant' })
+    }
+  })
+}
+
+const filteredGigs = computed(() => {
+  return (yourEvents.value || []).filter((event: any) => {
+    // 1. Text Search (BK ID / Contract Code, Title, Venue, Client, Host)
+    if (gigSearchQuery.value.trim()) {
+      const q = gigSearchQuery.value.toLowerCase().trim()
+      const code = (event.Contract_Code || event.Booking_ID || '').toLowerCase()
+      const title = (event.JOB_LISTING?.Event_Title || 'Direct Booking Performance').toLowerCase()
+      const venue = (event.Venue_Location || event.JOB_LISTING?.Location || '').toLowerCase()
+      const client = (event.USER_ACCOUNT?.Username || '').toLowerCase()
+      const host = (event.BUSINESS_PROFILE?.Business_Name || event.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name || '').toLowerCase()
+      if (!code.includes(q) && !title.includes(q) && !venue.includes(q) && !client.includes(q) && !host.includes(q)) {
+        return false
+      }
+    }
+
+    // 2. Type Filter (Direct Booking vs Job Listing)
+    if (gigTypeFilter.value === 'job' && !event.Job_ID) return false
+    if (gigTypeFilter.value === 'direct' && event.Job_ID) return false
+
+    // 3. Status Filter (Active vs Completed vs Cancelled)
+    if (gigStatusFilter.value === 'active' && ['Completed', 'Cancelled', 'Declined'].includes(event.Status)) return false
+    if (gigStatusFilter.value === 'completed' && event.Status !== 'Completed') return false
+    if (gigStatusFilter.value === 'cancelled' && !['Cancelled', 'Declined'].includes(event.Status)) return false
+
+    // 4. Date Filter (Upcoming vs Past) - Cancelled events belong to the 'past' category
+    if (gigDateFilter.value !== 'all') {
+      const isPast = isEventFinished(event) || ['Cancelled', 'Declined', 'Completed'].includes(event.Status)
+      if (gigDateFilter.value === 'upcoming' && isPast) return false
+      if (gigDateFilter.value === 'past' && !isPast) return false
+    }
+
+    return true
+  })
+})
+
+// Booking Completion & Review State
+const completingBookingId = ref<string | null>(null)
+const completionFeedback = ref<{ status: 'success' | 'error'; message: string } | null>(null)
+const currentTime = ref(Date.now())
+let completionClock: ReturnType<typeof setInterval> | null = null
+
+const reviewedBookingIds = ref<Set<string>>(new Set())
+const isReviewModalOpen = ref(false)
+const selectedEventForReview = ref<any>(null)
+
+// Allow completion 30 minutes after scheduled end or once finished
+const canCompleteContract = (contract: any): boolean => {
+  if (!['Confirmed', 'Active'].includes(contract.Status)) return false
+  if (isEventFinished(contract)) return true
+
+  const endDate = contract.End_Date || contract.Start_Date || contract.Event_Date
+  const endTime = contract.End_Time
+
+  if (!endDate || !endTime) return false
+
+  const scheduledEnd = new Date(`${endDate}T${endTime}+08:00`)
+  const completionAvailableAt = scheduledEnd.getTime() + 30 * 60 * 1000
+
+  return (
+    !Number.isNaN(scheduledEnd.getTime()) &&
+    currentTime.value >= completionAvailableAt
+  )
+}
+
+const handleCompleteContract = async (contract: any) => {
+  if (completingBookingId.value || !canCompleteContract(contract)) return
+
+  const confirmed = window.confirm(
+    `Mark contract ${contract.Contract_Code || contract.Booking_ID} as completed?`
+  )
+  if (!confirmed) return
+
+  completingBookingId.value = contract.Booking_ID
+  completionFeedback.value = null
+
+  try {
+    const { data, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+
+    const accessToken = data.session?.access_token
+    if (!accessToken) throw new Error('Your session has expired. Please log in again.')
+
+    await $fetch('/api/bookings/complete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: {
+        bookingId: contract.Booking_ID
+      }
+    })
+
+    completionFeedback.value = {
+      status: 'success',
+      message: `Contract ${contract.Contract_Code || contract.Booking_ID} marked as completed successfully.`
+    }
+
+    await fetchArtistEvents()
+  } catch (err: any) {
+    console.error('Failed to complete artist booking:', err)
+    completionFeedback.value = {
+      status: 'error',
+      message: err.data?.statusMessage || err.statusMessage || err.message || 'Failed to complete booking.'
+    }
+  } finally {
+    completingBookingId.value = null
+  }
+}
+
+const openReviewForEvent = (event: any) => {
+  selectedEventForReview.value = event
+  isReviewModalOpen.value = true
+}
+
+const onReviewSubmitted = () => {
+  if (selectedEventForReview.value) {
+    reviewedBookingIds.value.add(selectedEventForReview.value.Booking_ID)
+  }
+  isReviewModalOpen.value = false
+}
 
 // Upcoming Events for Posts Tab Sidebar
 const upcomingEvents = computed(() => {
@@ -242,20 +457,6 @@ const upcomingEvents = computed(() => {
     })
 })
 
-const filteredContracts = computed(() => {
-  if (contractFilter.value === 'all') return allArtistContracts.value
-  if (contractFilter.value === 'pending') {
-    return allArtistContracts.value.filter(c => ['Pending_Artist_Approval', 'Pending', 'Draft'].includes(c.Status))
-  }
-  if (contractFilter.value === 'confirmed') {
-    return allArtistContracts.value.filter(c => ['Confirmed', 'Active', 'Completed'].includes(c.Status))
-  }
-  if (contractFilter.value === 'cancelled') {
-    return allArtistContracts.value.filter(c => ['Cancelled', 'Declined'].includes(c.Status))
-  }
-  return allArtistContracts.value
-})
-
 // Modal for Form 2 Contract Review
 const selectedContractForForm2 = ref<any | null>(null)
 const isForm2ModalOpen = ref(false)
@@ -271,7 +472,7 @@ const fetchArtistEvents = async () => {
   try {
     const db = supabase as any
 
-    // 1. Fetch Confirmed Events (Both Job-linked & Direct Contracts)
+    // 1. Fetch Confirmed & Completed Events (Both Job-linked & Direct Contracts)
     const { data: confirmedData, error: confirmedErr } = await db
       .from('BOOKING_CONTRACT')
       .select(`
@@ -290,7 +491,9 @@ const fetchArtistEvents = async () => {
         Song_Lineup_JSON,
         Required_Equipment,
         Status,
+        Is_Rush_Booking,
         Requester_Account_ID,
+        Provider_Business_ID,
         USER_ACCOUNT:Requester_Account_ID (
           Username,
           Profile_Picture
@@ -308,15 +511,36 @@ const fetchArtistEvents = async () => {
           Start_Time,
           End_Time,
           Compensation_Fee,
-          Description
+          Description,
+          Is_Public,
+          Posted_By_BUSINESS_ID,
+          BUSINESS_PROFILE:Posted_By_BUSINESS_ID (
+            Business_Name
+          )
         )
       `)
       .eq('Provider_Artist_ID', artistId.value)
-      .in('Status', ['Confirmed', 'Active'])
+      .in('Status', ['Confirmed', 'Active', 'Completed', 'Cancelled', 'Declined'])
       .order('Start_Date', { ascending: true })
 
     if (!confirmedErr && confirmedData) {
       yourEvents.value = confirmedData
+
+      // Check review status for completed events
+      const sessionUser = (await supabase.auth.getUser()).data.user
+      if (sessionUser?.id) {
+        const completedGigs = confirmedData.filter((e: any) => e.Status === 'Completed')
+        for (const gig of completedGigs) {
+          try {
+            const reviewed = await hasUserReviewed(gig.Booking_ID, sessionUser.id)
+            if (reviewed) {
+              reviewedBookingIds.value.add(gig.Booking_ID)
+            }
+          } catch (reErr) {
+            // Non-blocking
+          }
+        }
+      }
     }
 
     // 2. Fetch Pending Contract Offers (Form 2 Review Trigger)
@@ -338,46 +562,9 @@ const fetchArtistEvents = async () => {
         Song_Lineup_JSON,
         Required_Equipment,
         Status,
-        Requester_Account_ID,
-        BUSINESS_PROFILE:Provider_Business_ID (
-          Business_Name
-        ),
-        JOB_LISTING (
-          Job_ID,
-          Job_Code,
-          Event_Title,
-          Location
-        )
-      `)
-      .eq('Provider_Artist_ID', artistId.value)
-      .in('Status', ['Pending_Artist_Approval', 'Pending', 'Draft'])
-
-    if (offersData) {
-      pendingOffers.value = offersData
-    }
-
-    // 3. Fetch All Booking Contracts for this artist (Direct Bookings & Job Agreements)
-    const { data: allContractsData } = await db
-      .from('BOOKING_CONTRACT')
-      .select(`
-        Booking_ID,
-        Contract_Code,
-        Job_ID,
-        Booking_Type,
-        Start_Date,
-        End_Date,
-        Event_Date,
-        Start_Time,
-        End_Time,
-        Venue_Location,
-        Agreed_Fee,
-        Song_Lineup,
-        Song_Lineup_JSON,
-        Required_Equipment,
-        Status,
         Is_Rush_Booking,
-        Created_at,
         Requester_Account_ID,
+        Provider_Business_ID,
         USER_ACCOUNT:Requester_Account_ID (
           Username,
           Profile_Picture
@@ -389,14 +576,26 @@ const fetchArtistEvents = async () => {
           Job_ID,
           Job_Code,
           Event_Title,
-          Location
+          Location,
+          Start_Date,
+          End_Date,
+          Start_Time,
+          End_Time,
+          Compensation_Fee,
+          Description,
+          Is_Public,
+          Posted_By_BUSINESS_ID,
+          BUSINESS_PROFILE:Posted_By_BUSINESS_ID (
+            Business_Name
+          )
         )
       `)
       .eq('Provider_Artist_ID', artistId.value)
+      .in('Status', ['Pending_Artist_Approval', 'Pending', 'Draft'])
       .order('Created_at', { ascending: false })
 
-    if (allContractsData) {
-      allArtistContracts.value = allContractsData
+    if (offersData) {
+      pendingOffers.value = offersData
     }
   } catch (e) {
     console.error('Failed to load artist gigs:', e)
@@ -745,8 +944,7 @@ onMounted(async () => {
 
       if (route.query.contractId) {
         activeTab.value = 'gigs'
-        gigsSubTab.value = 'contracts'
-        const target = allArtistContracts.value.find(
+        const target = yourEvents.value.find(
           (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
         ) || pendingOffers.value.find(
           (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
@@ -872,8 +1070,7 @@ watch(
   (newContractId) => {
     if (newContractId) {
       activeTab.value = 'gigs'
-      gigsSubTab.value = 'contracts'
-      const target = allArtistContracts.value.find(
+      const target = yourEvents.value.find(
         (c: any) => c.Booking_ID === newContractId || c.Contract_Code === newContractId
       ) || pendingOffers.value.find(
         (c: any) => c.Booking_ID === newContractId || c.Contract_Code === newContractId
@@ -1442,7 +1639,7 @@ const handleLogout = async () => {
 
           <!-- Sticky Floating Banner for Active Editing Section -->
           <div v-if="activeEditingSection"
-            class="sticky top-20 z-40 w-full bg-[#131315]/95 backdrop-blur-md border border-[#46464D]/60 rounded-xl px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+            class="sticky top-20 z-10 w-full bg-[#131315]/95 backdrop-blur-md border border-[#46464D]/60 rounded-xl px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
             <div class="flex items-center gap-2.5">
               <span class="w-2.5 h-2.5 rounded-full bg-[#D0D4F7] animate-pulse"></span>
               <span class="text-xs font-mono tracking-wider uppercase text-gray-200 font-semibold">
@@ -1975,306 +2172,550 @@ const handleLogout = async () => {
           </div>
         </div>
 
-        <!-- Gigs Tab Content Container (Profile Only Shows Confirmed "Your Gigs") -->
-        <div v-else-if="activeTab === 'gigs'" class="w-full space-y-8">
+        <!-- Gigs Tab Content Container -->
+        <div v-else-if="activeTab === 'gigs'" class="w-full space-y-8 font-Sora">
 
-          <!-- PENDING OFFERS ALERT BANNER (Triggers Form 2 Artist Approval) -->
+          <!-- Booking Completion Feedback Banner -->
           <div
-            v-if="pendingOffers.length > 0"
-            class="p-5 rounded-2xl bg-amber-950/25 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in font-Sora"
+            v-if="completionFeedback"
+            class="p-4 rounded-xl border flex items-center justify-between gap-3 text-xs"
+            :class="completionFeedback.status === 'success'
+              ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+              : 'bg-red-950/30 border-red-500/40 text-red-200'"
           >
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-                <Icon name="ic:baseline-assignment-late" class="text-2xl text-amber-400 animate-pulse" />
-              </div>
-              <div>
-                <h4 class="text-sm font-bold text-white">
-                  You have {{ pendingOffers.length }} Booking Contract {{ pendingOffers.length === 1 ? 'Offer' : 'Offers' }} Pending!
-                </h4>
-                <p class="text-xs text-amber-300/80">
-                  Review terms, customize your song lineup, and confirm your performance agreement.
-                </p>
-              </div>
+            <div class="flex items-center gap-2">
+              <Icon :name="completionFeedback.status === 'success' ? 'ic:round-check-circle' : 'ic:baseline-error'" class="text-base" />
+              <span>{{ completionFeedback.message }}</span>
             </div>
-
             <button
               type="button"
-              @click="openForm2Modal(pendingOffers[0])"
-              class="px-5 py-2.5 rounded-full text-xs font-bold bg-amber-400 hover:bg-amber-300 text-black transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto shadow-md"
+              @click="completionFeedback = null"
+              class="text-gray-400 hover:text-white cursor-pointer"
             >
-              Review Form 2 Contract
+              <Icon name="ic:round-close" class="text-base" />
             </button>
           </div>
 
-          <!-- Sub-Section Switcher: All, Confirmed Gigs, Contracts & Proposals -->
-          <div class="flex items-center gap-2 border-b border-[#2A2A2E] pb-3">
-            <button
-              type="button"
-              @click="gigsSubTab = 'all'"
-              class="px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-              :class="gigsSubTab === 'all' ? 'bg-[#D0D4F7] text-[#131315]' : 'bg-[#1C1C1F] text-gray-400 hover:text-white border border-[#2A2A2E]'">
-              All
-            </button>
-            <button
-              type="button"
-              @click="gigsSubTab = 'gigs'"
-              class="px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-              :class="gigsSubTab === 'gigs' ? 'bg-[#D0D4F7] text-[#131315]' : 'bg-[#1C1C1F] text-gray-400 hover:text-white border border-[#2A2A2E]'">
-              <span>Your Gigs</span>
-              <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono" :class="gigsSubTab === 'gigs' ? 'bg-[#131315]/20 text-[#131315]' : 'bg-[#2A2A2E] text-gray-300'">
-                {{ yourEvents.length }}
-              </span>
-            </button>
-            <button
-              type="button"
-              @click="gigsSubTab = 'contracts'"
-              class="px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-              :class="gigsSubTab === 'contracts' ? 'bg-[#D0D4F7] text-[#131315]' : 'bg-[#1C1C1F] text-gray-400 hover:text-white border border-[#2A2A2E]'">
-              <span>Booking Contracts</span>
-              <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono" :class="gigsSubTab === 'contracts' ? 'bg-[#131315]/20 text-[#131315]' : 'bg-[#2A2A2E] text-gray-300'">
-                {{ allArtistContracts.length }}
-              </span>
-              <span v-if="pendingOffers.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-black animate-pulse">
-                {{ pendingOffers.length }} Action Required
-              </span>
-            </button>
-          </div>
-
-          <!-- ================================================================= -->
-          <!-- SECTION: "YOUR GIGS" (Deduplicated Job Listings vs Contracts)     -->
-          <!-- ================================================================= -->
-          <section v-if="gigsSubTab === 'all' || gigsSubTab === 'gigs'" class="space-y-4 font-Sora">
-            <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
-              <div>
-                <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Gigs</h2>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  Confirmed gigs from accepted job listings and direct client bookings.
-                </p>
+          <!-- DEDICATED TOP "PENDING OFFERS" SECTION (Only shown when pendingOffers.length > 0) -->
+          <section v-if="pendingOffers.length > 0" class="space-y-4 p-5 sm:p-6 rounded-2xl bg-amber-950/20 border border-amber-500/40 animate-in fade-in">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-500/20 pb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Icon name="ic:baseline-assignment-late" class="text-lg text-amber-400 animate-pulse" />
+                </div>
+                <div>
+                  <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <span>Pending Contract Offers</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-400 text-black">
+                      {{ pendingOffers.length }} Action Required
+                    </span>
+                  </h3>
+                  <p class="text-xs text-amber-300/80">
+                    Review terms, customize your song lineup, and sign your performance agreement.
+                  </p>
+                </div>
               </div>
-              <span class="text-xs font-mono text-[#D0D4F7] px-2.5 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
-                {{ yourEvents.length }} {{ yourEvents.length === 1 ? 'gig' : 'gigs' }}
-              </span>
             </div>
 
-            <div v-if="eventsLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
-              <div v-for="i in 2" :key="i" class="h-36 bg-[#1C1C1F] rounded-2xl border border-[#2A2A2E]"></div>
-            </div>
-
-            <div v-else-if="yourEvents.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
-              <Icon name="ic:outline-event-busy" class="text-3xl text-gray-500 mx-auto" />
-              <p class="text-sm font-semibold text-white">No Confirmed Gigs Yet</p>
-              <p class="text-xs text-gray-400">Audition for casting calls on the Events page or accept direct booking requests to fill your calendar.</p>
-            </div>
-
-            <!-- Deduplicated Gig Cards Grid -->
-            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <!-- Pending Offers Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div
-                v-for="event in yourEvents"
-                :key="event.Booking_ID"
-                class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-3 transition-all shadow-lg"
+                v-for="offer in pendingOffers"
+                :key="offer.Booking_ID"
+                class="bg-[#1C1C1F]/95 border border-amber-500/40 hover:border-amber-400 rounded-2xl p-5 space-y-3 transition-all shadow-lg flex flex-col justify-between"
               >
-                <!-- DEDUPLICATION LOGIC: If event has Job_ID, show Job Listing Card. Else show Contract Card -->
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <span class="text-[10px] font-mono uppercase tracking-wider text-[#D0D4F7]">
-                      {{ event.Job_ID ? 'JOB LISTING GIG' : 'DIRECT BOOKING CONTRACT' }}
-                    </span>
-                    <h3 class="text-base sm:text-lg font-bold text-white mt-0.5">
-                      {{ event.Job_ID ? event.JOB_LISTING?.Event_Title : 'Direct Booking Performance' }}
-                    </h3>
-                  </div>
-
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Confirmed
-                  </span>
-                </div>
-
-                <!-- Necessary Details Only -->
-                <div class="space-y-1.5 text-xs text-gray-300">
-                  <div class="flex items-center gap-2">
-                    <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
-                    <span>
-                      {{ event.Start_Date || event.Event_Date }}
-                      <span v-if="event.End_Date && event.End_Date !== event.Start_Date"> to {{ event.End_Date }}</span>
-                      <span v-if="event.Start_Time"> • {{ formatTimeRange12(event.Start_Time, event.End_Time) }}</span>
-                    </span>
-                  </div>
-
-                  <div class="flex items-center gap-2">
-                    <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
-                    <span class="truncate">{{ event.Job_ID ? (event.JOB_LISTING?.Location || event.Venue_Location) : event.Venue_Location }}</span>
-                  </div>
-
-                  <div v-if="!event.Job_ID && event.USER_ACCOUNT?.Username" class="flex items-center gap-2 text-gray-400">
-                    <Icon name="ic:baseline-person" class="text-[#D0D4F7] text-sm shrink-0" />
-                    <span>Booked by: {{ event.USER_ACCOUNT.Username }}</span>
-                  </div>
-                  <div v-else-if="event.BUSINESS_PROFILE?.Business_Name" class="flex items-center gap-2 text-gray-400">
-                    <Icon name="ic:baseline-storefront" class="text-[#D0D4F7] text-sm shrink-0" />
-                    <span>Host: {{ event.BUSINESS_PROFILE.Business_Name }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- ================================================================= -->
-          <!-- SECTION 2: "CONTRACTS & DIRECT BOOKING OFFERS"                    -->
-          <!-- ================================================================= -->
-          <section v-if="gigsSubTab === 'all' || gigsSubTab === 'contracts'" class="space-y-5 font-Sora pt-4 border-t border-[#2A2A2E]">
-            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-              <div>
-                <div class="flex items-center gap-2">
-                  <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Booking Contracts</h2>
-                  <span v-if="pendingOffers.length" class="px-2 py-0.5 rounded-full text-xs font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                    {{ pendingOffers.length }} Action Required
-                  </span>
-                </div>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  Direct bookings from clients, incoming proposals, and contracts from accepted gig listings.
-                </p>
-              </div>
-
-              <!-- Filter Tabs -->
-              <div class="flex items-center gap-1.5 bg-[#141416] p-1 rounded-xl border border-[#2A2A2E] self-start sm:self-auto">
-                <button
-                  type="button"
-                  @click="contractFilter = 'all'"
-                  class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                  :class="contractFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-semibold' : 'text-gray-400 hover:text-white'">
-                  All ({{ allArtistContracts.length }})
-                </button>
-                <button
-                  type="button"
-                  @click="contractFilter = 'pending'"
-                  class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1"
-                  :class="contractFilter === 'pending' ? 'bg-amber-400 text-[#131315] font-semibold' : 'text-amber-300 hover:text-amber-200'">
-                  <span>Pending</span>
-                  <span v-if="pendingOffers.length" class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                </button>
-                <button
-                  type="button"
-                  @click="contractFilter = 'confirmed'"
-                  class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                  :class="contractFilter === 'confirmed' ? 'bg-[#D0D4F7] text-[#131315] font-semibold' : 'text-gray-400 hover:text-white'">
-                  Confirmed
-                </button>
-                <button
-                  type="button"
-                  @click="contractFilter = 'cancelled'"
-                  class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer"
-                  :class="contractFilter === 'cancelled' ? 'bg-[#D0D4F7] text-[#131315] font-semibold' : 'text-gray-400 hover:text-white'">
-                  Past
-                </button>
-              </div>
-            </div>
-
-            <!-- Empty Contracts State -->
-            <div v-if="filteredContracts.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
-              <Icon name="ic:outline-description" class="text-3xl text-gray-500 mx-auto" />
-              <p class="text-sm font-semibold text-white">No Contracts Found</p>
-              <p class="text-xs text-gray-400">When clients book you directly or accept your job applications, contract offers appear here.</p>
-            </div>
-
-            <!-- Contracts Grid -->
-            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div
-                v-for="contract in filteredContracts"
-                :key="contract.Booking_ID"
-                class="bg-[#1C1C1F]/80 border rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg flex flex-col justify-between transition-all"
-                :class="['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status)
-                  ? 'border-amber-500/40 bg-amber-950/10 hover:border-amber-400'
-                  : 'border-[#2A2A2E] hover:border-[#46464D]'">
-                
                 <div class="space-y-3">
-                  <!-- Header: Code, Origin Pill & Status Badge -->
-                  <div class="flex items-start justify-between gap-3">
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <span
-                          class="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold"
-                          :class="!contract.Job_ID
-                            ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
-                            : 'bg-[#d0d4f6]/10 text-[#d0d4f6] border border-[#d0d4f6]/30'">
-                          {{ !contract.Job_ID ? 'Direct Client Booking' : 'Job Listing Contract' }}
-                        </span>
-                        <span v-if="contract.Is_Rush_Booking" class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-semibold">
-                          <Icon name="ic:baseline-bolt" class="text-xs" />
-                          <span>Rush</span>
-                        </span>
-                      </div>
-                      <h3 class="text-base font-bold text-white mt-1">
-                        {{ contract.Contract_Code || contract.Booking_ID }}
-                      </h3>
-                    </div>
-
-                    <span
-                      class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold"
-                      :class="['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status)
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
-                        : (['Confirmed', 'Active'].includes(contract.Status)
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-gray-500/15 text-gray-400 border border-gray-500/30')">
-                      {{ ['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status) ? 'Action Required' : contract.Status }}
-                    </span>
-                  </div>
-
-                  <!-- Client / Business Host Details -->
-                  <div class="flex items-center gap-3 p-3 rounded-xl bg-[#141416] border border-[#2A2A2E]">
-                    <div class="w-9 h-9 rounded-full bg-[#1E1E24] overflow-hidden border border-[#46464D]/50 shrink-0 flex items-center justify-center">
-                      <img
-                        v-if="contract.USER_ACCOUNT?.Profile_Picture"
-                        :src="contract.USER_ACCOUNT.Profile_Picture"
-                        :alt="contract.USER_ACCOUNT.Username"
-                        class="w-full h-full object-cover" />
-                      <Icon v-else name="ic:baseline-person" class="text-lg text-[#D0D4F7]" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <h4 class="text-sm font-semibold text-white truncate">
-                        {{ contract.BUSINESS_PROFILE?.Business_Name || contract.USER_ACCOUNT?.Username || 'Client Requester' }}
-                      </h4>
-                      <span class="text-[11px] text-gray-400 font-mono">
-                        {{ contract.BUSINESS_PROFILE?.Business_Name ? 'Business Host' : 'Direct Client' }}
+                  <!-- BK ID on Top + Action Required Badge -->
+                  <div class="flex items-center justify-between gap-2 border-b border-[#2A2A2E]/60 pb-2.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <Icon name="ic:outline-confirmation-number" class="text-xs text-amber-400 shrink-0" />
+                      <span class="text-xs font-mono font-bold text-white tracking-wide truncate">
+                        {{ offer.Contract_Code || offer.Booking_ID }}
                       </span>
                     </div>
-                    <div v-if="contract.Agreed_Fee" class="text-right shrink-0 font-mono">
-                      <span class="text-xs text-emerald-400 font-bold">₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
+
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <span v-if="offer.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Icon name="ic:baseline-bolt" class="text-xs" />
+                        <span>Rush</span>
+                      </span>
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                        Action Required
+                      </span>
                     </div>
                   </div>
 
-                  <!-- Schedule & Venue Details -->
+                  <!-- Origin & Title -->
+                  <div>
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold"
+                      :class="!offer.Job_ID ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30' : 'bg-[#d0d4f6]/10 text-[#d0d4f6] border border-[#d0d4f6]/30'">
+                      {{ !offer.Job_ID ? 'Direct Client Booking' : 'Job Listing Contract' }}
+                    </span>
+                    <h4 class="text-base font-bold text-white mt-1">
+                      {{ offer.Job_ID ? offer.JOB_LISTING?.Event_Title : 'Direct Booking Performance' }}
+                    </h4>
+                  </div>
+
+                  <!-- Details (Matching lines 2092-2101) -->
                   <div class="space-y-1.5 text-xs text-gray-300">
                     <div class="flex items-center gap-2">
                       <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
-                      <span>{{ contract.Start_Date || contract.Event_Date }} <span v-if="contract.Start_Time">• {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span></span>
+                      <span>
+                        {{ offer.Start_Date || offer.Event_Date }}
+                        <span v-if="offer.End_Date && offer.End_Date !== offer.Start_Date"> to {{ offer.End_Date }}</span>
+                        <span v-if="offer.Start_Time"> • {{ formatTimeRange12(offer.Start_Time, offer.End_Time) }}</span>
+                      </span>
                     </div>
+
                     <div class="flex items-center gap-2">
                       <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
-                      <span class="truncate">{{ contract.Venue_Location }}</span>
+                      <span class="truncate">{{ offer.Job_ID ? (offer.JOB_LISTING?.Location || offer.Venue_Location) : offer.Venue_Location }}</span>
+                    </div>
+
+                    <div v-if="!offer.Job_ID && offer.USER_ACCOUNT?.Username" class="flex items-center gap-2 text-gray-400">
+                      <Icon name="ic:baseline-person" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span>Booked by: {{ offer.USER_ACCOUNT.Username }}</span>
+                    </div>
+                    <div v-else-if="offer.BUSINESS_PROFILE?.Business_Name || offer.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name" class="flex items-center gap-2 text-gray-400">
+                      <Icon name="ic:baseline-storefront" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span>Host: {{ offer.BUSINESS_PROFILE?.Business_Name || offer.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name }}</span>
+                    </div>
+
+                    <div v-if="offer.Agreed_Fee" class="text-xs font-mono text-emerald-400 pt-1">
+                      <span>Agreed Fee: ₱{{ Number(offer.Agreed_Fee).toLocaleString() }}</span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Action CTA -->
-                <div class="pt-3 border-t border-[#2A2A2E] flex items-center justify-between">
-                  <span class="text-[11px] text-gray-500 font-mono">
-                    {{ ['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status) ? 'Awaiting your setlist & signature' : 'Agreement confirmed' }}
+                <!-- Footer: Review & Sign CTA -->
+                <div class="pt-3 border-t border-[#2A2A2E] flex items-center justify-between gap-3">
+                  <span class="text-[11px] text-gray-400 font-mono">
+                    Awaiting setlist &amp; signature
                   </span>
-
                   <button
                     type="button"
-                    @click="openForm2Modal(contract)"
-                    class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
-                    :class="['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status)
-                      ? 'bg-amber-400 hover:bg-amber-300 text-black'
-                      : 'bg-[#1E1E24] hover:bg-[#D0D4F7] text-gray-200 hover:text-[#131315] border border-[#3A3A3C]'">
-                    <Icon :name="['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status) ? 'ic:baseline-edit-note' : 'ic:outline-visibility'" class="text-base" />
-                    <span>{{ ['Pending_Artist_Approval', 'Pending', 'Draft'].includes(contract.Status) ? 'Review & Sign (Form 2)' : 'View Agreement' }}</span>
+                    @click="openForm2Modal(offer)"
+                    class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Icon name="ic:baseline-edit-note" class="text-base" />
+                    <span>Review &amp; Sign (Form 2)</span>
                   </button>
                 </div>
               </div>
             </div>
           </section>
+
+          <!-- ================================================================= -->
+          <!-- PRIMARY SECTION: "YOUR GIGS" (Unified Cards Feed)                 -->
+          <!-- ================================================================= -->
+          <section class="space-y-5">
+            <!-- Header & Overview -->
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+              <div>
+                <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Gigs</h2>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  Confirmed performances from accepted job listings and direct client bookings. Click any gig to view or update your agreement.
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2 self-start sm:self-auto">
+                <span class="text-xs font-mono text-[#D0D4F7] px-3 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
+                  {{ yourEvents.length }} {{ yourEvents.length === 1 ? 'total gig' : 'total gigs' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- SEARCH AND FILTER CONTROLS BAR -->
+            <div class="bg-[#141416] p-3 sm:p-4 rounded-2xl border border-[#2A2A2E] space-y-3">
+              <div class="flex items-center gap-2.5 sm:gap-3">
+                <!-- Search Input -->
+                <div class="relative flex-1 min-w-0">
+                  <Icon name="ic:baseline-search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base" />
+                  <input
+                    v-model="gigSearchQuery"
+                    type="text"
+                    placeholder="Search by BK ID, event title, venue, or client..."
+                    class="w-full pl-9 pr-9 py-2.5 rounded-xl bg-[#1C1C1F] border border-[#2A2A2E] text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#D0D4F7] transition-all"
+                  />
+                  <button
+                    v-if="gigSearchQuery"
+                    type="button"
+                    @click="gigSearchQuery = ''"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    <Icon name="ic:round-close" class="text-sm" />
+                  </button>
+                </div>
+
+                <!-- Single Filter Icon Dropdown Container -->
+                <div class="relative shrink-0">
+                  <button
+                    type="button"
+                    @click="isFilterDropdownOpen = !isFilterDropdownOpen"
+                    class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm select-none"
+                    :class="isFilterDropdownOpen || activeFilterCount > 0
+                      ? 'bg-[#D0D4F7] text-[#131315] border-[#D0D4F7]'
+                      : 'bg-[#1C1C1F] hover:bg-[#252529] text-gray-300 hover:text-white border-[#2A2A2E]'"
+                  >
+                    <Icon name="ic:outline-filter-alt" class="text-base shrink-0" />
+                    <span>Filter</span>
+                    <span
+                      v-if="activeFilterCount > 0"
+                      class="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0"
+                      :class="isFilterDropdownOpen || activeFilterCount > 0 ? 'bg-[#131315] text-[#D0D4F7]' : 'bg-[#D0D4F7] text-[#131315]'"
+                    >
+                      {{ activeFilterCount }}
+                    </span>
+                    <Icon
+                      name="ic:baseline-keyboard-arrow-down"
+                      class="text-sm transition-transform duration-200 shrink-0"
+                      :class="isFilterDropdownOpen ? 'rotate-180' : ''"
+                    />
+                  </button>
+
+                  <!-- Backdrop to close on click outside -->
+                  <div
+                    v-if="isFilterDropdownOpen"
+                    class="fixed inset-0 z-20"
+                    @click="isFilterDropdownOpen = false"
+                  ></div>
+
+                  <!-- Dropdown Popover -->
+                  <div
+                    v-if="isFilterDropdownOpen"
+                    @click.stop
+                    class="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#18181B] border border-[#2A2A2E] rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-2.5">
+                      <div class="flex items-center gap-1.5 text-white font-semibold text-xs">
+                        <Icon name="ic:outline-filter-alt" class="text-sm text-[#D0D4F7]" />
+                        <span>Filter Gigs</span>
+                      </div>
+                      <button
+                        v-if="hasActiveFilters"
+                        type="button"
+                        @click="resetGigFilters"
+                        class="text-[11px] font-mono text-gray-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Reset All
+                      </button>
+                    </div>
+
+                    <!-- 1. Type Filter -->
+                    <div class="space-y-1.5">
+                      <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                        Type
+                      </label>
+                      <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                        <button
+                          type="button"
+                          @click="gigTypeFilter = 'all'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                          :class="gigTypeFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          All
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigTypeFilter = 'job'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium truncate"
+                          :class="gigTypeFilter === 'job' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          Job Listing
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigTypeFilter = 'direct'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                          :class="gigTypeFilter === 'direct' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          Direct
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- 2. Status Filter -->
+                    <div class="space-y-1.5">
+                      <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                        Status
+                      </label>
+                      <div class="grid grid-cols-2 gap-1.5 bg-[#131315] p-1.5 rounded-xl border border-[#2A2A2E] text-xs">
+                        <button
+                          type="button"
+                          @click="gigStatusFilter = 'all'"
+                          class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                          :class="gigStatusFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          <span>All</span>
+                          <span class="text-[10px] font-mono opacity-80">{{ yourEvents.length }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigStatusFilter = 'active'"
+                          class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                          :class="gigStatusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-gray-400 hover:text-white'"
+                        >
+                          <span>Active</span>
+                          <span class="text-[10px] font-mono opacity-80">{{ activeGigsCount }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigStatusFilter = 'completed'"
+                          class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                          :class="gigStatusFilter === 'completed' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-gray-400 hover:text-white'"
+                        >
+                          <span>Completed</span>
+                          <span class="text-[10px] font-mono opacity-80">{{ completedGigsCount }}</span>
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigStatusFilter = 'cancelled'"
+                          class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                          :class="gigStatusFilter === 'cancelled' ? 'bg-red-500/20 text-red-300 font-bold border border-red-500/30' : 'text-gray-400 hover:text-white'"
+                        >
+                          <span>Cancelled</span>
+                          <span class="text-[10px] font-mono opacity-80">{{ cancelledGigsCount }}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- 3. Date Filter -->
+                    <div class="space-y-1.5">
+                      <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                        Date
+                      </label>
+                      <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                        <button
+                          type="button"
+                          @click="gigDateFilter = 'all'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                          :class="gigDateFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          All Dates
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigDateFilter = 'upcoming'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                          :class="gigDateFilter === 'upcoming' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          Upcoming
+                        </button>
+                        <button
+                          type="button"
+                          @click="gigDateFilter = 'past'"
+                          class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                          :class="gigDateFilter === 'past' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                        >
+                          Past
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Active Filter Summary & Done -->
+                    <div class="pt-2 border-t border-[#2A2A2E] flex items-center justify-between">
+                      <span class="text-[11px] text-gray-400 font-mono">
+                        {{ filteredGigs.length }} {{ filteredGigs.length === 1 ? 'gig' : 'gigs' }}
+                      </span>
+                      <button
+                        type="button"
+                        @click="isFilterDropdownOpen = false"
+                        class="px-3 py-1 rounded-lg bg-[#2A2A2E] hover:bg-[#3A3A3E] text-white text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Reset Button (Visible if active filters) -->
+                <button
+                  v-if="hasActiveFilters"
+                  type="button"
+                  @click="resetGigFilters"
+                  class="px-3 py-2.5 rounded-xl text-xs font-medium text-gray-400 hover:text-white bg-[#1C1C1F] hover:bg-[#2A2A2E] transition-all cursor-pointer flex items-center gap-1 border border-[#2A2A2E] shrink-0"
+                  title="Reset all filters"
+                >
+                  <Icon name="ic:round-refresh" class="text-sm" />
+                  <span class="hidden sm:inline">Reset</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Gigs Results Container with stable viewport min-height to prevent jumping -->
+            <div
+              ref="gigsContainerRef"
+              class="relative"
+              :style="{ minHeight: `${gigsContainerMinHeight}px`, overflowAnchor: 'none' }"
+            >
+              <!-- Loading State -->
+              <div v-if="eventsLoading" class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
+                <div v-for="i in 2" :key="i" class="h-44 bg-[#1C1C1F] rounded-2xl border border-[#2A2A2E]"></div>
+              </div>
+
+              <!-- Empty State -->
+              <div v-else-if="filteredGigs.length === 0" class="text-center py-16 px-4 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3 flex flex-col items-center justify-center min-h-80">
+                <Icon name="ic:outline-event-busy" class="text-3xl text-gray-500 mx-auto" />
+                <p class="text-sm font-semibold text-white">
+                  {{ hasActiveFilters ? 'No Gigs Match Your Filter Criteria' : 'No Confirmed Gigs Yet' }}
+                </p>
+                <p class="text-xs text-gray-400 max-w-md">
+                  {{ hasActiveFilters ? 'Try adjusting your search query or resetting filters.' : 'Audition for casting calls on the Events page or accept direct booking requests to fill your calendar.' }}
+                </p>
+                <button
+                  v-if="hasActiveFilters"
+                  type="button"
+                  @click="resetGigFilters"
+                  class="mt-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-[#2A2A2E] text-white hover:bg-[#3A3A3E] transition-all cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              </div>
+
+            <!-- Gig Cards Grid -->
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div
+                v-for="event in filteredGigs"
+                :key="event.Booking_ID"
+                @click="openForm2Modal(event)"
+                class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] hover:bg-[#1E1E23] rounded-2xl p-5 sm:p-6 space-y-3.5 transition-all shadow-lg cursor-pointer group flex flex-col justify-between"
+              >
+                <div class="space-y-3">
+                  <!-- TOP OF CARD: BK ID & Status Badges -->
+                  <div class="flex items-center justify-between gap-2 border-b border-[#2A2A2E]/60 pb-2.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <Icon name="ic:outline-confirmation-number" class="text-xs text-[#D0D4F7] shrink-0" />
+                      <span class="text-xs font-mono font-bold text-white tracking-wide truncate group-hover:text-[#D0D4F7] transition-colors">
+                        {{ event.Contract_Code || event.Booking_ID }}
+                      </span>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                      <span v-if="event.Job_ID && event.JOB_LISTING?.Is_Public === false" class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-700/40 text-gray-300 border border-gray-600/50">
+                        Private
+                      </span>
+                      <span v-if="event.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                        <Icon name="ic:baseline-bolt" class="text-xs" />
+                        <span>Rush</span>
+                      </span>
+                      <span v-if="event.Status === 'Cancelled' || event.Status === 'Declined'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+                        <Icon name="ic:round-cancel" class="text-xs" />
+                        <span>Cancelled</span>
+                      </span>
+                      <span v-else-if="event.Status === 'Completed'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Completed ✓
+                      </span>
+                      <span v-else-if="isEventHappeningNow(event)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span>Happening Now</span>
+                      </span>
+                      <span v-else-if="isEventFinished(event)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        Ended / Finished
+                      </span>
+                      <span v-else class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Confirmed
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Origin Pill & Event Title -->
+                  <div>
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold"
+                      :class="!event.Job_ID
+                        ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                        : 'bg-[#d0d4f6]/10 text-[#d0d4f6] border border-[#d0d4f6]/30'">
+                      {{ !event.Job_ID ? 'Direct Client Booking' : 'Job Listing Gig' }}
+                    </span>
+                    <h3 class="text-base sm:text-lg font-bold text-white mt-1 group-hover:text-[#D0D4F7] transition-colors">
+                      {{ event.Job_ID ? event.JOB_LISTING?.Event_Title : 'Direct Booking Performance' }}
+                    </h3>
+                  </div>
+
+                  <!-- Necessary Details Only (Pattern lines 2092-2101) -->
+                  <div class="space-y-1.5 text-xs text-gray-300">
+                    <div class="flex items-center gap-2">
+                      <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span>
+                        {{ event.Start_Date || event.Event_Date }}
+                        <span v-if="event.End_Date && event.End_Date !== event.Start_Date"> to {{ event.End_Date }}</span>
+                        <span v-if="event.Start_Time"> • {{ formatTimeRange12(event.Start_Time, event.End_Time) }}</span>
+                      </span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span class="truncate">{{ event.Job_ID ? (event.JOB_LISTING?.Location || event.Venue_Location) : event.Venue_Location }}</span>
+                    </div>
+
+                    <div v-if="!event.Job_ID && event.USER_ACCOUNT?.Username" class="flex items-center gap-2 text-gray-400">
+                      <Icon name="ic:baseline-person" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span>Booked by: {{ event.USER_ACCOUNT.Username }}</span>
+                    </div>
+                    <div v-else-if="event.BUSINESS_PROFILE?.Business_Name || event.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name" class="flex items-center gap-2 text-gray-400">
+                      <Icon name="ic:baseline-storefront" class="text-[#D0D4F7] text-sm shrink-0" />
+                      <span>Host: {{ event.BUSINESS_PROFILE?.Business_Name || event.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name }}</span>
+                    </div>
+
+                    <div v-if="event.Agreed_Fee" class="text-xs font-mono text-emerald-400 pt-0.5">
+                      <span>Agreed Fee: ₱{{ Number(event.Agreed_Fee).toLocaleString() }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer Quick Actions (@click.stop) -->
+                <div class="pt-3 border-t border-[#2A2A2E] flex flex-wrap items-center justify-between gap-3" @click.stop>
+                  <template v-if="event.Status === 'Cancelled' || event.Status === 'Declined'">
+                    <span class="text-[11px] text-red-400/80 font-mono flex items-center gap-1.5">
+                      <span>Booking Cancelled</span>
+                    </span>
+                    <button
+                      type="button"
+                      @click="openForm2Modal(event)"
+                      class="px-3.5 py-1.5 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 transition-all cursor-pointer text-xs font-medium"
+                    >
+                      View Agreement
+                    </button>
+                  </template>
+
+                  <template v-else-if="event.Status === 'Completed'">
+                    <span class="text-[11px] text-gray-400 font-mono">
+                      Performance concluded
+                    </span>
+                    <button
+                      type="button"
+                      :disabled="reviewedBookingIds.has(event.Booking_ID)"
+                      @click="openReviewForEvent(event)"
+                      class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                      :class="reviewedBookingIds.has(event.Booking_ID)
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default'
+                        : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
+                    >
+                      <Icon :name="reviewedBookingIds.has(event.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
+                      <span>{{ reviewedBookingIds.has(event.Booking_ID) ? 'Reviewed ✓' : 'Rate Host / Client' }}</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <span class="text-[10px] text-gray-400">
+                      Available when event ends or 30m after scheduled time
+                    </span>
+                    <button
+                      type="button"
+                      :disabled="!canCompleteContract(event) || completingBookingId !== null"
+                      @click="handleCompleteContract(event)"
+                      class="px-3.5 py-1.5 rounded-full border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium"
+                    >
+                      {{ completingBookingId === event.Booking_ID ? 'Completing...' : 'Mark as Completed' }}
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         </div>
 
@@ -2594,6 +3035,22 @@ const handleLogout = async () => {
       @close="isForm2ModalOpen = false"
       @accepted="fetchArtistEvents"
       @rejected="fetchArtistEvents"
+      @updated="fetchArtistEvents"
+    />
+
+    <!-- Review Modal for Rating Venue Hosts & Direct Clients -->
+    <ReviewModal
+      :is-open="isReviewModalOpen"
+      :booking-id="selectedEventForReview?.Booking_ID"
+      :contract-code="selectedEventForReview?.Contract_Code"
+      :event-title="selectedEventForReview?.Job_ID ? selectedEventForReview?.JOB_LISTING?.Event_Title : 'Performance Gig'"
+      :event-date="selectedEventForReview?.Start_Date || selectedEventForReview?.Event_Date"
+      :target-name="selectedEventForReview?.BUSINESS_PROFILE?.Business_Name || selectedEventForReview?.JOB_LISTING?.BUSINESS_PROFILE?.Business_Name || selectedEventForReview?.USER_ACCOUNT?.Username || 'Host / Client'"
+      :target-role="selectedEventForReview?.BUSINESS_PROFILE || selectedEventForReview?.JOB_LISTING?.BUSINESS_PROFILE ? 'Venue Host' : 'Client'"
+      :target-business-id="selectedEventForReview?.Provider_Business_ID || selectedEventForReview?.JOB_LISTING?.Posted_By_BUSINESS_ID || null"
+      :target-account-id="selectedEventForReview?.Requester_Account_ID || null"
+      @close="isReviewModalOpen = false"
+      @submitted="onReviewSubmitted"
     />
 
     <!-- Artist Create Post Modal -->

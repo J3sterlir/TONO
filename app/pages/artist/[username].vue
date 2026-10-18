@@ -36,6 +36,14 @@ const closePostModal = () => {
 const currentUser = useSupabaseUser()
 const { fetchCurrentUserProfile } = useTonoAuth()
 const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
+const isRoleLoading = ref(true)
+
+const canBook = computed(() => {
+  if (isOwner.value) return false
+  if (currentUser.value && isRoleLoading.value) return false
+  if (currentUserRole.value === 'artist') return false
+  return true
+})
 
 // Share Toast notification state
 const isCopied = ref(false)
@@ -85,6 +93,11 @@ const isBookingModalOpen = ref(false)
 const bookingSuccessToast = ref('')
 
 useModalScrollLock(isBookingModalOpen)
+
+const openBookingModal = () => {
+  if (!canBook.value) return
+  isBookingModalOpen.value = true
+}
 
 const handleBookingSubmit = (payload: any) => {
   bookingSuccessToast.value = `Booking contract offer ${payload?.Contract_Code || ''} sent to ${displayName.value}!`
@@ -497,7 +510,26 @@ const resolvedSocialLinks = computed(() => {
 })
 
 // Upcoming Events for Posts Tab Sidebar
-const upcomingEvents = computed(() => {
+// Time formatting helper for tour dates
+const formatGigTime = (timeStr?: string | null) => {
+  if (!timeStr) return ''
+  try {
+    const clean = timeStr.trim()
+    if (!clean) return ''
+    const [hh, mm] = clean.split(':')
+    if (!hh) return timeStr
+    const h = parseInt(hh, 10)
+    if (isNaN(h)) return timeStr
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const displayH = h % 12 || 12
+    return `${displayH}:${mm || '00'} ${ampm}`
+  } catch {
+    return timeStr
+  }
+}
+
+// All Upcoming Confirmed Gigs for Gigs Tab & Sidebar
+const allUpcomingGigs = computed(() => {
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
@@ -511,7 +543,6 @@ const upcomingEvents = computed(() => {
       const db = (b.Start_Date || b.Event_Date || b.JOB_LISTING?.Start_Date || '').split('T')[0]
       return da.localeCompare(db)
     })
-    .slice(0, 4)
     .map((e: any) => {
       const rawDate = e.Start_Date || e.Event_Date || e.JOB_LISTING?.Start_Date || ''
       let day = '--'
@@ -526,25 +557,41 @@ const upcomingEvents = computed(() => {
         if (y && m && d) {
           const dateObj = new Date(y, m - 1, d)
           day = String(dateObj.getDate())
-          month = dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase()
+          month = dateObj.toLocaleString('en-US', { month: 'short' })
         }
       }
 
-      const title = e.JOB_LISTING?.Event_Title || (e.Booking_Type === 'Direct' ? 'Direct Booking' : 'Live Performance')
-      const location = e.Venue_Location || e.JOB_LISTING?.Location || e.BUSINESS_PROFILE?.Business_Address || e.BUSINESS_PROFILE?.Business_Name || (artistCity.value || 'Venue TBD')
+      // Location / City for the top bold title (matching reference image)
+      const venueOrCity =
+        e.Venue_Location ||
+        e.JOB_LISTING?.Location ||
+        e.BUSINESS_PROFILE?.Business_Address ||
+        e.BUSINESS_PROFILE?.Business_Name ||
+        (artistCity.value ? `${artistCity.value}` : 'Venue TBA')
+
+      // Event title / Lineup / Description for subtitle (matching reference image)
+      const eventTitle =
+        e.JOB_LISTING?.Event_Title ||
+        (e.Booking_Type === 'Direct' ? 'Direct Booking Performance' : 'Live Show')
+
+      const time = e.Start_Time ? formatGigTime(e.Start_Time) : ''
 
       return {
         id: e.Booking_ID || e.Contract_Code || Math.random().toString(),
         day,
         month,
-        title,
-        location,
+        venueOrCity,
+        eventTitle,
+        time,
       }
     })
 })
 
+// Top 4 preview for Posts tab sidebar
+const upcomingEvents = computed(() => allUpcomingGigs.value.slice(0, 4))
+
 // Tab Navigation
-const activeTab = ref<'posts' | 'calendar' | 'portfolio' | 'contact' | 'members'>('posts')
+const activeTab = ref<'posts' | 'gigs' | 'portfolio' | 'reviews' | 'contact' | 'members'>('posts')
 
 // Fallback preview URL helper
 const fallbackShareImage = 'https://tono.ph/images/tono-og-cover.jpg'
@@ -592,9 +639,12 @@ onMounted(async () => {
       }
     } catch {
       currentUserRole.value = 'user'
+    } finally {
+      isRoleLoading.value = false
     }
   } else {
     currentUserRole.value = 'guest'
+    isRoleLoading.value = false
   }
 })
 
@@ -890,13 +940,18 @@ const isScrolled = computed(() => scrollY.value > 200)
               </span>
             </div>
 
-            <div v-if="artistCity" class="flex items-center gap-1.5 text-xs text-gray-300 mt-0.5">
-              <Icon name="ic:baseline-location-on" class="text-sm text-[#D0D4F7]" />
-              <span>{{ artistCity }}{{ artistBarangay ? ' • ' + artistBarangay : '' }}</span>
+            <div class="flex items-center gap-2 text-xs text-gray-300 mt-0.5 flex-wrap">
+              <div v-if="artistCity" class="flex items-center gap-1.5">
+                <Icon name="ic:baseline-location-on" class="text-sm text-[#D0D4F7]" />
+                <span>{{ artistCity }}{{ artistBarangay ? ' • ' + artistBarangay : '' }}</span>
+              </div>
+              <span v-if="artistCity" class="text-gray-500">•</span>
+              <RatingStars :target-artist-id="artistRecord?.ARTIST_ID" :inline="true" />
             </div>
 
             <div class="flex items-center gap-3 mt-3 flex-wrap">
-              <div @click="isBookingModalOpen = true"
+              <!-- Book Button (Hidden for Artists and Owner, Visible for Users, Businesses & Guests) -->
+              <div v-if="canBook" @click="openBookingModal"
                 class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full font-Geist cursor-pointer transition-colors shadow-lg group">
                 <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
                 <button class="font-medium cursor-pointer">BOOK</button>
@@ -927,6 +982,40 @@ const isScrolled = computed(() => scrollY.value > 200)
               </span>
             </button>
 
+            <!-- Gigs Tab (Tour Dates & Live Performances) -->
+            <button @click="activeTab = 'gigs'" class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'gigs' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+              <span class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'gigs' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+                Gigs
+              </span>
+            </button>
+
+            <button @click="activeTab = 'portfolio'" class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'portfolio' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+              <span class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'portfolio' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+                Portfolio
+              </span>
+            </button>
+
+            <!-- Reviews Tab -->
+            <button @click="activeTab = 'reviews'" class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'reviews' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+              <span class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'reviews' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+                Reviews
+              </span>
+            </button>
+
+            <button @click="activeTab = 'contact'" class="font-Sora cursor-pointer transition-colors"
+              :class="activeTab === 'contact' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
+              <span class="inline-block py-4 sm:py-5"
+                :class="activeTab === 'contact' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
+                Contact
+              </span>
+            </button>
+
             <!-- Members Tab (Only for Band artists) -->
             <button
               v-if="artistTypeLabel === 'Band'"
@@ -939,30 +1028,6 @@ const isScrolled = computed(() => scrollY.value > 200)
                 :class="activeTab === 'members' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''"
               >
                 Members
-              </span>
-            </button>
-
-            <button @click="activeTab = 'calendar'" class="font-Sora cursor-pointer transition-colors"
-              :class="activeTab === 'calendar' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span class="inline-block py-4 sm:py-5"
-                :class="activeTab === 'calendar' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
-                Calendar
-              </span>
-            </button>
-
-            <button @click="activeTab = 'portfolio'" class="font-Sora cursor-pointer transition-colors"
-              :class="activeTab === 'portfolio' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span class="inline-block py-4 sm:py-5"
-                :class="activeTab === 'portfolio' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
-                Portfolio
-              </span>
-            </button>
-
-            <button @click="activeTab = 'contact'" class="font-Sora cursor-pointer transition-colors"
-              :class="activeTab === 'contact' ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'">
-              <span class="inline-block py-4 sm:py-5"
-                :class="activeTab === 'contact' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
-                Contact
               </span>
             </button>
           </div>
@@ -1094,7 +1159,7 @@ const isScrolled = computed(() => scrollY.value > 200)
                   <div
                     v-for="event in upcomingEvents"
                     :key="event.id"
-                    @click="activeTab = 'calendar'"
+                    @click="activeTab = 'gigs'"
                     class="flex items-center gap-3 sm:gap-4 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
                   >
                     <div
@@ -1107,8 +1172,8 @@ const isScrolled = computed(() => scrollY.value > 200)
                     </div>
 
                     <div class="flex flex-col min-w-0">
-                      <h4 class="font-medium text-sm sm:text-base text-white truncate">{{ event.title }}</h4>
-                      <p class="text-xs text-gray-400 truncate">{{ event.location }}</p>
+                      <h4 class="font-medium text-sm sm:text-base text-white truncate">{{ event.venueOrCity }}</h4>
+                      <p class="text-xs text-gray-400 truncate">{{ event.eventTitle }}</p>
                     </div>
                   </div>
                 </template>
@@ -1123,28 +1188,14 @@ const isScrolled = computed(() => scrollY.value > 200)
               </div>
             </div>
 
-            <button @click="activeTab = 'calendar'"
+            <button @click="activeTab = 'gigs'"
               class="w-full flex items-center justify-center p-3 border rounded-lg border-[#D0D4F7]/60 hover:border-[#D0D4F7] hover:bg-[#D0D4F7]/10 font-Geist font-medium text-xs sm:text-sm text-[#D0D4F7] transition-all cursor-pointer">
-              <span>VIEW ALL EVENTS</span>
+              <span>VIEW ALL GIGS</span>
             </button>
           </aside>
         </div>
 
-        <!-- 2. Calendar Tab Content Container -->
-        <div v-else-if="activeTab === 'calendar'" class="w-full">
-          <ArtistGigCalendar v-if="artistRecord?.ARTIST_ID" :artist-id="artistRecord.ARTIST_ID" :is-owner="isOwner" />
-          <div v-else
-            class="w-full min-h-100 border border-[#46464D]/40 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-[#131315]/50">
-            <div
-              class="w-14 h-14 rounded-full bg-[#1E1E24] border border-[#46464D]/50 flex items-center justify-center mb-4">
-              <Icon name="ic:outline-calendar-month" class="text-2xl text-[#D0D4F7]" />
-            </div>
-            <h3 class="font-Sora text-lg font-semibold text-white mb-2">Gig & Performance Schedule</h3>
-            <p class="text-sm text-gray-400 max-w-md">
-              Gig schedule is currently unavailable.
-            </p>
-          </div>
-        </div>
+
 
         <!-- 3. Portfolio Tab Content Container (Read-Only Exact Layout) -->
         <div v-else-if="activeTab === 'portfolio'" class="w-full flex flex-col gap-6 sm:gap-8">
@@ -1454,6 +1505,74 @@ const isScrolled = computed(() => scrollY.value > 200)
               {{ displayName }} has not yet listed their active members.
             </p>
           </div>
+        </div>
+
+        <!-- Gigs Tab Content (Styled like Tour Dates / Reference Image) -->
+        <div v-else-if="activeTab === 'gigs'" class="w-full space-y-6">
+          <div class="border-b border-[#2A2A2E] pb-3">
+            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight font-Sora">Live Gigs &amp; Tour Dates</h2>
+            <p class="text-xs sm:text-sm text-gray-400 mt-1">
+              Confirmed upcoming performances and scheduled live shows for {{ displayName }}.
+            </p>
+          </div>
+
+          <!-- Empty State -->
+          <div
+            v-if="allUpcomingGigs.length === 0"
+            class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2"
+          >
+            <Icon name="ic:outline-event-busy" class="text-4xl text-gray-500 mx-auto" />
+            <h3 class="text-base font-semibold text-white">No Upcoming Public Gigs</h3>
+            <p class="text-xs text-gray-400">Check back soon for newly scheduled performances and live dates.</p>
+          </div>
+
+          <!-- Tour Dates / Gigs List (Matching Reference Image) -->
+          <div v-else class="divide-y divide-[#2A2A2E]/70 rounded-2xl bg-[#131315]/60 border border-[#2A2A2E]/60 overflow-hidden">
+            <div
+              v-for="ev in allUpcomingGigs"
+              :key="ev.id"
+              class="flex items-center justify-between py-4 sm:py-5 px-4 sm:px-6 hover:bg-white/3 transition-colors gap-4 sm:gap-6"
+            >
+              <!-- Left Column: Date (Month / Day) -->
+              <div class="w-12 sm:w-16 shrink-0 flex flex-col leading-tight">
+                <span class="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wider font-Sora">
+                  {{ ev.month }}
+                </span>
+                <span class="text-xl sm:text-2xl font-bold text-white font-Sora mt-0.5">
+                  {{ ev.day }}
+                </span>
+              </div>
+
+              <!-- Middle Column: City/Venue (Bold) & Event/Lineup (Lighter) -->
+              <div class="flex-1 min-w-0">
+                <h4 class="text-base sm:text-lg font-bold text-white truncate font-Sora">
+                  {{ ev.venueOrCity }}
+                </h4>
+                <p class="text-xs sm:text-sm text-gray-400 truncate mt-0.5 font-normal">
+                  {{ ev.eventTitle }}
+                </p>
+              </div>
+
+              <!-- Right Column: Time -->
+              <div class="shrink-0 text-right">
+                <span class="text-xs sm:text-sm text-gray-300 font-medium font-mono">
+                  {{ ev.time || 'TBA' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reviews Tab Content -->
+        <div v-else-if="activeTab === 'reviews'" class="space-y-6">
+          <div class="border-b border-[#2A2A2E] pb-3">
+            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Client Testimonials &amp; Reviews</h2>
+            <p class="text-xs sm:text-sm text-gray-400 mt-1">
+              Verified feedback and ratings from venues and clients who have booked {{ displayName }}.
+            </p>
+          </div>
+
+          <ReviewsList :target-artist-id="artistRecord?.ARTIST_ID" />
         </div>
       </main>
 

@@ -59,29 +59,36 @@ const businessId = ref<string | null>(null)
 const isProfileLoaded = ref(false)
 
 // Slot Locking State (Realtime)
-const bookedDatesList = ref<string[]>([])
+interface BookedSlot {
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  status: string
+}
+const bookedSlotsList = ref<BookedSlot[]>([])
 let artistBookingRealtimeChannel: any = null
 
 const fetchBookedDates = async () => {
   if (!props.artistId) {
-    bookedDatesList.value = []
+    bookedSlotsList.value = []
     return
   }
   try {
     const { data, error } = await db
       .from('BOOKING_CONTRACT')
-      .select('Start_Date, End_Date, Event_Date, Status')
+      .select('Start_Date, End_Date, Event_Date, Start_Time, End_Time, Status')
       .eq('Provider_Artist_ID', props.artistId)
       .not('Status', 'in', '("Cancelled","Declined","Voided")')
 
     if (!error && data) {
-      const dates = new Set<string>()
-      for (const row of data) {
-        if (row.Event_Date) dates.add(row.Event_Date)
-        if (row.Start_Date) dates.add(row.Start_Date)
-        if (row.End_Date) dates.add(row.End_Date)
-      }
-      bookedDatesList.value = Array.from(dates)
+      bookedSlotsList.value = data.map((row: any) => ({
+        startDate: row.Start_Date || row.Event_Date,
+        endDate: row.End_Date || row.Start_Date || row.Event_Date,
+        startTime: row.Start_Time || '00:00',
+        endTime: row.End_Time || '23:59',
+        status: row.Status
+      }))
     }
   } catch (err) {
     console.warn('Failed to fetch artist booked dates:', err)
@@ -133,9 +140,21 @@ const isSubmitting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
-const isSelectedDateBooked = computed(() => {
-  if (!startDate.value) return false
-  return bookedDatesList.value.includes(startDate.value)
+const takenSlotsForSelectedDate = computed(() => {
+  if (!startDate.value) return []
+  return bookedSlotsList.value.filter(s => {
+    return startDate.value >= s.startDate && startDate.value <= s.endDate
+  })
+})
+
+const isTimeSlotOverlapping = computed(() => {
+  if (!startDate.value || !startTime.value || !endTime.value) return false
+  const reqStart = startTime.value
+  const reqEnd = endTime.value
+
+  return takenSlotsForSelectedDate.value.some(slot => {
+    return reqStart < slot.endTime && reqEnd > slot.startTime
+  })
 })
 
 // Auto-Save Draft State
@@ -372,8 +391,8 @@ const handleSaveContract = async () => {
     return
   }
 
-  if (isSelectedDateBooked.value) {
-    errorMessage.value = `This artist is already booked on ${startDate.value}. Please choose a different date.`
+  if (isTimeSlotOverlapping.value) {
+    errorMessage.value = `This artist is already booked or requested during this time slot on ${startDate.value}. Please choose a different, non-overlapping time slot.`
     return
   }
 
@@ -434,7 +453,11 @@ const handleSaveContract = async () => {
     }, 1500)
   } catch (err: any) {
     console.error('Booking submission error:', err)
-    errorMessage.value = err.message || 'Failed to submit booking contract. Please try again.'
+    if (err.message?.includes('1st come, 1st served') || err.message?.includes('already has an active booking') || err.message?.includes('during this time slot')) {
+      errorMessage.value = 'This time slot was just booked by another client (1st come, 1st served). Please select a different time slot.'
+    } else {
+      errorMessage.value = err.message || 'Failed to submit booking contract. Please try again.'
+    }
     isSubmitting.value = false
   }
 }
@@ -504,7 +527,7 @@ const handleSaveContract = async () => {
             <button
               type="button"
               @click="handleSaveContract"
-              :disabled="isSubmitting || isSelectedDateBooked"
+              :disabled="isSubmitting || isTimeSlotOverlapping"
               class="text-xs sm:text-sm font-bold text-[#131315] bg-[#D0D4F7] hover:bg-white px-5 sm:px-6 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
               <Icon v-if="isSubmitting" name="ic:baseline-sync" class="animate-spin text-base" />
               <span>{{ isSubmitting ? 'Submitting...' : 'Send Contract Offer' }}</span>
@@ -632,10 +655,31 @@ const handleSaveContract = async () => {
                 </div>
               </div>
 
-              <!-- Realtime Slot Conflict Warning -->
-              <div v-if="isSelectedDateBooked" class="col-span-full p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-300 text-xs font-Sora">
+              <!-- Taken Time Slots on Selected Day -->
+              <div v-if="takenSlotsForSelectedDate.length > 0" class="col-span-full p-3.5 bg-[#141416] border border-amber-500/30 rounded-xl space-y-1.5 font-Sora">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                  <Icon name="ic:outline-schedule" class="text-sm" />
+                  <span>Existing Bookings on {{ startDate }}:</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span
+                    v-for="(slot, sIdx) in takenSlotsForSelectedDate"
+                    :key="sIdx"
+                    class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20 text-[11px] font-mono flex items-center gap-1"
+                  >
+                    <span>{{ formatTime12(slot.startTime) }} – {{ formatTime12(slot.endTime) }}</span>
+                    <span class="text-[9px] text-amber-400/80">({{ slot.status }})</span>
+                  </span>
+                </div>
+                <p class="text-[10px] text-gray-400">
+                  You can book this artist on the same day as long as your requested time slot does not overlap.
+                </p>
+              </div>
+
+              <!-- Overlap Conflict Warning -->
+              <div v-if="isTimeSlotOverlapping" class="col-span-full p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-300 text-xs font-Sora animate-in fade-in">
                 <Icon name="ic:baseline-error-outline" class="text-base text-rose-400 shrink-0" />
-                <span><strong>Date Conflict:</strong> {{ artistName }} already has a confirmed gig on {{ startDate }}. Please pick an open date.</span>
+                <span><strong>Time Slot Overlap:</strong> The selected time ({{ formatTime12(startTime) }} – {{ formatTime12(endTime) }}) overlaps with an existing booking. Please adjust your start or end time.</span>
               </div>
 
               <div class="grid grid-cols-2 gap-3 sm:gap-4">
