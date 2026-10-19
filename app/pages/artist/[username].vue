@@ -15,8 +15,10 @@ const db = supabase as any
 
 import type { PostItem } from '~/composables/useArtistPosts'
 import { formatPostTimestamp, formatCount } from '~/utils/postHelpers'
+import { useTonoSongs, type SongItem } from '~/composables/useTonoSongs'
 
 const { posts, fetchArtistPosts, toggleLike } = useArtistPosts()
+const { playSong, isPlaying, currentSong } = useTonoSongs()
 
 const selectedPost = ref<PostItem | null>(null)
 const isPostModalOpen = ref(false)
@@ -34,6 +36,7 @@ const closePostModal = () => {
 
 // User auth & role state
 const currentUser = useSupabaseUser()
+const currentUserId = ref<string | null>(currentUser.value?.id || null)
 const { fetchCurrentUserProfile } = useTonoAuth()
 const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 const isRoleLoading = ref(true)
@@ -281,7 +284,38 @@ const { data: profileData, error: fetchError } = await useAsyncData(
         displayOrder: l.Display_Order ?? 0,
       }))
 
-    // D. Fetch Portfolio Media (Milestones & Promotional Posters)
+    // D. Fetch Original 1-Minute Custom Songs
+    const { data: songsData } = await db
+      .from('SONG')
+      .select('*')
+      .eq('ARTIST_ID', artistId)
+      .eq('Is_Expired', false)
+      .order('Created_at', { ascending: false })
+
+    const resolvedArtistName =
+      artist.BAND?.Band_Name ||
+      artist.SOLO_ARTIST?.Artist_Name ||
+      userAcc?.Username ||
+      username.value
+
+    const customSongs = (songsData || []).map((s: any) => ({
+      Song_ID: s.Song_ID,
+      ARTIST_ID: s.ARTIST_ID,
+      Title: s.Title,
+      Description: s.Description,
+      Genre: s.Genre,
+      File_URL: s.File_URL,
+      Duration: s.Duration || 60,
+      Play_Count: s.Play_Count || 0,
+      Like_Count: s.Like_Count || 0,
+      Created_at: s.Created_at,
+      Expires_at: s.Expires_at,
+      artistName: resolvedArtistName,
+      artistAvatar: artist.USER_ACCOUNT?.Profile_Picture || null,
+      artistUsername: username.value
+    }))
+
+    // E. Fetch Portfolio Media (Milestones & Promotional Posters)
     const { data: mediaData } = await db
       .from('PORTFOLIO_MEDIA')
       .select('*')
@@ -423,6 +457,7 @@ const { data: profileData, error: fetchError } = await useAsyncData(
       instruments,
       mediaItems,
       audioItems,
+      customSongs,
       milestoneItems,
       posterItems,
       upcomingEvents,
@@ -481,10 +516,63 @@ const tagsDisplay = computed(() => {
 
 const bandMembers = computed(() => profileData.value?.bandMembers || [])
 
+const artistAccountId = computed(() => artistRecord.value?.ACCOUNT_ID || '')
+
 const isOwner = computed(() => {
-  if (!currentUser.value || !artistRecord.value) return false
-  return currentUser.value.id === artistRecord.value.ACCOUNT_ID
+  const currentId = currentUserId.value || currentUser.value?.id
+  const targetAccId = artistAccountId.value
+  if (!currentId || !targetAccId) return false
+  return currentId.toLowerCase() === targetAccId.toLowerCase()
 })
+
+const canFollow = computed(() => {
+  if (isOwner.value) return false
+  const currentId = currentUserId.value || currentUser.value?.id
+  const targetAccId = artistAccountId.value
+  if (!targetAccId) return false
+  if (!currentId) return true // Guests can see follow button, which redirects to /Login
+  return currentId.toLowerCase() !== targetAccId.toLowerCase()
+})
+
+// Social Follow System
+const {
+  isFollowingMap,
+  followerCounts,
+  followingCounts,
+  followsYouMap,
+  mutualFollowersMap,
+  toggleFollow: toggleFollowSocial,
+  fetchFollowStats,
+  fetchFollowStatus,
+  fetchMutualFollowers
+} = useSocialFollow()
+
+const isFollowingArtist = computed(() => artistAccountId.value ? Boolean(isFollowingMap.value[artistAccountId.value]) : false)
+const followsYou = computed(() => artistAccountId.value ? Boolean(followsYouMap.value[artistAccountId.value]) : false)
+const followerCount = computed(() => artistAccountId.value ? followerCounts.value[artistAccountId.value] || 0 : 0)
+const followingCount = computed(() => artistAccountId.value ? followingCounts.value[artistAccountId.value] || 0 : 0)
+const mutualSummary = computed(() => artistAccountId.value ? mutualFollowersMap.value[artistAccountId.value] || { sampleNames: [], totalCount: 0 } : { sampleNames: [], totalCount: 0 })
+
+watch(
+  artistAccountId,
+  async (accId) => {
+    if (accId) {
+      await Promise.all([
+        fetchFollowStats(accId),
+        fetchFollowStatus(accId),
+        fetchMutualFollowers(accId)
+      ])
+    }
+  },
+  { immediate: true }
+)
+
+const handleFollowArtist = async () => {
+  if (!canFollow.value) return
+  if (artistAccountId.value) {
+    await toggleFollowSocial(artistAccountId.value)
+  }
+}
 
 const resolvedSocialLinks = computed(() => {
   const rawLinks = artistRecord.value?.Links
@@ -627,9 +715,19 @@ const backToDiscoveryRoute = computed(() => {
 })
 
 onMounted(async () => {
-  if (currentUser.value) {
+  const sessionUser = (await supabase.auth.getUser()).data.user
+  if (sessionUser?.id) {
+    currentUserId.value = sessionUser.id
+  } else if (currentUser.value?.id) {
+    currentUserId.value = currentUser.value.id
+  }
+
+  if (currentUserId.value) {
     try {
       const profile = await fetchCurrentUserProfile()
+      if (profile?.account?.ACCOUNT_ID) {
+        currentUserId.value = profile.account.ACCOUNT_ID
+      }
       if (profile?.artistProfile) {
         currentUserRole.value = 'artist'
       } else if (profile?.businessProfile) {
@@ -802,7 +900,7 @@ const isScrolled = computed(() => scrollY.value > 200)
               <Icon
                 v-if="artistRecord?.Is_Verified"
                 name="ic:round-verified"
-                class="text-emerald-400 text-xs sm:text-sm shrink-0" />
+                class="text-indigo-500 text-xs sm:text-sm shrink-0" />
             </div>
           </div>
         </Transition>
@@ -823,7 +921,7 @@ const isScrolled = computed(() => scrollY.value > 200)
     <!-- Floating Copy Toast -->
     <div v-if="isCopied"
       class="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#1E1E24] border border-[#D0D4F7]/60 text-white shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
-      <Icon name="ic:round-check-circle" class="text-emerald-400 text-lg" />
+      <Icon name="ic:round-check-circle" class="text-indigo-500 text-lg" />
       <span class="text-xs sm:text-sm font-medium">Link copied to clipboard! Ready to share.</span>
     </div>
 
@@ -905,7 +1003,7 @@ const isScrolled = computed(() => scrollY.value > 200)
                 {{ artistTypeLabel }}
               </span>
               <span v-if="artistRecord.Is_Verified"
-                class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-indigo-500 text-white border border-indigo-500/20 font-medium">
                 <Icon name="ic:round-verified" class="text-xs" />
                 Verified
               </span>
@@ -916,9 +1014,38 @@ const isScrolled = computed(() => scrollY.value > 200)
               {{ displayName }}
             </h1>
 
-            <span class="font-mono text-xs sm:text-sm text-gray-300">
-              @{{ artistRecord.USER_ACCOUNT?.Username }}
-            </span>
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="font-mono text-xs sm:text-sm text-gray-300">
+                @{{ artistRecord.USER_ACCOUNT?.Username }}
+              </span>
+              <span
+                v-if="followsYou"
+                class="text-[11px] px-2 py-0.5 rounded-full bg-[#1E1E24] text-[#D0D4F7] border border-[#D0D4F7]/30 font-medium"
+              >
+                Follows you
+              </span>
+            </div>
+
+            <!-- Follower & Following Stats & Mutual Social Proof -->
+            <div class="flex items-center gap-3 text-xs text-gray-300 mt-0.5 flex-wrap">
+              <span class="font-medium text-white">
+                {{ formatCount(followerCount) }} <span class="text-gray-400 font-normal">Followers</span>
+              </span>
+              <span class="text-gray-500">•</span>
+              <span class="font-medium text-white">
+                {{ formatCount(followingCount) }} <span class="text-gray-400 font-normal">Following</span>
+              </span>
+            </div>
+
+            <div
+              v-if="mutualSummary.sampleNames.length > 0"
+              class="text-xs text-gray-400 flex items-center gap-1.5"
+            >
+              <Icon name="mdi:account-group-outline" class="text-sm text-[#D0D4F7]" />
+              <span>
+                Followed by <strong class="text-gray-200">@{{ mutualSummary.sampleNames.join(', @') }}</strong><template v-if="mutualSummary.totalCount > mutualSummary.sampleNames.length"> and {{ mutualSummary.totalCount - mutualSummary.sampleNames.length }} others</template>
+              </span>
+            </div>
 
             <div class="max-w-xl my-1">
               <p v-if="artistBio"
@@ -926,7 +1053,6 @@ const isScrolled = computed(() => scrollY.value > 200)
                 {{ artistBio }}
               </p>
               <p v-else class="text-xs sm:text-sm text-gray-400/70 italic">
-                Local artist on TONO.
               </p>
             </div>
 
@@ -950,6 +1076,23 @@ const isScrolled = computed(() => scrollY.value > 200)
             </div>
 
             <div class="flex items-center gap-3 mt-3 flex-wrap">
+              <!-- Follow / Following Action Button (Hidden when viewing own artist profile) -->
+              <div
+                v-if="canFollow"
+                @click="handleFollowArtist"
+                class="flex items-center px-5 py-2.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm font-semibold"
+                :class="isFollowingArtist ? 'bg-[#1E1E24] text-gray-200 border border-[#3A3A3E] hover:border-white/40' : 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2]'"
+              >
+                <Icon
+                  :name="isFollowingArtist ? 'ic:round-check' : 'ic:round-person-add'"
+                  class="text-sm"
+                  :class="isFollowingArtist ? 'text-emerald-400' : 'text-[#0E0E10]'"
+                />
+                <button class="font-semibold cursor-pointer">
+                  {{ isFollowingArtist ? 'Following' : 'Follow' }}
+                </button>
+              </div>
+
               <!-- Book Button (Hidden for Artists and Owner, Visible for Users, Businesses & Guests) -->
               <div v-if="canBook" @click="openBookingModal"
                 class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full font-Geist cursor-pointer transition-colors shadow-lg group">
@@ -1290,6 +1433,66 @@ const isScrolled = computed(() => scrollY.value > 200)
                   <p class="text-[11px] text-gray-400 mt-0.5">Spotify and SoundCloud tracks will appear here.</p>
                 </div>
               </div>
+
+              <!-- Original 1-Minute Custom Tracks (Community Hub) -->
+              <div
+                v-if="profileData?.customSongs?.length"
+                class="bg-[#1C1C1F]/60 border rounded-xl border-[#46464D]/40 p-4 sm:p-5 flex flex-col gap-4 shadow-lg"
+              >
+                <div class="flex items-center justify-between">
+                  <h2 class="text-base font-Sora font-semibold text-white">Original 1-Min Songs</h2>
+                  <span class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
+                    {{ profileData.customSongs.length }}
+                  </span>
+                </div>
+
+                <div class="flex flex-col gap-2.5">
+                  <div
+                    v-for="song in profileData.customSongs"
+                    :key="song.Song_ID"
+                    class="bg-[#141416] border border-[#303035] rounded-xl p-3 flex flex-col gap-2 hover:border-[#46464D] transition-colors"
+                  >
+                    <div class="flex items-center justify-between gap-2.5">
+                      <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                        <button
+                          @click="playSong(song)"
+                          class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-colors shadow-sm"
+                          :class="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'bg-[#D0D4F7] text-[#0E0E10]' : 'bg-[#26262E] text-[#D0D4F7] hover:bg-[#D0D4F7] hover:text-[#0E0E10]'"
+                          :title="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'Pause' : 'Play'"
+                        >
+                          <Icon
+                            :name="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'ic:round-pause' : 'ic:round-play-arrow'"
+                            class="text-lg"
+                          />
+                        </button>
+
+                        <div class="min-w-0 flex-1">
+                          <p class="text-xs font-semibold text-white truncate font-Sora">
+                            {{ song.Title }}
+                          </p>
+                          <div class="flex items-center gap-2 mt-0.5">
+                            <span v-if="song.Genre" class="text-[10px] text-[#D0D4F7] bg-[#D0D4F7]/10 px-1.5 py-0.5 rounded font-medium">
+                              {{ song.Genre }}
+                            </span>
+                            <span class="text-[10px] text-gray-400 font-mono">1:00</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-3 text-gray-400 font-mono text-[11px] shrink-0">
+                        <span class="flex items-center gap-1">
+                          <Icon name="ic:round-play-arrow" class="text-xs text-[#D0D4F7]" />
+                          {{ formatCount(song.Play_Count) }}
+                        </span>
+                        <span class="flex items-center gap-1">
+                          <Icon name="ic:baseline-favorite" class="text-xs text-[#D0D4F7]" />
+                          {{ formatCount(song.Like_Count) }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1426,7 +1629,7 @@ const isScrolled = computed(() => scrollY.value > 200)
             </div>
             <div class="flex items-center gap-2">
               <span class="text-xs font-mono px-3 py-1 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] border border-[#D0D4F7]/25 font-semibold">
-                {{ bandMembers.length }} {{ bandMembers.length === 1 ? 'Performer' : 'Performers' }}
+                {{ bandMembers.length }} {{ bandMembers.length === 1 ? 'Listed Member' : 'Listed Members' }}
               </span>
             </div>
           </div>
@@ -1454,7 +1657,7 @@ const isScrolled = computed(() => scrollY.value > 200)
                   {{ member.artistName.charAt(0) }}
                 </div>
                 <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#18181B] flex items-center justify-center">
-                  <Icon name="ic:round-verified" class="text-emerald-400 text-sm" />
+                  <Icon name="ic:round-verified" class="bg-indigo-500 text-sm" />
                 </div>
               </div>
 
@@ -1509,12 +1712,6 @@ const isScrolled = computed(() => scrollY.value > 200)
 
         <!-- Gigs Tab Content (Styled like Tour Dates / Reference Image) -->
         <div v-else-if="activeTab === 'gigs'" class="w-full space-y-6">
-          <div class="border-b border-[#2A2A2E] pb-3">
-            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight font-Sora">Live Gigs &amp; Tour Dates</h2>
-            <p class="text-xs sm:text-sm text-gray-400 mt-1">
-              Confirmed upcoming performances and scheduled live shows for {{ displayName }}.
-            </p>
-          </div>
 
           <!-- Empty State -->
           <div
@@ -1523,7 +1720,7 @@ const isScrolled = computed(() => scrollY.value > 200)
           >
             <Icon name="ic:outline-event-busy" class="text-4xl text-gray-500 mx-auto" />
             <h3 class="text-base font-semibold text-white">No Upcoming Public Gigs</h3>
-            <p class="text-xs text-gray-400">Check back soon for newly scheduled performances and live dates.</p>
+            <p class="text-xs text-gray-400"></p>
           </div>
 
           <!-- Tour Dates / Gigs List (Matching Reference Image) -->
@@ -1565,13 +1762,6 @@ const isScrolled = computed(() => scrollY.value > 200)
 
         <!-- Reviews Tab Content -->
         <div v-else-if="activeTab === 'reviews'" class="space-y-6">
-          <div class="border-b border-[#2A2A2E] pb-3">
-            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Client Testimonials &amp; Reviews</h2>
-            <p class="text-xs sm:text-sm text-gray-400 mt-1">
-              Verified feedback and ratings from venues and clients who have booked {{ displayName }}.
-            </p>
-          </div>
-
           <ReviewsList :target-artist-id="artistRecord?.ARTIST_ID" />
         </div>
       </main>

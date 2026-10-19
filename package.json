@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@nuxt/icon": "^2.4.1",
     "@nuxtjs/supabase": "^2.0.10",
     "@supabase/supabase-js": "^2.112.3",

@@ -133,6 +133,42 @@ const isOwner = computed(() => {
   return currentUserId.value.toLowerCase() === business.value.ACCOUNT_ID.toLowerCase()
 })
 
+// Social Follow System
+const {
+  isFollowingMap,
+  followerCounts,
+  mutualFollowersMap,
+  toggleFollow: toggleFollowSocial,
+  fetchFollowStats,
+  fetchFollowStatus,
+  fetchMutualFollowers
+} = useSocialFollow()
+
+const businessAccountId = computed(() => business.value?.ACCOUNT_ID || '')
+const isFollowingBusiness = computed(() => businessAccountId.value ? Boolean(isFollowingMap.value[businessAccountId.value]) : false)
+const followerCount = computed(() => businessAccountId.value ? followerCounts.value[businessAccountId.value] || 0 : 0)
+const mutualSummary = computed(() => businessAccountId.value ? mutualFollowersMap.value[businessAccountId.value] || { sampleNames: [], totalCount: 0 } : { sampleNames: [], totalCount: 0 })
+
+watch(
+  businessAccountId,
+  async (accId) => {
+    if (accId) {
+      await Promise.all([
+        fetchFollowStats(accId),
+        fetchFollowStatus(accId),
+        fetchMutualFollowers(accId)
+      ])
+    }
+  },
+  { immediate: true }
+)
+
+const handleFollowBusiness = async () => {
+  if (businessAccountId.value) {
+    await toggleFollowSocial(businessAccountId.value)
+  }
+}
+
 // Formatted Social Links
 const resolvedSocialLinks = computed(() => {
   const rawLinks = business.value?.Links
@@ -471,6 +507,23 @@ const scrollToTop = () => {
                 @{{ business.USER_ACCOUNT.Username }}
               </span>
 
+              <!-- Follower Stats & Mutual Social Proof -->
+              <div class="flex items-center gap-3 text-xs text-gray-300 mt-1 flex-wrap">
+                <span class="font-medium text-white">
+                  {{ formatCount(followerCount) }} <span class="text-gray-400 font-normal">Followers</span>
+                </span>
+              </div>
+
+              <div
+                v-if="mutualSummary.sampleNames.length > 0"
+                class="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5"
+              >
+                <Icon name="mdi:account-group-outline" class="text-sm text-[#D0D4F7]" />
+                <span>
+                  Followed by <strong class="text-gray-200">@{{ mutualSummary.sampleNames.join(', @') }}</strong><template v-if="mutualSummary.totalCount > mutualSummary.sampleNames.length"> and {{ mutualSummary.totalCount - mutualSummary.sampleNames.length }} others</template>
+                </span>
+              </div>
+
               <!-- Contact Information Box -->
               <div v-if="business.Contact_Information && (!business.Is_Contact_Hidden || isOwner)"
                 class="flex flex-wrap items-center justify-start gap-2 bg-black/40 backdrop-blur-md p-3 py-1.5 rounded-xl max-w-fit border border-white/10 mt-1">
@@ -500,11 +553,28 @@ const scrollToTop = () => {
                 <RatingStars :target-business-id="business.BUSINESS_ID" :inline="true" />
               </div>
 
-              <!-- Actions Row: Message Button & Share Button -->
+              <!-- Actions Row: Follow Button, Message Button & Share Button -->
               <div class="flex items-center gap-3 mt-3 flex-wrap">
+                <!-- Follow / Following Action Button -->
+                <div
+                  v-if="!isOwner"
+                  @click="handleFollowBusiness"
+                  class="flex items-center px-5 py-2.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm font-semibold"
+                  :class="isFollowingBusiness ? 'bg-[#1E1E24] text-gray-200 border border-[#3A3A3E] hover:border-white/40' : 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2]'"
+                >
+                  <Icon
+                    :name="isFollowingBusiness ? 'ic:round-check' : 'ic:round-person-add'"
+                    class="text-sm"
+                    :class="isFollowingBusiness ? 'text-emerald-400' : 'text-[#0E0E10]'"
+                  />
+                  <button class="font-semibold cursor-pointer">
+                    {{ isFollowingBusiness ? 'Following' : 'Follow' }}
+                  </button>
+                </div>
+
                 <!-- Message Action Button -->
                 <div v-if="!isOwner" @click="handleInitiateChat"
-                  class="flex items-center px-6 py-2.5 bg-[#D0D4F7] hover:bg-white text-[#151A34] gap-2 rounded-full font-Geist cursor-pointer transition-colors shadow-lg group"
+                  class="flex items-center px-5 py-2.5 bg-[#1E1E24]/80 hover:bg-[#282830] border border-[#46464D]/60 hover:border-[#D0D4F7]/60 text-[#D0D4F7] hover:text-white gap-2 rounded-full font-Geist cursor-pointer transition-all shadow-md group"
                   :class="initiatingChat ? 'opacity-80 pointer-events-none' : ''">
                   <Icon v-if="initiatingChat" name="svg-spinners:ring-resize" class="text-base" />
                   <Icon v-else name="mdi:message-text-outline"

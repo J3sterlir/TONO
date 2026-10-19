@@ -633,6 +633,56 @@ const {
   savePostersSection,
 } = useArtistPortfolio()
 
+import { useTonoSongs, type SongItem } from '~/composables/useTonoSongs'
+import AudioTrimmerModal from '~/components/AudioTrimmerModal.vue'
+
+// Custom 1-Minute Songs State
+const {
+  myArtistSongs,
+  fetchArtistSongs,
+  deleteArtistSong,
+  downloadSong,
+  playSong,
+  isPlaying,
+  currentSong
+} = useTonoSongs()
+
+const isAudioTrimmerOpen = ref(false)
+const isDeletingSongId = ref<string | null>(null)
+
+const getDaysUntilExpiration = (expiresAt?: string) => {
+  if (!expiresAt) return 30
+  const diffMs = new Date(expiresAt).getTime() - Date.now()
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  return Math.max(0, days)
+}
+
+const handleDeleteSong = async (song: SongItem) => {
+  if (!confirm(`Are you sure you want to delete "${song.Title}"? This cannot be undone.`)) return
+  try {
+    isDeletingSongId.value = song.Song_ID
+    await deleteArtistSong(song.Song_ID, song.Storage_Path)
+  } catch (err: any) {
+    alert(err.message || 'Failed to delete song')
+  } finally {
+    isDeletingSongId.value = null
+  }
+}
+
+const handleSongUploaded = async () => {
+  if (artistId.value) {
+    await fetchArtistSongs(artistId.value)
+  }
+}
+
+// Watch tab switches to ensure portfolio tracks stay fresh
+watch(activeTab, (newTab) => {
+  if (newTab === 'portfolio' && artistId.value) {
+    fetchArtistSongs(artistId.value)
+  }
+})
+
+
 // Modals State & Editing Tracking
 const isAddMediaOpen = ref(false)
 const isAddAudioOpen = ref(false)
@@ -881,6 +931,7 @@ onMounted(async () => {
         artistId.value = profile.artistProfile.ARTIST_ID
         artistType.value = profile.artistProfile.Artist_Type === 'Band' ? 'Band' : 'Solo'
         fetchPortfolio(profile.artistProfile.ARTIST_ID)
+        fetchArtistSongs(profile.artistProfile.ARTIST_ID)
       }
 
       // If artist is Band, fetch Band_Name from BAND table
@@ -1899,6 +1950,136 @@ const handleLogout = async () => {
                     </button>
                   </div>
                 </template>
+              </div>
+
+              <!-- Original 1-Minute Custom Songs (TONO Community Hub & Leaderboard Eligible) -->
+              <div class="bg-[#1C1C1F]/60 border rounded-xl border-[#46464D]/40 p-4 sm:p-5 flex flex-col gap-4 shadow-lg">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <h2 class="text-base font-Sora font-semibold text-white">Uploaded Songs</h2>
+                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
+                      {{ myArtistSongs.length }} / 4
+                    </span>
+                  </div>
+
+                  <button
+                    v-if="myArtistSongs.length < 4"
+                    @click="isAudioTrimmerOpen = true"
+                    class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2] transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                    title="Upload 1-Minute Custom Track"
+                  >
+                    <Icon name="ic:baseline-add" class="text-sm" />
+                    <span>Upload Track</span>
+                  </button>
+                </div>
+
+                <!-- Track Cards -->
+                <div v-if="myArtistSongs.length > 0" class="flex flex-col gap-3">
+                  <div
+                    v-for="song in myArtistSongs"
+                    :key="song.Song_ID"
+                    class="bg-[#141416] border border-[#303035] rounded-xl p-3 flex flex-col gap-2.5 hover:border-[#46464D] transition-colors"
+                  >
+                    <!-- Top Row: Play/Pause, Title, Genre, Download & Delete -->
+                    <div class="flex items-center justify-between gap-2.5">
+                      <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                        <!-- Play/Pause Button -->
+                        <button
+                          @click="playSong(song)"
+                          class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-colors shadow-sm"
+                          :class="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'bg-[#D0D4F7] text-[#0E0E10]' : 'bg-[#26262E] text-[#D0D4F7] hover:bg-[#D0D4F7] hover:text-[#0E0E10]'"
+                          :title="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'Pause' : 'Play'"
+                        >
+                          <Icon
+                            :name="currentSong?.Song_ID === song.Song_ID && isPlaying ? 'ic:round-pause' : 'ic:round-play-arrow'"
+                            class="text-lg"
+                          />
+                        </button>
+
+                        <div class="min-w-0 flex-1">
+                          <p class="text-xs font-semibold text-white truncate font-Sora">
+                            {{ song.Title }}
+                          </p>
+                          <div class="flex items-center gap-2 mt-0.5">
+                            <span v-if="song.Genre" class="text-[10px] text-[#D0D4F7] bg-[#D0D4F7]/10 px-1.5 py-0.5 rounded font-medium">
+                              {{ song.Genre }}
+                            </span>
+                            <span class="text-[10px] text-gray-400 font-mono">1:00</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Actions: Download & Delete -->
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button
+                          @click="downloadSong(song.File_URL, song.Title)"
+                          class="p-1.5 text-gray-400 hover:text-[#D0D4F7] transition-colors rounded cursor-pointer"
+                          title="Download Audio"
+                        >
+                          <Icon name="ic:round-download" class="text-base" />
+                        </button>
+                        <button
+                          @click="handleDeleteSong(song)"
+                          :disabled="isDeletingSongId === song.Song_ID"
+                          class="p-1.5 text-gray-400 hover:text-rose-400 transition-colors rounded cursor-pointer disabled:opacity-50"
+                          title="Delete Track"
+                        >
+                          <Icon v-if="isDeletingSongId === song.Song_ID" name="ic:baseline-sync" class="animate-spin text-base text-rose-400" />
+                          <Icon v-else name="ic:round-delete-outline" class="text-base" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Bottom Row: Plays, Likes, Expiration Warning Badge -->
+                    <div class="flex items-center justify-between pt-1.5 border-t border-[#26262E] text-[11px]">
+                      <div class="flex items-center gap-3 text-gray-400 font-mono">
+                        <span class="flex items-center gap-1">
+                          <Icon name="ic:round-play-arrow" class="text-xs text-[#D0D4F7]" />
+                          {{ formatCount(song.Play_Count) }}
+                        </span>
+                        <span class="flex items-center gap-1">
+                          <Icon name="ic:baseline-favorite" class="text-xs text-[#D0D4F7]" />
+                          {{ formatCount(song.Like_Count) }}
+                        </span>
+                      </div>
+
+                      <!-- Expiration Badge (NO EMOJIS - Uses ic:baseline-warning) -->
+                      <div
+                        v-if="getDaysUntilExpiration(song.Expires_at) <= 5"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                      >
+                        <Icon name="ic:baseline-warning" class="text-amber-400 text-xs" />
+                        <span>Expiring in {{ getDaysUntilExpiration(song.Expires_at) }} days</span>
+                      </div>
+                      <span v-else class="text-[10px] text-gray-400 font-mono">
+                        Expires in {{ getDaysUntilExpiration(song.Expires_at) }}d
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Empty State for Original Songs -->
+                <div
+                  v-else
+                  class="w-full rounded-xl border-2 border-dashed border-[#46464D]/50 bg-[#16161A]/50 flex flex-col items-center justify-center p-4 text-center transition-all hover:border-[#D0D4F7]/40"
+                >
+                  <div class="w-10 h-10 rounded-full bg-[#1E1E24] border border-[#46464D]/60 flex items-center justify-center text-[#D0D4F7] mb-2 shadow-inner">
+                    <Icon name="mdi:music" class="text-xl" />
+                  </div>
+                  <p class="font-Sora text-xs sm:text-sm font-semibold text-gray-200">
+                    No Original Tracks Uploaded
+                  </p>
+                  <p class="text-[11px] text-gray-400 mt-1 max-w-xs">
+                    4 Tracks / 1 min duration
+                  </p>
+                  <button
+                    @click="isAudioTrimmerOpen = true"
+                    class="mt-3 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2] transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Icon name="ic:baseline-add" class="text-xs" />
+                    <span>Upload Track</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3092,6 +3273,15 @@ const handleLogout = async () => {
       @close="isInviteModalOpen = false"
       @invited="handleMemberInvited"
     />
+
+    <!-- Audio Trimmer Modal for 1-Minute Custom Track Upload -->
+    <AudioTrimmerModal
+      :is-open="isAudioTrimmerOpen"
+      :artist-id="artistId"
+      @close="isAudioTrimmerOpen = false"
+      @uploaded="handleSongUploaded"
+    />
+
 
   </div>
 </template>

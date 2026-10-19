@@ -38,6 +38,7 @@ const imageLoadError = ref(false)
 const isDiscoverActive = computed(() => route.path === '/Artisthome')
 const isArtistsActive = computed(() => route.path.startsWith('/ArtistNavArtists') || route.path.startsWith('/UserNavArtists'))
 const isEventsActive = computed(() => route.path.startsWith('/ArtistNavEvents') || route.path.startsWith('/UserNavEvents'))
+const isCommunityActive = computed(() => route.path.toLowerCase() === '/community')
 const isProfileActive = computed(() => route.path.toLowerCase() === '/artistprofile')
 const isMessagesActive = computed(() => route.path.toLowerCase() === '/messages')
 
@@ -142,7 +143,7 @@ const handleLogout = async () => {
               <Icon
                 v-if="isVerified"
                 name="ic:round-verified"
-                class="text-emerald-400 text-xs sm:text-sm shrink-0" />
+                class="text-indigo-500 text-xs sm:text-sm shrink-0" />
             </div>
           </div>
         </Transition>
@@ -177,6 +178,15 @@ const handleLogout = async () => {
             ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
             : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7] hover:border-[#D0D4F7]/60 hover:-translate-y-0.5'">
           Events
+        </button>
+
+        <button
+          @click="navigateTo('/Community')"
+          class="pb-1 text-sm font-medium transition-all duration-300 cursor-pointer"
+          :class="isCommunityActive
+            ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
+            : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7] hover:border-[#D0D4F7]/60 hover:-translate-y-0.5'">
+          Community
         </button>
       </div>
 
@@ -258,6 +268,15 @@ const handleLogout = async () => {
           ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
           : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7]'">
         Events
+      </button>
+
+      <button
+        @click="navigateTo('/Community')"
+        class="py-1 px-3 text-xs font-medium transition-all duration-300 cursor-pointer"
+        :class="isCommunityActive
+          ? 'text-[#D0D4F7] border-b-2 border-[#D0D4F7]'
+          : 'text-[#C7C5CE] border-b-2 border-transparent hover:text-[#D0D4F7]'">
+        Community
       </button>
     </div>
   </nav>
