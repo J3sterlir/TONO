@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { formatTimeRange12 } from '~/utils/formatTime'
+import ArtistCustomActivityModal from '~/components/ArtistCustomActivityModal.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +21,7 @@ const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth()) // 0-indexed
 
 const gigs = ref<any[]>([])
+const customActivities = ref<any[]>([])
 const isLoading = ref(true)
 
 // Selected gig for modal
@@ -26,8 +29,10 @@ const selectedGig = ref<any | null>(null)
 const isModalOpen = ref(false)
 useModalScrollLock(isModalOpen)
 
-// Proximity warning state for cancellations
-const isWarningModalOpen = ref(false)
+// Custom Activity Modal state
+const isCustomActivityModalOpen = ref(false)
+const selectedActivity = ref<any | null>(null)
+const initialActivityDate = ref('')
 
 const monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -58,41 +63,92 @@ const fetchArtistGigs = async () => {
   if (!props.artistId) return
   isLoading.value = true
   try {
-    const { data, error } = await db
-      .from('BOOKING_CONTRACT')
-      .select(`
-        Booking_ID,
-        Contract_Code,
-        Job_ID,
-        Booking_Type,
-        Start_Date,
-        End_Date,
-        Event_Date,
-        Start_Time,
-        End_Time,
-        Venue_Location,
-        Agreed_Fee,
-        Song_Lineup,
-        Song_Lineup_JSON,
-        Required_Equipment,
-        Status,
-        Is_Rush_Booking,
-        JOB_LISTING (
-          Job_Code,
-          Event_Title,
-          Location,
-          Description
-        ),
-        BUSINESS_PROFILE:Provider_Business_ID (
-          Business_Name,
-          Business_Address
-        )
-      `)
-      .eq('Provider_Artist_ID', props.artistId)
-      .in('Status', ['Confirmed', 'Active', 'Completed'])
+    if (!props.isOwner) {
+      // PUBLIC VIEW: Strictly only fetch public job listing gigs (Job_ID is NOT null and Is_Public !== false).
+      // Direct bookings (Job_ID is null) and custom activities are PRIVATE and NEVER exposed to public visitors.
+      const { data, error } = await db
+        .from('BOOKING_CONTRACT')
+        .select(`
+          Booking_ID,
+          Contract_Code,
+          Job_ID,
+          Booking_Type,
+          Start_Date,
+          End_Date,
+          Event_Date,
+          Start_Time,
+          End_Time,
+          Venue_Location,
+          Agreed_Fee,
+          Song_Lineup,
+          Song_Lineup_JSON,
+          Required_Equipment,
+          Status,
+          Is_Rush_Booking,
+          JOB_LISTING!inner (
+            Job_Code,
+            Event_Title,
+            Location,
+            Description,
+            Is_Public
+          ),
+          BUSINESS_PROFILE:Provider_Business_ID (
+            Business_Name,
+            Business_Address
+          )
+        `)
+        .eq('Provider_Artist_ID', props.artistId)
+        .in('Status', ['Confirmed', 'Active', 'Completed'])
+        .not('Job_ID', 'is', null)
+        .neq('JOB_LISTING.Is_Public', false)
 
-    if (!error && data) {
-      gigs.value = data
+      if (!error && data) {
+        gigs.value = data
+      }
+    } else {
+      // OWNER VIEW: Fetch both job listing gigs and direct client bookings.
+      const { data, error } = await db
+        .from('BOOKING_CONTRACT')
+        .select(`
+          Booking_ID,
+          Contract_Code,
+          Job_ID,
+          Booking_Type,
+          Start_Date,
+          End_Date,
+          Event_Date,
+          Start_Time,
+          End_Time,
+          Venue_Location,
+          Agreed_Fee,
+          Song_Lineup,
+          Song_Lineup_JSON,
+          Required_Equipment,
+          Status,
+          Is_Rush_Booking,
+          JOB_LISTING (
+            Job_Code,
+            Event_Title,
+            Location,
+            Description,
+            Is_Public
+          ),
+          BUSINESS_PROFILE:Provider_Business_ID (
+            Business_Name,
+            Business_Address
+          ),
+          USER_ACCOUNT:Requester_Account_ID (
+            Username
+          )
+        `)
+        .eq('Provider_Artist_ID', props.artistId)
+        .in('Status', ['Confirmed', 'Active', 'Completed'])
+
+      if (!error && data) {
+        gigs.value = data
+      }
+
+      await fetchCustomActivities()
     }
   } catch (e) {
     console.error('Failed to fetch artist gigs for calendar:', e)
@@ -100,6 +156,58 @@ const fetchArtistGigs = async () => {
     isLoading.value = false
   }
 }
+
+// Fetch artist custom schedule events (rehearsals, personal blocks)
+const fetchCustomActivities = async () => {
+  if (!props.artistId || !props.isOwner) return
+  try {
+    const { data, error } = await db
+      .from('ARTIST_CUSTOM_SCHEDULE')
+      .select('*')
+      .eq('Artist_ID', props.artistId)
+      .order('Start_Date', { ascending: true })
+
+    if (!error && data) {
+      customActivities.value = data
+    }
+  } catch (err) {
+    console.warn('Failed to load artist custom schedule:', err)
+  }
+}
+
+// Realtime sync for custom activities
+let customScheduleRealtimeChannel: any = null
+
+const setupCustomScheduleRealtime = () => {
+  if (customScheduleRealtimeChannel) {
+    supabase.removeChannel(customScheduleRealtimeChannel)
+    customScheduleRealtimeChannel = null
+  }
+  if (!props.artistId || !props.isOwner) return
+
+  customScheduleRealtimeChannel = supabase
+    .channel(`artist-custom-schedule-realtime-${props.artistId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'ARTIST_CUSTOM_SCHEDULE',
+        filter: `Artist_ID=eq.${props.artistId}`
+      },
+      () => {
+        fetchCustomActivities()
+      }
+    )
+    .subscribe()
+}
+
+onBeforeUnmount(() => {
+  if (customScheduleRealtimeChannel) {
+    supabase.removeChannel(customScheduleRealtimeChannel)
+    customScheduleRealtimeChannel = null
+  }
+})
 
 // Compute calendar grid days
 interface CalendarDay {
@@ -109,6 +217,7 @@ interface CalendarDay {
   isCurrentMonth: boolean
   isToday: boolean
   gigs: any[]
+  activities: any[]
 }
 
 const formatDateStr = (d: Date): string => {
@@ -116,6 +225,24 @@ const formatDateStr = (d: Date): string => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+const getGigsForDate = (dateStr: string) => {
+  return gigs.value.filter(g => {
+    const start = g.Start_Date || g.Event_Date
+    const end = g.End_Date || start
+    if (!start) return false
+    return dateStr >= start && dateStr <= end
+  })
+}
+
+const getCustomActivitiesForDate = (dateStr: string) => {
+  if (!props.isOwner) return []
+  return customActivities.value.filter(a => {
+    const start = a.Start_Date
+    const end = a.End_Date || start
+    return dateStr >= start && dateStr <= end
+  })
 }
 
 const calendarDays = computed(() => {
@@ -139,7 +266,8 @@ const calendarDays = computed(() => {
       dayNumber: prevMonthLastDay - i,
       isCurrentMonth: false,
       isToday: dateStr === todayStr,
-      gigs: getGigsForDate(dateStr)
+      gigs: getGigsForDate(dateStr),
+      activities: getCustomActivitiesForDate(dateStr)
     })
   }
 
@@ -153,7 +281,8 @@ const calendarDays = computed(() => {
       dayNumber: i,
       isCurrentMonth: true,
       isToday: dateStr === todayStr,
-      gigs: getGigsForDate(dateStr)
+      gigs: getGigsForDate(dateStr),
+      activities: getCustomActivitiesForDate(dateStr)
     })
   }
 
@@ -168,29 +297,37 @@ const calendarDays = computed(() => {
       dayNumber: i,
       isCurrentMonth: false,
       isToday: dateStr === todayStr,
-      gigs: getGigsForDate(dateStr)
+      gigs: getGigsForDate(dateStr),
+      activities: getCustomActivitiesForDate(dateStr)
     })
   }
 
   return days
 })
 
-const getGigsForDate = (dateStr: string) => {
-  return gigs.value.filter(g => {
-    const start = g.Start_Date || g.Event_Date
-    const end = g.End_Date || start
-    if (!start) return false
-    return dateStr >= start && dateStr <= end
-  })
-}
-
 const getGigTitle = (gig: any) => {
-  return gig.JOB_LISTING?.Event_Title || gig.Contract_Code || 'Live Performance'
+  if (gig.Job_ID) {
+    return gig.JOB_LISTING?.Event_Title || gig.Contract_Code || 'Public Gig'
+  }
+  return gig.Booking_Type ? `Direct: ${gig.Booking_Type}` : (gig.Contract_Code || 'Direct Booking')
 }
 
 const handleChipClick = (gig: any) => {
   selectedGig.value = gig
   isModalOpen.value = true
+}
+
+const handleActivityChipClick = (activity: any) => {
+  selectedActivity.value = activity
+  initialActivityDate.value = activity.Start_Date || ''
+  isCustomActivityModalOpen.value = true
+}
+
+const openAddActivity = (dateStr?: string) => {
+  if (!props.isOwner) return
+  selectedActivity.value = null
+  initialActivityDate.value = dateStr || ''
+  isCustomActivityModalOpen.value = true
 }
 
 const getSongList = (gig: any) => {
@@ -208,44 +345,80 @@ const getSongList = (gig: any) => {
 
 onMounted(() => {
   fetchArtistGigs()
+  if (props.isOwner) {
+    setupCustomScheduleRealtime()
+  }
 })
 
 watch(() => props.artistId, () => {
   fetchArtistGigs()
+  if (props.isOwner) {
+    setupCustomScheduleRealtime()
+  }
 })
 </script>
 
 <template>
-  <div class="w-full bg-[#131315] border border-[#2A2A2E]/80 rounded-2xl p-5 sm:p-7 space-y-6 font-Sora text-white shadow-xl">
+  <div class="w-full bg-[#131315] border border-[#2A2A2E]/80 rounded-2xl p-4 sm:p-7 space-y-6 font-Sora text-white shadow-xl">
 
-    <!-- Calendar Header with Month Controls -->
-    <div class="flex items-center justify-between gap-4">
+    <!-- Calendar Header with Month Controls and Add Activity CTA -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-white">
           {{ monthNames[currentMonth] }} {{ currentYear }}
         </h2>
         <p class="text-xs text-gray-400 mt-0.5">
-          {{ isOwner ? 'Your confirmed performance dates and bookings.' : 'Public gig schedule and tour dates.' }}
+          {{ isOwner ? 'Your confirmed gigs, private direct bookings, and custom schedule.' : 'Public gig schedule and tour dates.' }}
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2.5 self-end sm:self-auto">
+        <!-- Add Activity Button (Artist Owner Only) -->
         <button
+          v-if="isOwner"
           type="button"
-          @click="prevMonth"
-          class="w-9 h-9 rounded-full bg-[#1C1C1F] border border-[#3A3A3C] hover:border-gray-400 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-          title="Previous Month"
+          @click="openAddActivity()"
+          class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs font-bold transition-all cursor-pointer shadow-sm select-none"
         >
-          <Icon name="ic:round-chevron-left" class="text-xl" />
+          <Icon name="ic:baseline-add" class="text-base" />
+          <span>Add Activity</span>
         </button>
-        <button
-          type="button"
-          @click="nextMonth"
-          class="w-9 h-9 rounded-full bg-[#1C1C1F] border border-[#3A3A3C] hover:border-gray-400 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-          title="Next Month"
-        >
-          <Icon name="ic:round-chevron-right" class="text-xl" />
-        </button>
+
+        <!-- Navigation Arrows -->
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            @click="prevMonth"
+            class="w-9 h-9 rounded-xl bg-[#1C1C1F] border border-[#3A3A3C] hover:border-[#D0D4F7]/60 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            title="Previous Month"
+          >
+            <Icon name="ic:round-chevron-left" class="text-xl" />
+          </button>
+          <button
+            type="button"
+            @click="nextMonth"
+            class="w-9 h-9 rounded-xl bg-[#1C1C1F] border border-[#3A3A3C] hover:border-[#D0D4F7]/60 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            title="Next Month"
+          >
+            <Icon name="ic:round-chevron-right" class="text-xl" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar Legend (Owner Mode) -->
+    <div v-if="isOwner" class="flex items-center gap-4 text-[11px] font-mono text-gray-400 flex-wrap border-y border-[#2A2A2E]/60 py-2">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-[#D0D4F7]"></span>
+        <span>Public Gigs</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-purple-500"></span>
+        <span>Private Direct Bookings</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>
+        <span>Custom Activity / Blocker</span>
       </div>
     </div>
 
@@ -261,10 +434,12 @@ watch(() => props.artistId, () => {
       <div
         v-for="day in calendarDays"
         :key="day.dateStr"
+        @click="isOwner ? openAddActivity(day.dateStr) : undefined"
         class="min-h-24 sm:min-h-28 p-1.5 sm:p-2 rounded-xl border transition-all flex flex-col justify-between"
         :class="[
           day.isCurrentMonth ? 'bg-[#18181B]/80 border-[#2A2A2E]' : 'bg-[#121214]/40 border-[#202024]/50 opacity-40',
-          day.isToday ? 'ring-1 ring-[#D0D4F7]/60' : ''
+          day.isToday ? 'ring-1 ring-[#D0D4F7]/60' : '',
+          isOwner ? 'cursor-pointer hover:border-[#46464D]' : ''
         ]"
       >
         <!-- Day Number -->
@@ -275,28 +450,49 @@ watch(() => props.artistId, () => {
           >
             {{ day.dayNumber }}
           </span>
-          <span v-if="day.gigs.length" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse sm:hidden"></span>
+          <div class="flex items-center gap-1">
+            <span v-if="day.gigs.length" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse sm:hidden"></span>
+            <span v-if="day.activities?.length" class="w-1.5 h-1.5 rounded-full bg-amber-400 sm:hidden"></span>
+          </div>
         </div>
 
-        <!-- Gig Chips Container -->
+        <!-- Chips Container (Gigs + Custom Activities) -->
         <div class="space-y-1 mt-1 overflow-hidden">
+          <!-- Gig Chips -->
           <div
             v-for="gig in day.gigs"
             :key="gig.Booking_ID"
             @click.stop="handleChipClick(gig)"
             class="px-2 py-1 rounded-md text-[10px] font-medium truncate cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex items-center gap-1.5 group select-none"
-            :class="isOwner ? 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-white' : 'bg-[#B4B8DA] text-[#151A34] hover:bg-white'"
+            :class="[
+              gig.Job_ID 
+                ? (isOwner ? 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-white' : 'bg-[#B4B8DA] text-[#151A34] hover:bg-white')
+                : 'bg-purple-500/20 text-purple-200 border border-purple-500/40 hover:bg-purple-500/30'
+            ]"
             :title="getGigTitle(gig)"
           >
-            <span class="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
+            <Icon v-if="!gig.Job_ID" name="ic:round-lock" class="text-xs shrink-0 text-purple-300" />
+            <span v-else class="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
             <span class="truncate">{{ getGigTitle(gig) }}</span>
+          </div>
+
+          <!-- Custom Activity Chips (Owner Mode Only) -->
+          <div
+            v-for="act in day.activities"
+            :key="act.Schedule_ID"
+            @click.stop="handleActivityChipClick(act)"
+            class="px-2 py-1 rounded-md text-[10px] font-medium truncate cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex items-center gap-1.5 bg-amber-500/15 text-amber-200 border border-amber-500/30 hover:bg-amber-500/25 select-none"
+            :title="`${act.Title} (${act.Start_Time} - ${act.End_Time})`"
+          >
+            <Icon name="ic:baseline-event-note" class="text-xs shrink-0 text-amber-300" />
+            <span class="truncate">{{ act.Title }}</span>
           </div>
         </div>
       </div>
     </div>
 
     <!-- ========================================================================= -->
-    <!-- DETAILS MODAL: ROLE-BASED (PUBLIC VS ARTIST OWNER) -->
+    <!-- DETAILS MODAL: GIG CONTRACT (ROLE-BASED: PUBLIC VS ARTIST OWNER) -->
     <!-- ========================================================================= -->
     <div v-if="isModalOpen && selectedGig" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" @click="isModalOpen = false"></div>
@@ -307,10 +503,15 @@ watch(() => props.artistId, () => {
         <!-- Modal Header -->
         <div class="flex items-start justify-between gap-4 border-b border-[#2A2A2E] pb-4">
           <div>
-            <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">
-              {{ isOwner ? (selectedGig.Job_ID ? 'MARKETPLACE GIG CONTRACT' : 'DIRECT BOOKING CONTRACT') : 'LIVE EVENT DETAILS' }}
-            </span>
-            <h3 class="text-xl font-bold text-white mt-0.5">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">
+                {{ isOwner ? (selectedGig.Job_ID ? 'MARKETPLACE GIG CONTRACT' : 'DIRECT CLIENT BOOKING') : 'LIVE GIG DETAILS' }}
+              </span>
+              <span v-if="!selectedGig.Job_ID" class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                Private
+              </span>
+            </div>
+            <h3 class="text-xl font-bold text-white mt-1">
               {{ getGigTitle(selectedGig) }}
             </h3>
           </div>
@@ -339,7 +540,16 @@ watch(() => props.artistId, () => {
           <div class="flex items-center gap-2 p-3 bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl">
             <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-base shrink-0" />
             <div>
-              <p class="font-medium text-white">{{ selectedGig.Venue_Location || selectedGig.JOB_LISTING?.Location || '' }}</p>
+              <p class="font-medium text-white">{{ selectedGig.Venue_Location || selectedGig.JOB_LISTING?.Location || 'Location TBA' }}</p>
+            </div>
+          </div>
+
+          <!-- Client / Host Context (Owner View) -->
+          <div v-if="isOwner && (selectedGig.USER_ACCOUNT?.Username || selectedGig.BUSINESS_PROFILE?.Business_Name)" class="flex items-center gap-2 p-3 bg-[#1C1C1F] border border-[#2A2A2E] rounded-xl">
+            <Icon :name="selectedGig.Job_ID ? 'ic:baseline-storefront' : 'ic:baseline-person'" class="text-[#D0D4F7] text-base shrink-0" />
+            <div>
+              <p class="text-[10px] font-mono text-gray-400 uppercase">{{ selectedGig.Job_ID ? 'Venue Host' : 'Direct Client' }}</p>
+              <p class="font-medium text-white">{{ selectedGig.BUSINESS_PROFILE?.Business_Name || selectedGig.USER_ACCOUNT?.Username }}</p>
             </div>
           </div>
         </div>
@@ -400,6 +610,20 @@ watch(() => props.artistId, () => {
         </div>
       </div>
     </div>
+
+    <!-- ========================================================================= -->
+    <!-- ARTIST CUSTOM ACTIVITY CREATION & EDIT MODAL -->
+    <!-- ========================================================================= -->
+    <ArtistCustomActivityModal
+      :is-open="isCustomActivityModalOpen"
+      :artist-id="artistId"
+      :activity="selectedActivity"
+      :initial-date="initialActivityDate"
+      :active-gigs="gigs"
+      @close="isCustomActivityModalOpen = false"
+      @saved="fetchCustomActivities"
+      @deleted="fetchCustomActivities"
+    />
 
   </div>
 </template>

@@ -10,6 +10,7 @@ import { useTonoReviews } from '~/composables/useTonoReviews'
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile } = useTonoAuth()
+const { openReportModal } = useModerationReport()
 
 const activeTab = ref<'active' | 'pending' | 'history'>('active')
 const isLoading = ref(true)
@@ -692,10 +693,39 @@ onBeforeUnmount(() => {
               </span>
             </div>
             <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors">{{ getArtistName(contract) }}</h3>
-            <p class="text-xs text-gray-400">📅 {{ contract.Start_Date || contract.Event_Date }} • 📍 {{ contract.Venue_Location }}</p>
+            <p class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
+              <span class="flex items-center gap-1">
+                <Icon name="ic:baseline-calendar-today" class="text-xs text-[#D0D4F7]" />
+                {{ contract.Start_Date || contract.Event_Date }}
+              </span>
+              <span>•</span>
+              <span class="flex items-center gap-1">
+                <Icon name="ic:baseline-location-on" class="text-xs text-[#D0D4F7]" />
+                {{ contract.Venue_Location }}
+              </span>
+            </p>
             <p v-if="contract.Cancellation_Reason" class="text-xs text-red-300">
               Reason: {{ contract.Cancellation_Reason }}
             </p>
+
+            <!-- Late Cancellation Flag & Report -->
+            <div
+              v-if="contract.Is_Late_Cancellation"
+              class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2"
+            >
+              <div class="flex items-center gap-1.5 text-xs text-amber-300">
+                <Icon name="ic:baseline-warning" class="text-base text-amber-400 shrink-0" />
+                <span>Last-Minute Cancellation (&le;5 days)</span>
+              </div>
+              <button
+                type="button"
+                @click.stop="openReportModal({ targetType: 'Contract', targetId: contract.Booking_ID, targetAccountId: contract.ARTIST?.USER_ACCOUNT?.ACCOUNT_ID || contract.ARTIST?.ARTIST_ID, targetName: getArtistName(contract), previewSnippet: `Late cancellation on ${contract.Start_Date || contract.Event_Date}. Reason: ${contract.Cancellation_Reason || 'None provided'}` })"
+                class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 text-rose-300 text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <Icon name="ic:round-flag" class="text-xs" />
+                <span>Report</span>
+              </button>
+            </div>
 
             <!-- Review Action for Completed Contracts -->
             <div v-if="contract.Status === 'Completed'" class="pt-2 border-t border-[#2A2A2E]/60 flex items-center justify-between">
@@ -735,6 +765,10 @@ onBeforeUnmount(() => {
       :is-open="isReviewModalOpen"
       :booking="selectedReviewBooking"
       :reviewer-account-id="currentAccountId"
+      :booking-id="selectedReviewBooking?.Booking_ID"
+      :contract-code="selectedReviewBooking?.Contract_Code"
+      :event-title="selectedReviewBooking?.JOB_LISTING?.Event_Title || 'Direct Booking Gig'"
+      :event-date="selectedReviewBooking?.Start_Date || selectedReviewBooking?.Event_Date"
       :target-artist-id="selectedReviewBooking?.Provider_Artist_ID"
       target-name="Performing Artist"
       @close="isReviewModalOpen = false"

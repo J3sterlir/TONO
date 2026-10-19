@@ -9,6 +9,15 @@ export type TonoUserAccount = {
   Barangay: string | null
   Created_at?: string | null
   Is_Banned?: boolean | null
+  Ban_Reason?: string | null
+  Is_Suspended?: boolean | null
+  Suspended_Until?: string | null
+  Suspension_Reason?: string | null
+  Strike_Count?: number | null
+  Penalty_Rating_Deduction?: number | null
+  Ban_Contested?: boolean | null
+  Contest_Message?: string | null
+  Contested_At?: string | null
   Profile_Picture?: string | null
   Cover_Picture?: string | null
 }

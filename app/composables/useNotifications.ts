@@ -435,12 +435,12 @@ export const useNotifications = () => {
     markAsRead(item)
 
     const contractId = item.entityId
-    if (!contractId && item.actionLink) {
+    if (item.actionLink) {
       return navigateTo(item.actionLink)
     }
 
     if (currentRole === 'Artist') {
-      return navigateTo(`/ArtistNavEvents?contractId=${contractId}`)
+      return navigateTo(`/Artistprofile?tab=gigs&contractId=${contractId}`)
     } else if (currentRole === 'Business') {
       return navigateTo(`/BusinessContracts?contractId=${contractId}`)
     } else {

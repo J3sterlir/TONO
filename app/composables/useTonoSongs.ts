@@ -155,6 +155,24 @@ export const useTonoSongs = () => {
     currentTime.value = 0
     songDuration.value = song.Duration || 60
 
+    // If userHasLiked is not set, resolve it in the background for this song
+    if (song.userHasLiked === undefined) {
+      resolveCurrentUserId().then(async (uid) => {
+        if (uid && currentSong.value?.Song_ID === song.Song_ID) {
+          const { data: likeRecord } = await db
+            .from('SONG_LIKES')
+            .select('Like_ID')
+            .eq('Song_ID', song.Song_ID)
+            .eq('ACCOUNT_ID', uid)
+            .maybeSingle()
+          if (currentSong.value?.Song_ID === song.Song_ID) {
+            currentSong.value.userHasLiked = !!likeRecord
+            song.userHasLiked = !!likeRecord
+          }
+        }
+      }).catch(() => {})
+    }
+
     audio.src = song.File_URL
     audio.load()
     audio.play().catch((err) => {
@@ -210,15 +228,33 @@ export const useTonoSongs = () => {
   }
 
   /**
-   * Toggle Like on a song
+   * Robust authenticated user resolution (avoids undefined accountId)
+   */
+  const resolveCurrentUserId = async (): Promise<string | null> => {
+    if (currentUser.value?.id) return currentUser.value.id
+    if ((currentUser.value as any)?.sub) return (currentUser.value as any).sub
+
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (userData?.user?.id) return userData.user.id
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (sessionData?.session?.user?.id) return sessionData.session.user.id
+    } catch {
+      // Non-blocking
+    }
+    return null
+  }
+
+  /**
+   * Toggle Like on a song (Robust for all account roles: user, artist, business)
    */
   const toggleSongLike = async (songId: string) => {
-    if (!currentUser.value) {
+    const userId = await resolveCurrentUserId()
+    if (!userId) {
       await navigateTo('/Login')
       return false
     }
 
-    const userId = currentUser.value.id
     // Find song in any loaded lists
     const targetSong =
       (currentSong.value?.Song_ID === songId ? currentSong.value : null) ||
@@ -226,7 +262,22 @@ export const useTonoSongs = () => {
       topLikedSongs.value.find((s) => s.Song_ID === songId) ||
       myArtistSongs.value.find((s) => s.Song_ID === songId)
 
-    const prevLiked = targetSong?.userHasLiked ?? false
+    // Check DB state if userHasLiked is not set
+    let isCurrentlyLiked = targetSong?.userHasLiked
+    if (isCurrentlyLiked === undefined) {
+      const { data: existingLike } = await db
+        .from('SONG_LIKES')
+        .select('Like_ID')
+        .eq('Song_ID', songId)
+        .eq('ACCOUNT_ID', userId)
+        .maybeSingle()
+      isCurrentlyLiked = !!existingLike
+      if (targetSong) {
+        targetSong.userHasLiked = isCurrentlyLiked
+      }
+    }
+
+    const prevLiked = isCurrentlyLiked
     const prevCount = targetSong?.Like_Count ?? 0
 
     // Optimistic UI update
@@ -237,16 +288,18 @@ export const useTonoSongs = () => {
 
     try {
       if (prevLiked) {
-        await db
+        const { error: delErr } = await db
           .from('SONG_LIKES')
           .delete()
           .eq('Song_ID', songId)
           .eq('ACCOUNT_ID', userId)
+        if (delErr) throw delErr
       } else {
-        await db.from('SONG_LIKES').insert({
+        const { error: insErr } = await db.from('SONG_LIKES').insert({
           Song_ID: songId,
           ACCOUNT_ID: userId
         })
+        if (insErr && insErr.code !== '23505') throw insErr
       }
       return !prevLiked
     } catch (err) {
@@ -372,7 +425,8 @@ export const useTonoSongs = () => {
       const mappedLiked = (likedData || []).map(mapSong)
 
       // Check current user liked status
-      if (currentUser.value?.id) {
+      const authUid = await resolveCurrentUserId()
+      if (authUid) {
         const allIds = Array.from(
           new Set([...mappedListened.map((s: SongItem) => s.Song_ID), ...mappedLiked.map((s: SongItem) => s.Song_ID)])
         )
@@ -380,7 +434,7 @@ export const useTonoSongs = () => {
           const { data: myLikes } = await db
             .from('SONG_LIKES')
             .select('Song_ID')
-            .eq('ACCOUNT_ID', currentUser.value.id)
+            .eq('ACCOUNT_ID', authUid)
             .in('Song_ID', allIds)
 
           const likedSet = new Set((myLikes || []).map((l: any) => l.Song_ID))

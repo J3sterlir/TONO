@@ -19,6 +19,7 @@ import { useTonoSongs, type SongItem } from '~/composables/useTonoSongs'
 
 const { posts, fetchArtistPosts, toggleLike } = useArtistPosts()
 const { playSong, isPlaying, currentSong } = useTonoSongs()
+const { openReportModal } = useModerationReport()
 
 const selectedPost = ref<PostItem | null>(null)
 const isPostModalOpen = ref(false)
@@ -57,16 +58,38 @@ const chatToast = ref('')
 const initiatingButton = ref<'hero' | 'contact' | null>(null)
 
 const handleInitiateChat = async (source: 'hero' | 'contact' = 'hero') => {
-  const resolvedUser = currentUser.value || (await supabase.auth.getUser()).data.user
-  if (!resolvedUser) {
+  let resolvedUserId = currentUserId.value || currentUser.value?.id || (currentUser.value as any)?.sub
+  if (!resolvedUserId) {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      resolvedUserId = userData?.user?.id
+    } catch {}
+  }
+  if (!resolvedUserId) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      resolvedUserId = sessionData?.session?.user?.id
+    } catch {}
+  }
+
+  if (!resolvedUserId) {
     await navigateTo(`/Login?redirect=/artist/${username.value}`)
     return
   }
 
-  const artistAccId = artistRecord.value?.ACCOUNT_ID || profileData.value?.artist?.ACCOUNT_ID || profileData.value?.artist?.USER_ACCOUNT?.ACCOUNT_ID
-  if (!artistAccId) return
+  const artistAccId =
+    artistRecord.value?.ACCOUNT_ID ||
+    profileData.value?.artist?.ACCOUNT_ID ||
+    profileData.value?.artist?.USER_ACCOUNT?.ACCOUNT_ID
+  if (!artistAccId) {
+    chatToast.value = 'Could not resolve artist account.'
+    setTimeout(() => {
+      chatToast.value = ''
+    }, 4000)
+    return
+  }
 
-  if (resolvedUser.id.toLowerCase() === artistAccId.toLowerCase()) {
+  if (String(resolvedUserId).toLowerCase() === String(artistAccId).toLowerCase()) {
     chatToast.value = 'You cannot start a chat with yourself.'
     setTimeout(() => {
       chatToast.value = ''
@@ -76,7 +99,7 @@ const handleInitiateChat = async (source: 'hero' | 'contact' = 'hero') => {
 
   initiatingButton.value = source
   try {
-    const threadId = await getOrCreateThread(artistAccId, resolvedUser.id)
+    const threadId = await getOrCreateThread(artistAccId, resolvedUserId)
     if (threadId) {
       await navigateTo(`/Messages?threadId=${threadId}`)
     }
@@ -347,7 +370,7 @@ const { data: profileData, error: fetchError } = await useAsyncData(
         displayOrder: m.Display_Order ?? 0,
       }))
 
-    // E. Fetch Upcoming Confirmed Bookings / Events
+    // E. Fetch Upcoming Confirmed Public Events (Excludes private direct bookings)
     const { data: upcomingEventsData } = await db
       .from('BOOKING_CONTRACT')
       .select(`
@@ -362,9 +385,10 @@ const { data: profileData, error: fetchError } = await useAsyncData(
         End_Time,
         Venue_Location,
         Status,
-        JOB_LISTING (
+        JOB_LISTING!inner (
           Event_Title,
-          Location
+          Location,
+          Is_Public
         ),
         BUSINESS_PROFILE:Provider_Business_ID (
           Business_Name,
@@ -373,6 +397,8 @@ const { data: profileData, error: fetchError } = await useAsyncData(
       `)
       .eq('Provider_Artist_ID', artistId)
       .in('Status', ['Confirmed', 'Active'])
+      .not('Job_ID', 'is', null)
+      .neq('JOB_LISTING.Is_Public', false)
       .order('Start_Date', { ascending: true })
 
     const upcomingEvents = upcomingEventsData || []
@@ -1080,13 +1106,13 @@ const isScrolled = computed(() => scrollY.value > 200)
               <div
                 v-if="canFollow"
                 @click="handleFollowArtist"
-                class="flex items-center px-5 py-2.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm font-semibold"
+                class="flex items-center px-5 py-2.5 rounded-full gap-1.5 font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm font-semibold"
                 :class="isFollowingArtist ? 'bg-[#1E1E24] text-gray-200 border border-[#3A3A3E] hover:border-white/40' : 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2]'"
               >
                 <Icon
                   :name="isFollowingArtist ? 'ic:round-check' : 'ic:round-person-add'"
                   class="text-sm"
-                  :class="isFollowingArtist ? 'text-emerald-400' : 'text-[#0E0E10]'"
+                  :class="isFollowingArtist ? 'text-[#D0D4F7]' : 'text-[#0E0E10]'"
                 />
                 <button class="font-semibold cursor-pointer">
                   {{ isFollowingArtist ? 'Following' : 'Follow' }}
@@ -1097,7 +1123,7 @@ const isScrolled = computed(() => scrollY.value > 200)
               <div v-if="canBook" @click="openBookingModal"
                 class="flex items-center px-6 py-2.5 bg-[#B4B8DA] hover:bg-white text-[#151A34] gap-2 rounded-full font-Geist cursor-pointer transition-colors shadow-lg group">
                 <Icon name="ic:baseline-calendar-today" class="text-sm group-hover:scale-110 transition-transform" />
-                <button class="font-medium cursor-pointer">BOOK</button>
+                <button class="font-medium text-sm cursor-pointer">Book</button>
               </div>
 
               <!-- Message Action Button (Hero Banner) -->
@@ -1107,6 +1133,17 @@ const isScrolled = computed(() => scrollY.value > 200)
                 <Icon v-if="initiatingButton === 'hero'" name="svg-spinners:ring-resize" class="text-sm" />
                 <Icon v-else name="mdi:message-text-outline" class="text-sm group-hover:scale-110 transition-transform" />
                 <button class="font-medium cursor-pointer text-xs sm:text-sm">Message</button>
+              </div>
+
+              <!-- Report Artist Action Button -->
+              <div
+                v-if="!isOwner && artistRecord?.User_ID"
+                @click="openReportModal({ targetType: 'Profile', targetId: artistRecord.ARTIST_ID, targetAccountId: artistRecord.User_ID, targetName: displayName || `@${username}`, previewText: artistBio || undefined })"
+                class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
+                title="Report Profile"
+              >
+                <Icon name="ic:round-flag" class="text-sm group-hover:scale-110 transition-transform" />
+                <span class="font-medium">Report</span>
               </div>
             </div>
           </div>
@@ -1767,9 +1804,16 @@ const isScrolled = computed(() => scrollY.value > 200)
       </main>
 
       <!-- Direct Booking Modal Component -->
-      <DirectBookingModal :is-open="isBookingModalOpen" :artist-id="artistRecord?.ARTIST_ID" :artist-name="displayName"
-        :artist-avatar="profilePicture" :artist-type="artistTypeLabel" @close="isBookingModalOpen = false"
-        @submit="handleBookingSubmit" />
+      <DirectBookingModal
+        :is-open="isBookingModalOpen"
+        :artist-id="artistRecord?.ARTIST_ID"
+        :artist-account-id="artistRecord?.ACCOUNT_ID"
+        :artist-name="displayName"
+        :artist-avatar="profilePicture"
+        :artist-type="artistTypeLabel"
+        @close="isBookingModalOpen = false"
+        @submit="handleBookingSubmit"
+      />
 
       <!-- Post Detail Modal Component -->
       <PostDetailModal

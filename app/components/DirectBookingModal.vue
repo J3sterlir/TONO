@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { formatTime12 } from '~/utils/formatTime'
+import { getTwoLetterInitials } from '~/composables/useNotifications'
+
+defineOptions({
+  inheritAttrs: false
+})
 
 const props = withDefaults(
   defineProps<{
     isOpen: boolean
     artistId?: string
+    artistAccountId?: string | null
     artistName?: string
     artistAvatar?: string | null
     artistType?: string
   }>(),
   {
     artistId: '',
+    artistAccountId: null,
     artistName: 'Featured Artist',
     artistAvatar: null,
     artistType: 'Solo Artist'
@@ -65,9 +72,11 @@ interface BookedSlot {
   startTime: string
   endTime: string
   status: string
+  isCustomSchedule?: boolean
 }
 const bookedSlotsList = ref<BookedSlot[]>([])
 let artistBookingRealtimeChannel: any = null
+let artistScheduleRealtimeChannel: any = null
 
 const fetchBookedDates = async () => {
   if (!props.artistId) {
@@ -75,33 +84,52 @@ const fetchBookedDates = async () => {
     return
   }
   try {
-    const { data, error } = await db
+    // 1. Fetch active booking contracts
+    const { data: contractsData, error: contractsError } = await db
       .from('BOOKING_CONTRACT')
       .select('Start_Date, End_Date, Event_Date, Start_Time, End_Time, Status')
       .eq('Provider_Artist_ID', props.artistId)
       .not('Status', 'in', '("Cancelled","Declined","Voided")')
 
-    if (!error && data) {
-      bookedSlotsList.value = data.map((row: any) => ({
-        startDate: row.Start_Date || row.Event_Date,
-        endDate: row.End_Date || row.Start_Date || row.Event_Date,
-        startTime: row.Start_Time || '00:00',
-        endTime: row.End_Time || '23:59',
-        status: row.Status
-      }))
-    }
+    const contractSlots: BookedSlot[] = (!contractsError && contractsData)
+      ? contractsData.map((row: any) => ({
+          startDate: row.Start_Date || row.Event_Date,
+          endDate: row.End_Date || row.Start_Date || row.Event_Date,
+          startTime: row.Start_Time || '00:00',
+          endTime: row.End_Time || '23:59',
+          status: row.Status,
+          isCustomSchedule: false
+        }))
+      : []
+
+    // 2. Fetch artist custom schedule activities (private blockers)
+    const { data: scheduleData, error: scheduleError } = await db
+      .from('ARTIST_CUSTOM_SCHEDULE')
+      .select('Start_Date, End_Date, Start_Time, End_Time')
+      .eq('Artist_ID', props.artistId)
+
+    const scheduleSlots: BookedSlot[] = (!scheduleError && scheduleData)
+      ? scheduleData.map((row: any) => ({
+          startDate: row.Start_Date,
+          endDate: row.End_Date || row.Start_Date,
+          startTime: row.Start_Time || '00:00',
+          endTime: row.End_Time || '23:59',
+          status: 'Scheduled Activity',
+          isCustomSchedule: true
+        }))
+      : []
+
+    bookedSlotsList.value = [...contractSlots, ...scheduleSlots]
   } catch (err) {
     console.warn('Failed to fetch artist booked dates:', err)
   }
 }
 
 const setupArtistRealtimeLock = () => {
-  if (artistBookingRealtimeChannel) {
-    supabase.removeChannel(artistBookingRealtimeChannel)
-    artistBookingRealtimeChannel = null
-  }
+  cleanupRealtimeChannel()
   if (!props.artistId) return
 
+  // Listen for booking contract changes
   artistBookingRealtimeChannel = supabase
     .channel(`direct-booking-lock-${props.artistId}`)
     .on(
@@ -117,12 +145,33 @@ const setupArtistRealtimeLock = () => {
       }
     )
     .subscribe()
+
+  // Listen for artist custom schedule blockers
+  artistScheduleRealtimeChannel = supabase
+    .channel(`direct-booking-schedule-lock-${props.artistId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'ARTIST_CUSTOM_SCHEDULE',
+        filter: `Artist_ID=eq.${props.artistId}`
+      },
+      () => {
+        fetchBookedDates()
+      }
+    )
+    .subscribe()
 }
 
 const cleanupRealtimeChannel = () => {
   if (artistBookingRealtimeChannel) {
     supabase.removeChannel(artistBookingRealtimeChannel)
     artistBookingRealtimeChannel = null
+  }
+  if (artistScheduleRealtimeChannel) {
+    supabase.removeChannel(artistScheduleRealtimeChannel)
+    artistScheduleRealtimeChannel = null
   }
 }
 
@@ -431,21 +480,109 @@ const handleSaveContract = async () => {
       Is_Rush_Booking: isRushBooking.value
     }
 
-    let insertRes = await db.from('BOOKING_CONTRACT').insert(payload)
+    let insertRes = await db.from('BOOKING_CONTRACT').insert(payload).select().single()
 
     // Collision retry: if duplicate Contract_Code key, re-fetch latest sequence and retry once
     if (insertRes.error && (insertRes.error.message?.includes('Contract_Code') || insertRes.error.code === '23505')) {
       await refreshContractCode()
       payload.Contract_Code = contractCode.value
-      insertRes = await db.from('BOOKING_CONTRACT').insert(payload)
+      insertRes = await db.from('BOOKING_CONTRACT').insert(payload).select().single()
     }
 
     if (insertRes.error) throw insertRes.error
 
+    const insertedBooking = insertRes.data || payload
+    const bookingId = insertedBooking.Booking_ID || null
+
+    // -------------------------------------------------------------------------
+    // Realtime Notification dispatch to Artist for Direct Booking
+    // -------------------------------------------------------------------------
+    let targetAccountId = props.artistAccountId
+    if (!targetAccountId && props.artistId) {
+      try {
+        const { data: aRow } = await db
+          .from('ARTIST')
+          .select('ACCOUNT_ID')
+          .eq('ARTIST_ID', props.artistId)
+          .maybeSingle()
+        if (aRow?.ACCOUNT_ID) {
+          targetAccountId = aRow.ACCOUNT_ID
+        }
+      } catch (idErr) {
+        console.warn('Could not resolve artist account ID for notification:', idErr)
+      }
+    }
+
+    if (targetAccountId) {
+      const clientDisplayName = businessName.value && businessName.value !== 'Individual Client'
+        ? businessName.value
+        : (currentUsername.value || 'A client')
+
+      const clientInitials = getTwoLetterInitials(clientDisplayName)
+      const formattedFee = agreedFee.value ? ` • ₱${Number(agreedFee.value).toLocaleString()}` : ''
+      const notifContent = `${clientDisplayName} sent you a direct booking offer for **${venueLocation.value.trim()}** on ${startDate.value}${formattedFee}. Review terms and sign contract to confirm.`
+      const actionLink = `/Artistprofile?tab=gigs&contractId=${bookingId || contractCode.value}`
+
+      try {
+        await db.rpc('send_notification', {
+          p_account_id: targetAccountId,
+          p_type: 'direct_booking_offer',
+          p_title: `Direct Booking Offer • ${contractCode.value}`,
+          p_content: notifContent,
+          p_action_link: actionLink,
+          p_svg_type: 'contract_offer',
+          p_avatar_text: clientInitials,
+          p_action_primary: 'Review & Sign',
+          p_action_secondary: null,
+          p_entity_id: bookingId || null,
+          p_entity_type: 'BOOKING_CONTRACT',
+          p_metadata: {
+            contract_code: contractCode.value,
+            sender_name: clientDisplayName,
+            venue: venueLocation.value.trim(),
+            fee: agreedFee.value ? Number(agreedFee.value) : null,
+            start_date: startDate.value,
+            booking_type: bookingType.value || 'Direct',
+            is_direct: true
+          },
+          p_sender_account_id: currentAccountId.value || null
+        })
+      } catch (rpcErr) {
+        // Fallback directly to NOTIFICATION table insert
+        try {
+          await db.from('NOTIFICATION').insert({
+            Account_ID: targetAccountId,
+            Sender_Account_ID: currentAccountId.value || null,
+            Type: 'direct_booking_offer',
+            Title: `Direct Booking Offer • ${contractCode.value}`,
+            Content: notifContent,
+            Action_Link: actionLink,
+            Svg_Type: 'contract_offer',
+            Avatar_Text: clientInitials,
+            Action_Primary: 'Review & Sign',
+            Entity_ID: bookingId || null,
+            Entity_Type: 'BOOKING_CONTRACT',
+            Metadata: {
+              contract_code: contractCode.value,
+              sender_name: clientDisplayName,
+              venue: venueLocation.value.trim(),
+              fee: agreedFee.value ? Number(agreedFee.value) : null,
+              start_date: startDate.value,
+              booking_type: bookingType.value || 'Direct',
+              is_direct: true
+            },
+            Is_Read: false
+          })
+        } catch (tableNotifErr) {
+          console.warn('Failed to insert direct booking notification:', tableNotifErr)
+        }
+      }
+    }
+
     successMessage.value = `Booking contract ${contractCode.value} submitted! Sent to ${props.artistName} for review.`
     clearDraft()
 
-    emit('submit', payload)
+    emit('submit', insertedBooking)
 
     setTimeout(() => {
       isSubmitting.value = false
@@ -467,8 +604,13 @@ const handleSaveContract = async () => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md" @click="$emit('close')">
-      <div class="relative w-full max-w-5xl bg-[#131315] border border-[#2A2A2E]/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-white">
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md"
+      @click.self="$emit('close')"
+    >
+      <div
+        @click.stop
+        class="relative w-full max-w-5xl bg-[#131315] border border-[#2A2A2E]/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-white"
+      >
         
         <!-- Modal Top Bar -->
         <div class="flex items-center justify-between px-6 sm:px-8 pt-5 mb-2">
@@ -679,7 +821,7 @@ const handleSaveContract = async () => {
               <!-- Overlap Conflict Warning -->
               <div v-if="isTimeSlotOverlapping" class="col-span-full p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-300 text-xs font-Sora animate-in fade-in">
                 <Icon name="ic:baseline-error-outline" class="text-base text-rose-400 shrink-0" />
-                <span><strong>Time Slot Overlap:</strong> The selected time ({{ formatTime12(startTime) }} – {{ formatTime12(endTime) }}) overlaps with an existing booking. Please adjust your start or end time.</span>
+                <span><strong>Time Slot Overlap:</strong> The selected time ({{ formatTime12(startTime) }} – {{ formatTime12(endTime) }}) overlaps with an existing gig or scheduled artist activity. Please adjust your start or end time.</span>
               </div>
 
               <div class="grid grid-cols-2 gap-3 sm:gap-4">

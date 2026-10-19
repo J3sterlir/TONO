@@ -24,6 +24,8 @@ const emit = defineEmits<{
 }>()
 
 const { comments, isLoadingComments, fetchComments, addComment, toggleLike } = useArtistPosts()
+const { user } = useTonoAuth()
+const { openReportModal } = useModerationReport()
 
 const newCommentText = ref('')
 const isPostingComment = ref(false)
@@ -182,14 +184,25 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                @click="emit('close')"
-                class="flex text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
-                title="Close"
-              >
-                <Icon name="ic:round-close" class="text-xl" />
-              </button>
+              <div class="flex items-center gap-1">
+                <button
+                  v-if="user && post.ARTIST_ID && post.ARTIST_ID !== user.id"
+                  type="button"
+                  @click="openReportModal({ targetType: 'Post', targetId: post.POST_ID, targetAccountId: post.ARTIST_ID, targetName: artistName, previewSnippet: post.Caption || (post.Media ? '[Media Post]' : undefined) })"
+                  class="flex items-center text-gray-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  title="Report Post"
+                >
+                  <Icon name="ic:round-flag" class="text-lg" />
+                </button>
+                <button
+                  type="button"
+                  @click="emit('close')"
+                  class="flex text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <Icon name="ic:round-close" class="text-xl" />
+                </button>
+              </div>
             </div>
 
             <!-- Middle Scroll Area: Post Caption & Comments History -->
@@ -264,7 +277,7 @@ onUnmounted(() => {
                 <div
                   v-for="comment in comments"
                   :key="comment.Comment_ID"
-                  class="flex items-start gap-3"
+                  class="group relative flex items-start gap-3"
                 >
                   <!-- Commenter Avatar -->
                   <div
@@ -281,13 +294,24 @@ onUnmounted(() => {
 
                   <!-- Comment Text & Meta -->
                   <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-                    <div class="flex items-baseline gap-2">
-                      <span class="text-xs font-semibold text-white font-Sora hover:underline cursor-pointer">
-                        {{ comment.Username }}
-                      </span>
-                      <span class="text-[10.5px] text-[#C7C5CE] font-HankenGrotesk">
-                        {{ formatPostRelativeTime(comment.Created_at) }}
-                      </span>
+                    <div class="flex items-baseline justify-between gap-2">
+                      <div class="flex items-baseline gap-2 min-w-0">
+                        <span class="text-xs font-semibold text-white font-Sora hover:underline cursor-pointer truncate">
+                          {{ comment.Username }}
+                        </span>
+                        <span class="text-[10.5px] text-[#C7C5CE] font-HankenGrotesk shrink-0">
+                          {{ formatPostRelativeTime(comment.Created_at) }}
+                        </span>
+                      </div>
+                      <button
+                        v-if="user && comment.User_ID && comment.User_ID !== user.id"
+                        type="button"
+                        @click="openReportModal({ targetType: 'Comment', targetId: comment.Comment_ID, targetAccountId: comment.User_ID, targetName: comment.Username, previewSnippet: comment.Content })"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-rose-400 p-0.5 rounded-sm hover:bg-rose-500/10 cursor-pointer shrink-0"
+                        title="Report Comment"
+                      >
+                        <Icon name="ic:round-flag" class="text-xs" />
+                      </button>
                     </div>
                     <p class="text-xs text-gray-300 font-Geist leading-relaxed wrap-break-word">
                       {{ comment.Content }}

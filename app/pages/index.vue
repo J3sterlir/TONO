@@ -255,30 +255,9 @@ const scrollTo = (id: string) => {
                                 is ready to help.
                             </p>
                         </div>
-                        <a href="mailto:support@tono.music"
+                        <a href="mailto:tono.support@protonmail.com"
                             class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#b4b8da] hover:text-white transition-colors">
-                            <span>support@tono.music</span>
-                            <Icon name="ic:round-arrow-forward" class="text-base" />
-                        </a>
-                    </div>
-
-                    <!-- Partnerships & Venues -->
-                    <div
-                        class="rounded-2xl border border-white/15 bg-[#1E1E24]/60 p-6 sm:p-8 backdrop-blur-xl flex flex-col justify-between">
-                        <div>
-                            <div
-                                class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#b4b8da]/20 text-[#b4b8da]">
-                                <Icon name="ic:outline-storefront" class="text-xl" />
-                            </div>
-                            <h3 class="text-lg sm:text-xl font-semibold text-white mb-2">Venues & Organizers</h3>
-                            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
-                                Are you a local venue or festival organizer interested in listing events or finding
-                                performers? Connect with us.
-                            </p>
-                        </div>
-                        <a href="mailto:partners@tono.music"
-                            class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#b4b8da] hover:text-white transition-colors">
-                            <span>partners@tono.music</span>
+                            <span>tono.support@protonmail.com</span>
                             <Icon name="ic:round-arrow-forward" class="text-base" />
                         </a>
                     </div>

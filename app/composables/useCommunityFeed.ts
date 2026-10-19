@@ -265,12 +265,17 @@ export const useCommunityFeed = () => {
    * Toggle Like on a feed post
    */
   const toggleLike = async (postId: string) => {
-    if (!currentUser.value) {
+    let currentUserId = currentUser.value?.id || (currentUser.value as any)?.sub
+    if (!currentUserId) {
+      try {
+        const { data: userData } = await supabase.auth.getUser()
+        currentUserId = userData?.user?.id
+      } catch {}
+    }
+    if (!currentUserId) {
       await navigateTo('/Login')
       return
     }
-
-    const currentUserId = currentUser.value.id
     const post = feedPosts.value.find((p) => p.POST_ID === postId)
     if (!post) return
 

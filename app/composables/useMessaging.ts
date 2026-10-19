@@ -62,6 +62,8 @@ export interface ConversationThread {
 
 let chatRealtimeChannel: any = null
 let presenceHeartbeatTimer: any = null
+let isRealtimeSubscribing = false
+let currentRealtimeUserId: string | null = null
 const onlineUserIds = ref<Set<string>>(new Set())
 
 export const useMessaging = () => {
@@ -1027,143 +1029,190 @@ export const useMessaging = () => {
     const uid = await getUserId()
     if (!uid) return
 
-    if (chatRealtimeChannel) {
-      return // already subscribed
+    const normalizedUid = uid.toLowerCase()
+
+    // 1. If already actively subscribed for this user, do not re-bind
+    if (
+      chatRealtimeChannel &&
+      currentRealtimeUserId === normalizedUid &&
+      ['subscribed', 'joined', 'joining'].includes(chatRealtimeChannel.state)
+    ) {
+      return
     }
 
-    chatRealtimeChannel = supabase
-      .channel('tono_chat_realtime_hub', {
-        config: {
-          presence: {
-            key: uid.toLowerCase(),
+    // 2. Prevent concurrent invocations while async setup is executing
+    if (isRealtimeSubscribing) {
+      return
+    }
+    isRealtimeSubscribing = true
+
+    try {
+      // 3. Check if Supabase client already has an existing channel for this topic
+      const existingChannel = supabase
+        .getChannels()
+        .find((ch: any) => ch.topic === 'realtime:tono_chat_realtime_hub')
+
+      if (existingChannel) {
+        if (
+          currentRealtimeUserId === normalizedUid &&
+          ['subscribed', 'joined', 'joining'].includes(existingChannel.state)
+        ) {
+          chatRealtimeChannel = existingChannel
+          return
+        }
+        // Remove stale/previous channel instance so we can bind listeners before subscribing
+        try {
+          await supabase.removeChannel(existingChannel)
+        } catch {
+          // Non-blocking
+        }
+        chatRealtimeChannel = null
+      }
+
+      currentRealtimeUserId = normalizedUid
+
+      chatRealtimeChannel = supabase
+        .channel('tono_chat_realtime_hub', {
+          config: {
+            presence: {
+              key: normalizedUid,
+            },
           },
-        },
-      })
-      .on('presence', { event: 'sync' }, () => {
-        const state = chatRealtimeChannel.presenceState()
-        const activeIds = new Set<string>()
-        for (const key of Object.keys(state)) {
-          activeIds.add(key.toLowerCase())
-        }
-        onlineUserIds.value = activeIds
-        syncOnlineStatuses()
-      })
-      .on('presence', { event: 'join' }, ({ key }: any) => {
-        if (key) {
-          onlineUserIds.value.add(key.toLowerCase())
-          syncOnlineStatuses()
-        }
-      })
-      .on('presence', { event: 'leave' }, ({ key }: any) => {
-        if (key) {
-          onlineUserIds.value.delete(key.toLowerCase())
-          syncOnlineStatuses()
-        }
-      })
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'MESSAGE' },
-        (payload: any) => {
-          const eventType = payload.eventType
-          const newRow = payload.new
-          const oldRow = payload.old
-
-          if (eventType === 'INSERT') {
-            const mapped = mapRowToMessage(newRow, uid)
-
-            // If incoming message belongs to currently active thread
-            if (activeThread.value && activeThread.value.threadId === mapped.threadId) {
-              if (!messages.value.some((m) => m.id === mapped.id)) {
-                messages.value.push(mapped)
-              }
-              if (!mapped.isMine) {
-                markThreadAsRead(mapped.threadId)
-              }
+        })
+        .on('presence', { event: 'sync' }, () => {
+          if (!chatRealtimeChannel) return
+          try {
+            const state = chatRealtimeChannel.presenceState()
+            const activeIds = new Set<string>()
+            for (const key of Object.keys(state)) {
+              activeIds.add(key.toLowerCase())
             }
+            onlineUserIds.value = activeIds
+            syncOnlineStatuses()
+          } catch (e) {
+            console.warn('[useMessaging] Presence sync error:', e)
+          }
+        })
+        .on('presence', { event: 'join' }, ({ key }: any) => {
+          if (key) {
+            onlineUserIds.value.add(key.toLowerCase())
+            syncOnlineStatuses()
+          }
+        })
+        .on('presence', { event: 'leave' }, ({ key }: any) => {
+          if (key) {
+            onlineUserIds.value.delete(key.toLowerCase())
+            syncOnlineStatuses()
+          }
+        })
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'MESSAGE' },
+          (payload: any) => {
+            const eventType = payload.eventType
+            const newRow = payload.new
 
-            // Update thread snippet & resort
-            const targetThread = threads.value.find((t) => t.threadId === mapped.threadId)
-            if (targetThread) {
-              targetThread.lastMessageSnippet = mapped.isDeleted
-                ? 'This message was unsent'
-                : mapped.content || 'Sent an attachment'
-              targetThread.lastMessageAt = mapped.createdAt
-              targetThread.lastMessageSenderId = mapped.senderId
+            if (eventType === 'INSERT') {
+              const mapped = mapRowToMessage(newRow, uid)
 
-              if (!mapped.isMine && activeThread.value?.threadId !== mapped.threadId) {
-                targetThread.unreadCount = (targetThread.unreadCount || 0) + 1
-              }
-
-              // Sort threads so most recently active is first
-              threads.value.sort(
-                (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-              )
-            } else {
-              // New thread not in list yet, refetch
-              fetchThreads()
-            }
-          } else if (eventType === 'UPDATE') {
-            const mapped = mapRowToMessage(newRow, uid)
-
-            if (activeThread.value && activeThread.value.threadId === mapped.threadId) {
-              const idx = messages.value.findIndex((m) => m.id === mapped.id)
-              if (idx !== -1) {
-                messages.value[idx] = mapped
-              }
-            }
-
-            if (mapped.isDeleted) {
-              const targetThread = threads.value.find((t) => t.threadId === mapped.threadId)
-              if (targetThread) {
-                const nonDeleted = messages.value.filter((m) => !m.isDeleted && m.id !== mapped.id)
-                const lastActive = nonDeleted[nonDeleted.length - 1]
-                if (lastActive) {
-                  targetThread.lastMessageSnippet = lastActive.content || (lastActive.attachments.length > 0 ? 'Sent an attachment' : 'Sent a message')
-                  targetThread.lastMessageSenderId = lastActive.senderId
-                  targetThread.lastMessageAt = lastActive.createdAt
-                } else {
-                  targetThread.lastMessageSnippet = 'No messages yet'
-                  targetThread.lastMessageSenderId = null
+              // If incoming message belongs to currently active thread
+              if (activeThread.value && activeThread.value.threadId === mapped.threadId) {
+                if (!messages.value.some((m) => m.id === mapped.id)) {
+                  messages.value.push(mapped)
+                }
+                if (!mapped.isMine) {
+                  markThreadAsRead(mapped.threadId)
                 }
               }
-            } else if (mapped.isEdited) {
+
+              // Update thread snippet & resort
               const targetThread = threads.value.find((t) => t.threadId === mapped.threadId)
-              if (targetThread && messages.value[messages.value.length - 1]?.id === mapped.id) {
-                targetThread.lastMessageSnippet = mapped.content
+              if (targetThread) {
+                targetThread.lastMessageSnippet = mapped.isDeleted
+                  ? 'This message was unsent'
+                  : mapped.content || 'Sent an attachment'
+                targetThread.lastMessageAt = mapped.createdAt
+                targetThread.lastMessageSenderId = mapped.senderId
+
+                if (!mapped.isMine && activeThread.value?.threadId !== mapped.threadId) {
+                  targetThread.unreadCount = (targetThread.unreadCount || 0) + 1
+                }
+
+                // Sort threads so most recently active is first
+                threads.value.sort(
+                  (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+                )
+              } else {
+                // New thread not in list yet, refetch
+                fetchThreads()
+              }
+            } else if (eventType === 'UPDATE') {
+              const mapped = mapRowToMessage(newRow, uid)
+
+              if (activeThread.value && activeThread.value.threadId === mapped.threadId) {
+                const idx = messages.value.findIndex((m) => m.id === mapped.id)
+                if (idx !== -1) {
+                  messages.value[idx] = mapped
+                }
+              }
+
+              if (mapped.isDeleted) {
+                const targetThread = threads.value.find((t) => t.threadId === mapped.threadId)
+                if (targetThread) {
+                  const nonDeleted = messages.value.filter((m) => !m.isDeleted && m.id !== mapped.id)
+                  const lastActive = nonDeleted[nonDeleted.length - 1]
+                  if (lastActive) {
+                    targetThread.lastMessageSnippet = lastActive.content || (lastActive.attachments.length > 0 ? 'Sent an attachment' : 'Sent a message')
+                    targetThread.lastMessageSenderId = lastActive.senderId
+                    targetThread.lastMessageAt = lastActive.createdAt
+                  } else {
+                    targetThread.lastMessageSnippet = 'No messages yet'
+                    targetThread.lastMessageSenderId = null
+                  }
+                }
+              } else if (mapped.isEdited) {
+                const targetThread = threads.value.find((t) => t.threadId === mapped.threadId)
+                if (targetThread && messages.value[messages.value.length - 1]?.id === mapped.id) {
+                  targetThread.lastMessageSnippet = mapped.content
+                }
               }
             }
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'MESSAGE_THREAD' },
-        () => {
-          fetchThreads()
-        }
-      )
-      .subscribe(async (status: string) => {
-        if (status === 'SUBSCRIBED') {
-          try {
-            await chatRealtimeChannel.track({
-              user_id: uid.toLowerCase(),
-              online_at: new Date().toISOString(),
-            })
-          } catch (trackErr) {
-            console.warn('[useMessaging] Presence track error:', trackErr)
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'MESSAGE_THREAD' },
+          () => {
+            fetchThreads()
           }
+        )
+        .subscribe(async (status: string) => {
+          if (status === 'SUBSCRIBED' && chatRealtimeChannel) {
+            try {
+              await chatRealtimeChannel.track({
+                user_id: normalizedUid,
+                online_at: new Date().toISOString(),
+              })
+            } catch (trackErr) {
+              console.warn('[useMessaging] Presence track error:', trackErr)
+            }
 
-          // Record activity in database on session connect
-          recordUserActivity(uid)
+            // Record activity in database on session connect
+            recordUserActivity(uid)
 
-          // Setup periodic heartbeat every 2 minutes while active
-          if (!presenceHeartbeatTimer) {
-            presenceHeartbeatTimer = setInterval(() => {
-              recordUserActivity(uid)
-            }, 2 * 60 * 1000)
+            // Setup periodic heartbeat every 2 minutes while active
+            if (!presenceHeartbeatTimer) {
+              presenceHeartbeatTimer = setInterval(() => {
+                recordUserActivity(uid)
+              }, 2 * 60 * 1000)
+            }
           }
-        }
-      })
+        })
+    } catch (err) {
+      console.warn('[useMessaging] setupRealtime caught error:', err)
+    } finally {
+      isRealtimeSubscribing = false
+    }
   }
 
   const cleanupRealtime = () => {
@@ -1177,8 +1226,13 @@ export const useMessaging = () => {
       } catch {
         // Non-blocking
       }
-      supabase.removeChannel(chatRealtimeChannel)
+      try {
+        supabase.removeChannel(chatRealtimeChannel)
+      } catch {
+        // Non-blocking
+      }
       chatRealtimeChannel = null
+      currentRealtimeUserId = null
     }
   }
 

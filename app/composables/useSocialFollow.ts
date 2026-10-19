@@ -5,6 +5,16 @@ export interface MutualFollowersSummary {
   totalCount: number
 }
 
+export interface FollowUserItem {
+  accountId: string
+  username: string
+  displayName: string
+  profilePicture: string | null
+  userType?: string
+  profileRoute?: string
+  followedAt?: string
+}
+
 // Global reactive caches across pages
 const isFollowingMap = ref<Record<string, boolean>>({})
 const followerCounts = ref<Record<string, number>>({})
@@ -21,13 +31,20 @@ export const useSocialFollow = () => {
    * Toggles follow / unfollow on a target account
    */
   const toggleFollow = async (targetAccountId: string) => {
-    if (!currentUser.value) {
+    let currentId = currentUser.value?.id || (currentUser.value as any)?.sub
+    if (!currentId) {
+      try {
+        const { data: userData } = await supabase.auth.getUser()
+        currentId = userData?.user?.id
+      } catch {}
+    }
+
+    if (!currentId) {
       await navigateTo('/Login')
       return { success: false, isFollowing: false }
     }
 
-    const currentId = currentUser.value?.id || (currentUser.value as any)?.sub
-    if (!targetAccountId || !currentId || targetAccountId.toLowerCase() === currentId.toLowerCase()) {
+    if (!targetAccountId || targetAccountId.toLowerCase() === currentId.toLowerCase()) {
       return { success: false, isFollowing: false }
     }
 
@@ -215,6 +232,130 @@ export const useSocialFollow = () => {
     }
   }
 
+  /**
+   * Fetches full list of followers for an account with profile pictures and display names
+   */
+  const fetchFollowersList = async (accountId: string): Promise<FollowUserItem[]> => {
+    if (!accountId) return []
+    try {
+      const { data, error } = await db
+        .from('FOLLOW')
+        .select(`
+          Follow_ID,
+          Follower_Account_ID,
+          Created_at,
+          USER_ACCOUNT:Follower_Account_ID (
+            ACCOUNT_ID,
+            Username,
+            Profile_Picture,
+            ARTIST (
+              ARTIST_ID,
+              StageName
+            ),
+            BUSINESS_PROFILE (
+              BUSINESS_ID,
+              Business_Name
+            )
+          )
+        `)
+        .eq('Following_Account_ID', accountId)
+        .order('Created_at', { ascending: false })
+
+      if (error) throw error
+
+      return (data || []).map((row: any) => {
+        const acc = row.USER_ACCOUNT
+        const artist = Array.isArray(acc?.ARTIST) ? acc.ARTIST[0] : acc?.ARTIST
+        const business = Array.isArray(acc?.BUSINESS_PROFILE) ? acc.BUSINESS_PROFILE[0] : acc?.BUSINESS_PROFILE
+
+        let displayName = acc?.Username || 'User'
+        let profileRoute = ''
+
+        if (artist?.StageName) {
+          displayName = artist.StageName
+          profileRoute = `/artist/${acc?.Username}`
+        } else if (business?.Business_Name) {
+          displayName = business.Business_Name
+          profileRoute = `/business/${business.BUSINESS_ID}`
+        }
+
+        return {
+          accountId: row.Follower_Account_ID,
+          username: acc?.Username || 'User',
+          displayName,
+          profilePicture: acc?.Profile_Picture || null,
+          profileRoute,
+          followedAt: row.Created_at
+        }
+      })
+    } catch (err) {
+      console.error('[useSocialFollow] fetchFollowersList error:', err)
+      return []
+    }
+  }
+
+  /**
+   * Fetches full list of accounts followed by an account
+   */
+  const fetchFollowingList = async (accountId: string): Promise<FollowUserItem[]> => {
+    if (!accountId) return []
+    try {
+      const { data, error } = await db
+        .from('FOLLOW')
+        .select(`
+          Follow_ID,
+          Following_Account_ID,
+          Created_at,
+          USER_ACCOUNT:Following_Account_ID (
+            ACCOUNT_ID,
+            Username,
+            Profile_Picture,
+            ARTIST (
+              ARTIST_ID,
+              StageName
+            ),
+            BUSINESS_PROFILE (
+              BUSINESS_ID,
+              Business_Name
+            )
+          )
+        `)
+        .eq('Follower_Account_ID', accountId)
+        .order('Created_at', { ascending: false })
+
+      if (error) throw error
+
+      return (data || []).map((row: any) => {
+        const acc = row.USER_ACCOUNT
+        const artist = Array.isArray(acc?.ARTIST) ? acc.ARTIST[0] : acc?.ARTIST
+        const business = Array.isArray(acc?.BUSINESS_PROFILE) ? acc.BUSINESS_PROFILE[0] : acc?.BUSINESS_PROFILE
+
+        let displayName = acc?.Username || 'User'
+        let profileRoute = ''
+
+        if (artist?.StageName) {
+          displayName = artist.StageName
+          profileRoute = `/artist/${acc?.Username}`
+        } else if (business?.Business_Name) {
+          displayName = business.Business_Name
+          profileRoute = `/business/${business.BUSINESS_ID}`
+        }
+
+        return {
+          accountId: row.Following_Account_ID,
+          username: acc?.Username || 'User',
+          displayName,
+          profilePicture: acc?.Profile_Picture || null,
+          profileRoute,
+          followedAt: row.Created_at
+        }
+      })
+    } catch (err) {
+      console.error('[useSocialFollow] fetchFollowingList error:', err)
+      return []
+    }
+  }
+
   return {
     isFollowingMap,
     followerCounts,
@@ -224,6 +365,8 @@ export const useSocialFollow = () => {
     toggleFollow,
     fetchFollowStats,
     fetchFollowStatus,
-    fetchMutualFollowers
+    fetchMutualFollowers,
+    fetchFollowersList,
+    fetchFollowingList
   }
 }

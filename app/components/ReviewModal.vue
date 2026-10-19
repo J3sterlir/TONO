@@ -1,21 +1,31 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 
+defineOptions({
+  inheritAttrs: false
+})
+
+interface ReviewModalProps {
+  isOpen: boolean
+  booking?: any | null
+  reviewerAccountId?: string | null
+  bookingId?: string | null
+  contractCode?: string | null
+  eventTitle?: string | null
+  eventDate?: string | null
+  targetName?: string
+  targetRole?: string
+  targetArtistId?: string | null
+  targetBusinessId?: string | null
+  targetAccountId?: string | null
+}
+
 const props = withDefaults(
-  defineProps<{
-    isOpen: boolean
-    bookingId?: string | null
-    contractCode?: string | null
-    eventTitle?: string | null
-    eventDate?: string | null
-    targetName?: string
-    targetRole?: string
-    targetArtistId?: string | null
-    targetBusinessId?: string | null
-    targetAccountId?: string | null
-  }>(),
+  defineProps<ReviewModalProps>(),
   {
     isOpen: false,
+    booking: null,
+    reviewerAccountId: null,
     bookingId: null,
     contractCode: '',
     eventTitle: 'Live Gig Event',
@@ -56,6 +66,62 @@ const scoreLabels: Record<number, string> = {
   4: 'Good / Recommended',
   5: 'Exceptional Performance!'
 }
+
+const resolvedBookingId = computed(() => {
+  return props.bookingId || props.booking?.Booking_ID || null
+})
+
+const resolvedContractCode = computed(() => {
+  return props.contractCode || props.booking?.Contract_Code || ''
+})
+
+const resolvedEventTitle = computed(() => {
+  if (props.eventTitle && props.eventTitle !== 'Live Gig Event') return props.eventTitle
+  return props.booking?.JOB_LISTING?.Event_Title || props.booking?.Event_Title || props.booking?.Event_Name || props.eventTitle || 'Live Gig Event'
+})
+
+const resolvedEventDate = computed(() => {
+  if (props.eventDate) return props.eventDate
+  return props.booking?.Start_Date || props.booking?.Event_Date || props.booking?.Date || ''
+})
+
+const resolvedTargetName = computed(() => {
+  if (props.targetName && props.targetName !== 'Artist / Host' && props.targetName !== 'Performing Artist') {
+    return props.targetName
+  }
+  const artist = props.booking?.ARTIST
+  if (artist) {
+    return artist.StageName?.[0]?.Artist_Name || artist.BandName?.[0]?.Band_Name || artist.USER_ACCOUNT?.Username || props.targetName || 'Performing Artist'
+  }
+  const business = props.booking?.BUSINESS_PROFILE || props.booking?.JOB_LISTING?.BUSINESS_PROFILE
+  if (business?.Business_Name) {
+    return business.Business_Name
+  }
+  return props.targetName || 'Artist / Host'
+})
+
+const resolvedTargetRole = computed(() => {
+  if (props.targetRole && props.targetRole !== 'Partner') return props.targetRole
+  if (resolvedTargetArtistId.value) return 'Performing Artist'
+  if (resolvedTargetBusinessId.value) return 'Venue Host'
+  return 'Partner'
+})
+
+const resolvedTargetArtistId = computed(() => {
+  return props.targetArtistId || props.booking?.Provider_Artist_ID || null
+})
+
+const resolvedTargetBusinessId = computed(() => {
+  return props.targetBusinessId || props.booking?.Provider_Business_ID || props.booking?.JOB_LISTING?.Posted_By_BUSINESS_ID || null
+})
+
+const resolvedTargetAccountId = computed(() => {
+  return props.targetAccountId || props.booking?.Requester_Account_ID || null
+})
+
+const resolvedReviewerAccountId = computed(() => {
+  return props.reviewerAccountId || currentAccountId.value || user.value?.id || ''
+})
 
 const activeDisplayRating = computed(() => {
   return hoverRating.value > 0 ? hoverRating.value : selectedRating.value
@@ -134,7 +200,8 @@ const handleSubmit = async () => {
   formError.value = ''
   formSuccess.value = ''
 
-  if (!currentAccountId.value && !user.value?.id) {
+  const reviewerId = resolvedReviewerAccountId.value
+  if (!reviewerId) {
     formError.value = 'Please sign in to submit a review.'
     return
   }
@@ -145,13 +212,12 @@ const handleSubmit = async () => {
   }
 
   try {
-    const reviewerId = currentAccountId.value || user.value?.id || ''
     const result = await submitReview({
-      bookingId: props.bookingId || null,
+      bookingId: resolvedBookingId.value,
       reviewerAccountId: reviewerId,
-      targetArtistId: props.targetArtistId || null,
-      targetBusinessId: props.targetBusinessId || null,
-      targetAccountId: props.targetAccountId || null,
+      targetArtistId: resolvedTargetArtistId.value,
+      targetBusinessId: resolvedTargetBusinessId.value,
+      targetAccountId: resolvedTargetAccountId.value,
       ratingScore: selectedRating.value,
       writtenFeedback: writtenFeedback.value
     })
@@ -190,14 +256,14 @@ const handleSubmit = async () => {
         <!-- Header -->
         <div class="space-y-1">
           <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">
-            Gig Completion Feedback • {{ contractCode || 'DIRECT-BOOKING' }}
+            Gig Completion Feedback • {{ resolvedContractCode || 'DIRECT-BOOKING' }}
           </span>
           <h2 class="text-xl sm:text-2xl font-bold tracking-tight">
-            Rate &amp; Review {{ targetName }}
+            Rate &amp; Review {{ resolvedTargetName }}
           </h2>
           <p class="text-xs text-gray-400">
-            Share your experience for <span class="text-gray-200 font-medium">{{ eventTitle }}</span>
-            <span v-if="eventDate"> on {{ eventDate }}</span>.
+            Share your experience for <span class="text-gray-200 font-medium">{{ resolvedEventTitle }}</span>
+            <span v-if="resolvedEventDate"> on {{ resolvedEventDate }}</span>.
           </p>
         </div>
 

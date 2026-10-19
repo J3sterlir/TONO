@@ -57,10 +57,24 @@ const resolvedSocialLinks = computed(() => {
 
 // Artist Details & Tags State
 const artistId = ref('')
+const artistAccountId = ref('')
 const artistType = ref<'Solo' | 'Band'>('Solo')
 const artistGenres = ref<string[]>([])
 const artistInstruments = ref<string[]>([])
 const isEditDetailsOpen = ref(false)
+
+// Social Follow System
+const { fetchFollowStats, followerCounts, followingCounts } = useSocialFollow()
+const isFollowModalOpen = ref(false)
+const followModalTab = ref<'followers' | 'following'>('followers')
+
+const followerCount = computed(() => (artistAccountId.value ? followerCounts.value[artistAccountId.value] || 0 : 0))
+const followingCount = computed(() => (artistAccountId.value ? followingCounts.value[artistAccountId.value] || 0 : 0))
+
+const openFollowModal = (tab: 'followers' | 'following') => {
+  followModalTab.value = tab
+  isFollowModalOpen.value = true
+}
 
 // Multipage Tab State
 const route = useRoute()
@@ -600,6 +614,9 @@ const fetchArtistEvents = async () => {
 
     if (offersData) {
       pendingOffers.value = offersData
+      if (route.query.contractId) {
+        handleDeepLinkContract(route.query.contractId as string)
+      }
     }
   } catch (e) {
     console.error('Failed to load artist gigs:', e)
@@ -920,6 +937,8 @@ onMounted(async () => {
 
     if (profile) {
       if (profile.account) {
+        artistAccountId.value = profile.account.ACCOUNT_ID
+        fetchFollowStats(profile.account.ACCOUNT_ID)
         profilePicture.value = profile.account.Profile_Picture || null
         coverPicture.value = profile.account.Cover_Picture || null
         if (profile.account.Profile_Picture) {
@@ -998,15 +1017,7 @@ onMounted(async () => {
       }
 
       if (route.query.contractId) {
-        activeTab.value = 'gigs'
-        const target = yourEvents.value.find(
-          (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
-        ) || pendingOffers.value.find(
-          (c: any) => c.Booking_ID === route.query.contractId || c.Contract_Code === route.query.contractId
-        )
-        if (target) {
-          openForm2Modal(target)
-        }
+        handleDeepLinkContract(route.query.contractId as string)
       }
     }
   } catch (error) {
@@ -1015,6 +1026,29 @@ onMounted(async () => {
     isLoading.value = false
   }
 })
+
+// Deep Link Contract Handler & Watcher
+const handleDeepLinkContract = (contractId?: string) => {
+  if (!contractId) return
+  activeTab.value = 'gigs'
+  const target = (pendingOffers.value || []).find(
+    (c: any) => c.Booking_ID === contractId || c.Contract_Code === contractId
+  ) || (yourEvents.value || []).find(
+    (c: any) => c.Booking_ID === contractId || c.Contract_Code === contractId
+  )
+  if (target) {
+    openForm2Modal(target)
+  }
+}
+
+watch(
+  () => route.query.contractId,
+  (newContractId) => {
+    if (newContractId) {
+      handleDeepLinkContract(newContractId as string)
+    }
+  }
+)
 
 // Realtime Booking Contract Sync
 let artistContractsRealtimeChannel: any = null
@@ -1027,7 +1061,7 @@ const setupRealtimeContracts = () => {
   if (!artistId.value) return
 
   artistContractsRealtimeChannel = supabase
-    .channel(`artist-profile-contracts-${artistId.value}`)
+    .channel(`artist-profile-contracts-${artistId.value}-${Date.now()}`)
     .on(
       'postgres_changes',
       {
@@ -1036,8 +1070,14 @@ const setupRealtimeContracts = () => {
         table: 'BOOKING_CONTRACT',
         filter: `Provider_Artist_ID=eq.${artistId.value}`
       },
-      () => {
-        fetchArtistEvents()
+      async (payload: any) => {
+        await fetchArtistEvents()
+        if (payload?.eventType === 'INSERT' && payload.new) {
+          const newBooking = payload.new
+          if (route.query.contractId === newBooking.Booking_ID || route.query.contractId === newBooking.Contract_Code) {
+            handleDeepLinkContract(route.query.contractId as string)
+          }
+        }
       }
     )
     .subscribe()
@@ -1254,6 +1294,14 @@ const handleLogout = async () => {
       :initial-name="artistName" :initial-bio="artistBio" :initial-genres="artistGenres"
       :initial-instruments="artistInstruments" :initial-links="artistLinks" @close="isEditDetailsOpen = false" @saved="onProfileDetailsSaved" />
 
+    <!-- Followers / Following List Modal -->
+    <FollowListModal
+      :is-open="isFollowModalOpen"
+      :initial-tab="followModalTab"
+      :account-id="artistAccountId"
+      :title="artistName ? `${artistName}'s Connections` : 'Connections'"
+      @close="isFollowModalOpen = false" />
+
     <!-- Hidden File Inputs -->
     <input ref="avatarInputRef" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden"
       @change="onAvatarChange" />
@@ -1318,6 +1366,27 @@ const handleLogout = async () => {
             class="font-Sora font-bold text-3xl sm:text-5xl lg:text-[64px] tracking-tight text-white leading-tight wrap-break-word max-w-full">
             {{ artistName || 'Artist' }}
           </h1>
+
+          <!-- Followers & Following Counters (Interactive Modal Trigger) -->
+          <div class="flex items-center gap-3 text-xs sm:text-sm text-gray-300 mt-1 flex-wrap">
+            <button
+              type="button"
+              @click="openFollowModal('followers')"
+              class="cursor-pointer hover:underline flex items-center gap-1 font-medium text-white transition-colors"
+            >
+              <span class="font-bold text-[#D0D4F7]">{{ formatCount(followerCount) }}</span>
+              <span class="text-gray-400 font-normal">Followers</span>
+            </button>
+            <span class="text-gray-500">•</span>
+            <button
+              type="button"
+              @click="openFollowModal('following')"
+              class="cursor-pointer hover:underline flex items-center gap-1 font-medium text-white transition-colors"
+            >
+              <span class="font-bold text-[#D0D4F7]">{{ formatCount(followingCount) }}</span>
+              <span class="text-gray-400 font-normal">Following</span>
+            </button>
+          </div>
           <div class="max-w-xl my-1">
             <p v-if="artistBio"
               class="text-xs sm:text-sm md:text-[15px] text-gray-200/90 leading-relaxed line-clamp-3 md:line-clamp-4">
@@ -2481,7 +2550,7 @@ const handleLogout = async () => {
                     class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
                   >
                     <Icon name="ic:baseline-edit-note" class="text-base" />
-                    <span>Review &amp; Sign (Form 2)</span>
+                    <span>Review &amp; Sign Contract</span>
                   </button>
                 </div>
               </div>
@@ -2783,11 +2852,10 @@ const handleLogout = async () => {
                         <span>Rush</span>
                       </span>
                       <span v-if="event.Status === 'Cancelled' || event.Status === 'Declined'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
-                        <Icon name="ic:round-cancel" class="text-xs" />
                         <span>Cancelled</span>
                       </span>
                       <span v-else-if="event.Status === 'Completed'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        Completed ✓
+                        Completed
                       </span>
                       <span v-else-if="isEventHappeningNow(event)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
@@ -2876,7 +2944,7 @@ const handleLogout = async () => {
                         : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
                     >
                       <Icon :name="reviewedBookingIds.has(event.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
-                      <span>{{ reviewedBookingIds.has(event.Booking_ID) ? 'Reviewed ✓' : 'Rate Host / Client' }}</span>
+                      <span>{{ reviewedBookingIds.has(event.Booking_ID) ? 'Reviewed' : 'Rate Host / Client' }}</span>
                     </button>
                   </template>
 

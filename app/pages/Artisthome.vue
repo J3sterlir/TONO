@@ -611,6 +611,9 @@ const handleLogout = async () => {
           </div>
         </div>
       </section>
+
+      <!-- Bottom Feedback & Bug Reporting Banner -->
+      <DiscoverFeedbackBanner />
     </div>
   </div>
 </template>

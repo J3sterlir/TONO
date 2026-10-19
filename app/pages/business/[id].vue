@@ -14,9 +14,9 @@ const businessIdParam = computed(() => (route.params.id as string) || '')
 const supabase = useSupabaseClient()
 const db = supabase as any
 
-// Post and messaging composables
 const { posts, fetchBusinessPosts, toggleLike } = useArtistPosts()
 const { getOrCreateThread } = useMessaging()
+const { openReportModal } = useModerationReport()
 
 // User auth & role state
 const currentUser = useSupabaseUser()
@@ -248,16 +248,35 @@ const scrollDarkOverlayOpacity = computed(() => {
 // 4. Messaging & Actions
 // -----------------------------------------------------------------------------
 const handleInitiateChat = async () => {
-  const resolvedUser = currentUser.value || (await supabase.auth.getUser()).data.user
-  if (!resolvedUser) {
+  let resolvedUserId = currentUserId.value || currentUser.value?.id || (currentUser.value as any)?.sub
+  if (!resolvedUserId) {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      resolvedUserId = userData?.user?.id
+    } catch {}
+  }
+  if (!resolvedUserId) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      resolvedUserId = sessionData?.session?.user?.id
+    } catch {}
+  }
+
+  if (!resolvedUserId) {
     await navigateTo(`/Login?redirect=/business/${businessIdParam.value}`)
     return
   }
 
   const targetAccId = business.value?.ACCOUNT_ID
-  if (!targetAccId) return
+  if (!targetAccId) {
+    chatToast.value = 'Could not resolve business account.'
+    setTimeout(() => {
+      chatToast.value = ''
+    }, 4000)
+    return
+  }
 
-  if (resolvedUser.id.toLowerCase() === targetAccId.toLowerCase()) {
+  if (String(resolvedUserId).toLowerCase() === String(targetAccId).toLowerCase()) {
     chatToast.value = 'You cannot start a chat with your own business.'
     setTimeout(() => {
       chatToast.value = ''
@@ -267,7 +286,7 @@ const handleInitiateChat = async () => {
 
   initiatingChat.value = true
   try {
-    const threadId = await getOrCreateThread(targetAccId, resolvedUser.id)
+    const threadId = await getOrCreateThread(targetAccId, resolvedUserId)
     if (threadId) {
       await navigateTo(`/Messages?threadId=${threadId}`)
     }
@@ -565,7 +584,7 @@ const scrollToTop = () => {
                   <Icon
                     :name="isFollowingBusiness ? 'ic:round-check' : 'ic:round-person-add'"
                     class="text-sm"
-                    :class="isFollowingBusiness ? 'text-emerald-400' : 'text-[#0E0E10]'"
+                    :class="isFollowingBusiness ? 'text-[#D0D4F7]' : 'text-[#0E0E10]'"
                   />
                   <button class="font-semibold cursor-pointer">
                     {{ isFollowingBusiness ? 'Following' : 'Follow' }}
@@ -580,6 +599,17 @@ const scrollToTop = () => {
                   <Icon v-else name="mdi:message-text-outline"
                     class="text-base group-hover:scale-110 transition-transform" />
                   <button class="font-bold cursor-pointer text-xs sm:text-sm">Message</button>
+                </div>
+
+                <!-- Report Business Action Button -->
+                <div
+                  v-if="!isOwner && business.User_ID"
+                  @click="openReportModal({ targetType: 'Profile', targetId: business.BUSINESS_ID, targetAccountId: business.User_ID, targetName: business.Business_Name, previewSnippet: business.Business_Bio || business.Business_Address || undefined })"
+                  class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
+                  title="Report Profile"
+                >
+                  <Icon name="ic:round-flag" class="text-sm group-hover:scale-110 transition-transform" />
+                  <span class="font-medium">Report</span>
                 </div>
               </div>
             </div>

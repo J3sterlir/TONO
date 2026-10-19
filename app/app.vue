@@ -4,6 +4,7 @@
   </NuxtLayout>
   <ClientOnly>
     <TonoMusicPlayer />
+    <ReportModal />
   </ClientOnly>
 </template>
 

@@ -12,12 +12,15 @@ useHead({
 })
 import { useTonoReviews } from '~/composables/useTonoReviews'
 import { useTonoEvents } from '~/composables/useTonoEvents'
+import { formatCount } from '~/utils/postHelpers'
+import { formatTimeRange12 } from '~/utils/formatTime'
+import UserBookingDetailModal from '~/components/UserBookingDetailModal.vue'
 
 const supabase = useSupabaseClient()
 const db = supabase as any
 const { fetchCurrentUserProfile, resolveUserType } = useTonoAuth()
 const { uploadAvatar, uploadCover, isUploadingAvatar, isUploadingCover, uploadError } = useMediaUpload()
-const { isEventFinished } = useTonoEvents()
+const { isEventFinished, isEventHappeningNow } = useTonoEvents()
 const completingBookingId = ref<string | null>(null)
 
 const username = ref('')
@@ -32,6 +35,19 @@ const profilePicture = ref<string | null>(null)
 const coverPicture = ref<string | null>(null)
 const globalAvatarUrl = useState<string | null>('tono_user_avatar', () => null)
 const isLoading = ref(true)
+
+// Social Follow System
+const { fetchFollowStats, followerCounts, followingCounts } = useSocialFollow()
+const isFollowModalOpen = ref(false)
+const followModalTab = ref<'followers' | 'following'>('followers')
+
+const followerCount = computed(() => (currentAccountId.value ? followerCounts.value[currentAccountId.value] || 0 : 0))
+const followingCount = computed(() => (currentAccountId.value ? followingCounts.value[currentAccountId.value] || 0 : 0))
+
+const openFollowModal = (tab: 'followers' | 'following') => {
+  followModalTab.value = tab
+  isFollowModalOpen.value = true
+}
 
 // Navigation Tabs
 const activeTab = ref<'active' | 'requests' | 'reviews'>('active')
@@ -49,6 +65,91 @@ const activeBookings = ref<any[]>([])
 const pendingRequests = ref<any[]>([])
 const liveTodayEvents = ref<any[]>([])
 const isBookingsLoading = ref(true)
+
+// Bookings Tab Search and Filter State
+const bookingSearchQuery = ref('')
+const bookingTypeFilter = ref<'all' | 'job' | 'direct'>('all')
+const bookingStatusFilter = ref<'all' | 'active' | 'completed' | 'cancelled'>('all')
+const bookingDateFilter = ref<'all' | 'upcoming' | 'past'>('all')
+const isFilterDropdownOpen = ref(false)
+
+const selectedBookingForDetail = ref<any | null>(null)
+const isBookingDetailModalOpen = ref(false)
+
+const openBookingDetailModal = (booking: any) => {
+  selectedBookingForDetail.value = booking
+  isBookingDetailModalOpen.value = true
+}
+
+const activeBookingsCount = computed(() => {
+  return (activeBookings.value || []).filter((b: any) => ['Confirmed', 'Active'].includes(b.Status)).length
+})
+
+const completedBookingsCount = computed(() => {
+  return (activeBookings.value || []).filter((b: any) => b.Status === 'Completed').length
+})
+
+const cancelledBookingsCount = computed(() => {
+  return (activeBookings.value || []).filter((b: any) => ['Cancelled', 'Declined'].includes(b.Status)).length
+})
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (bookingTypeFilter.value !== 'all') count++
+  if (bookingStatusFilter.value !== 'all') count++
+  if (bookingDateFilter.value !== 'all') count++
+  return count
+})
+
+const hasActiveFilters = computed(() => {
+  return (
+    bookingSearchQuery.value.trim() !== '' ||
+    bookingTypeFilter.value !== 'all' ||
+    bookingStatusFilter.value !== 'all' ||
+    bookingDateFilter.value !== 'all'
+  )
+})
+
+const resetBookingFilters = () => {
+  bookingSearchQuery.value = ''
+  bookingTypeFilter.value = 'all'
+  bookingStatusFilter.value = 'all'
+  bookingDateFilter.value = 'all'
+}
+
+const filteredBookings = computed(() => {
+  return (activeBookings.value || []).filter((booking: any) => {
+    // 1. Text Search (BK ID / Contract Code, Title, Venue, Artist name)
+    if (bookingSearchQuery.value.trim()) {
+      const q = bookingSearchQuery.value.toLowerCase().trim()
+      const code = (booking.Contract_Code || booking.Booking_ID || '').toLowerCase()
+      const title = (booking.Job_ID ? booking.JOB_LISTING?.Event_Title : (booking.Booking_Type || 'Direct Performance')).toLowerCase()
+      const venue = (booking.Job_ID ? (booking.JOB_LISTING?.Location || booking.Venue_Location) : booking.Venue_Location || '').toLowerCase()
+      const artist = getArtistDisplayName(booking.ARTIST).toLowerCase()
+      if (!code.includes(q) && !title.includes(q) && !venue.includes(q) && !artist.includes(q)) {
+        return false
+      }
+    }
+
+    // 2. Type Filter (Direct Booking vs Job Listing)
+    if (bookingTypeFilter.value === 'job' && !booking.Job_ID) return false
+    if (bookingTypeFilter.value === 'direct' && booking.Job_ID) return false
+
+    // 3. Status Filter (Active vs Completed vs Cancelled)
+    if (bookingStatusFilter.value === 'active' && ['Completed', 'Cancelled', 'Declined'].includes(booking.Status)) return false
+    if (bookingStatusFilter.value === 'completed' && booking.Status !== 'Completed') return false
+    if (bookingStatusFilter.value === 'cancelled' && !['Cancelled', 'Declined'].includes(booking.Status)) return false
+
+    // 4. Date Filter (Upcoming vs Past)
+    if (bookingDateFilter.value !== 'all') {
+      const isPast = isEventFinished(booking) || ['Cancelled', 'Declined', 'Completed'].includes(booking.Status)
+      if (bookingDateFilter.value === 'upcoming' && isPast) return false
+      if (bookingDateFilter.value === 'past' && !isPast) return false
+    }
+
+    return true
+  })
+})
 
 // Cancellation & 5-Day Proximity Warning
 const isWarningModalOpen = ref(false)
@@ -177,6 +278,7 @@ onMounted(async () => {
       userCity.value = profile.account.City || ''
       userBarangay.value = profile.account.Barangay || ''
 
+      fetchFollowStats(profile.account.ACCOUNT_ID)
       await fetchUserBookings()
       setupRealtimeUserContracts()
 
@@ -241,7 +343,7 @@ const fetchUserBookings = async () => {
       .order('Created_at', { ascending: false })
 
     if (!contractsErr && contractsData) {
-      activeBookings.value = contractsData.filter((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status))
+      activeBookings.value = contractsData.filter((c: any) => ['Confirmed', 'Active', 'Completed', 'Cancelled', 'Declined'].includes(c.Status))
       pendingRequests.value = contractsData.filter((c: any) => ['Pending_Artist_Approval', 'Pending'].includes(c.Status))
 
       // Check review status for completed events
@@ -519,6 +621,14 @@ const handleLogout = async () => {
       @close="isEditDetailsOpen = false"
       @saved="onProfileDetailsSaved" />
 
+    <!-- Followers / Following List Modal -->
+    <FollowListModal
+      :is-open="isFollowModalOpen"
+      :initial-tab="followModalTab"
+      :account-id="currentAccountId"
+      :title="username ? `@${username}'s Connections` : 'Connections'"
+      @close="isFollowModalOpen = false" />
+
     <!-- Hidden File Inputs -->
     <input
       ref="avatarInputRef"
@@ -598,6 +708,27 @@ const handleLogout = async () => {
               {{ username || 'User' }}
             </h1>
             <RatingStars :target-account-id="currentAccountId" :inline="true" />
+          </div>
+
+          <!-- Followers & Following Counters (Interactive Modal Trigger) -->
+          <div class="flex items-center gap-3 text-xs sm:text-sm text-gray-300 mt-1 flex-wrap">
+            <button
+              type="button"
+              @click="openFollowModal('followers')"
+              class="cursor-pointer hover:underline flex items-center gap-1 font-medium text-white transition-colors"
+            >
+              <span class="font-bold text-[#D0D4F7]">{{ formatCount(followerCount) }}</span>
+              <span class="text-gray-400 font-normal">Followers</span>
+            </button>
+            <span class="text-gray-500">•</span>
+            <button
+              type="button"
+              @click="openFollowModal('following')"
+              class="cursor-pointer hover:underline flex items-center gap-1 font-medium text-white transition-colors"
+            >
+              <span class="font-bold text-[#D0D4F7]">{{ formatCount(followingCount) }}</span>
+              <span class="text-gray-400 font-normal">Following</span>
+            </button>
           </div>
 
           <!-- Categorized Tags: Genre Tags & Instrument Tags -->
@@ -712,7 +843,7 @@ const handleLogout = async () => {
             <span
               class="inline-block py-4 sm:py-5"
               :class="activeTab === 'active' ? 'border-b-2 border-[#D0D4F7] font-semibold' : ''">
-              Confirmed Events
+              Bookings
             </span>
             <span v-if="activeBookings.length" class="text-xs px-2 py-0.5 rounded-full bg-[#1C1C1F] border border-[#2A2A2E] text-[#D0D4F7] font-mono">
               {{ activeBookings.length }}
@@ -752,61 +883,326 @@ const handleLogout = async () => {
         <div v-for="i in 4" :key="i" class="h-44 bg-[#141416] border border-[#2A2A2E] rounded-2xl"></div>
       </div>
 
-      <!-- TAB 1: YOUR EVENTS & LIVE GIGS -->
-      <div v-else-if="activeTab === 'active'" class="space-y-12">
-        <!-- ================================================================= -->
-        <!-- SECTION 1: "YOUR EVENTS" (Deduplicated Job Listings vs Contracts) -->
-        <!-- ================================================================= -->
-        <section class="space-y-5 font-Sora">
-          <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
-            <div>
-              <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Confirmed Events</h2>
-              <p class="text-xs text-gray-400 mt-0.5">
-                Confirmed gig bookings with TONO artists and accepted performance contracts.
-              </p>
-            </div>
-            <span class="text-xs font-mono text-[#D0D4F7] px-2.5 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
-              {{ activeBookings.length }} {{ activeBookings.length === 1 ? 'event' : 'events' }}
+      <!-- TAB 1: BOOKINGS (Unified Cards Feed matching Artistprofile.vue) -->
+      <div v-else-if="activeTab === 'active'" class="space-y-6 font-Sora">
+        <!-- Header & Overview -->
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Your Bookings</h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Confirmed gig bookings with TONO artists and accepted performance contracts. Click any booking to view or update your agreement.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2 self-start sm:self-auto">
+            <span class="text-xs font-mono text-[#D0D4F7] px-3 py-1 rounded-full bg-[#1C1C1F] border border-[#2A2A2E]">
+              {{ activeBookings.length }} {{ activeBookings.length === 1 ? 'total booking' : 'total bookings' }}
             </span>
           </div>
+        </div>
 
-          <div v-if="activeBookings.length === 0" class="text-center py-12 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-2">
+        <!-- SEARCH AND FILTER CONTROLS BAR (Exact matching layout from Artistprofile.vue) -->
+        <div class="bg-[#141416] p-3 sm:p-4 rounded-2xl border border-[#2A2A2E] space-y-3">
+          <div class="flex items-center gap-2.5 sm:gap-3">
+            <!-- Search Input -->
+            <div class="relative flex-1 min-w-0">
+              <Icon name="ic:baseline-search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base" />
+              <input
+                v-model="bookingSearchQuery"
+                type="text"
+                placeholder="Search by BK ID, event title, venue, or artist..."
+                class="w-full pl-9 pr-9 py-2.5 rounded-xl bg-[#1C1C1F] border border-[#2A2A2E] text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#D0D4F7] transition-all"
+              />
+              <button
+                v-if="bookingSearchQuery"
+                type="button"
+                @click="bookingSearchQuery = ''"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white cursor-pointer"
+              >
+                <Icon name="ic:round-close" class="text-sm" />
+              </button>
+            </div>
+
+            <!-- Single Filter Icon Dropdown Container -->
+            <div class="relative shrink-0">
+              <button
+                type="button"
+                @click="isFilterDropdownOpen = !isFilterDropdownOpen"
+                class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm select-none"
+                :class="isFilterDropdownOpen || activeFilterCount > 0
+                  ? 'bg-[#D0D4F7] text-[#131315] border-[#D0D4F7]'
+                  : 'bg-[#1C1C1F] hover:bg-[#252529] text-gray-300 hover:text-white border-[#2A2A2E]'"
+              >
+                <Icon name="ic:outline-filter-alt" class="text-base shrink-0" />
+                <span>Filter</span>
+                <span
+                  v-if="activeFilterCount > 0"
+                  class="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0"
+                  :class="isFilterDropdownOpen || activeFilterCount > 0 ? 'bg-[#131315] text-[#D0D4F7]' : 'bg-[#D0D4F7] text-[#131315]'"
+                >
+                  {{ activeFilterCount }}
+                </span>
+                <Icon
+                  name="ic:baseline-keyboard-arrow-down"
+                  class="text-sm transition-transform duration-200 shrink-0"
+                  :class="isFilterDropdownOpen ? 'rotate-180' : ''"
+                />
+              </button>
+
+              <!-- Backdrop to close on click outside -->
+              <div
+                v-if="isFilterDropdownOpen"
+                class="fixed inset-0 z-20"
+                @click="isFilterDropdownOpen = false"
+              ></div>
+
+              <!-- Dropdown Popover -->
+              <div
+                v-if="isFilterDropdownOpen"
+                @click.stop
+                class="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#18181B] border border-[#2A2A2E] rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+              >
+                <!-- Header -->
+                <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-2.5">
+                  <div class="flex items-center gap-1.5 text-white font-semibold text-xs">
+                    <Icon name="ic:outline-filter-alt" class="text-sm text-[#D0D4F7]" />
+                    <span>Filter Bookings</span>
+                  </div>
+                  <button
+                    v-if="hasActiveFilters"
+                    type="button"
+                    @click="resetBookingFilters"
+                    class="text-[11px] font-mono text-gray-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    Reset All
+                  </button>
+                </div>
+
+                <!-- 1. Type Filter -->
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                    Type
+                  </label>
+                  <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                    <button
+                      type="button"
+                      @click="bookingTypeFilter = 'all'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                      :class="bookingTypeFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingTypeFilter = 'job'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium truncate"
+                      :class="bookingTypeFilter === 'job' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      Job Listing
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingTypeFilter = 'direct'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                      :class="bookingTypeFilter === 'direct' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      Direct
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 2. Status Filter -->
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                    Status
+                  </label>
+                  <div class="grid grid-cols-2 gap-1.5 bg-[#131315] p-1.5 rounded-xl border border-[#2A2A2E] text-xs">
+                    <button
+                      type="button"
+                      @click="bookingStatusFilter = 'all'"
+                      class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                      :class="bookingStatusFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      <span>All</span>
+                      <span class="text-[10px] font-mono opacity-80">{{ activeBookings.length }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingStatusFilter = 'active'"
+                      class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                      :class="bookingStatusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-gray-400 hover:text-white'"
+                    >
+                      <span>Active</span>
+                      <span class="text-[10px] font-mono opacity-80">{{ activeBookingsCount }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingStatusFilter = 'completed'"
+                      class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                      :class="bookingStatusFilter === 'completed' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-gray-400 hover:text-white'"
+                    >
+                      <span>Completed</span>
+                      <span class="text-[10px] font-mono opacity-80">{{ completedBookingsCount }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingStatusFilter = 'cancelled'"
+                      class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                      :class="bookingStatusFilter === 'cancelled' ? 'bg-red-500/20 text-red-300 font-bold border border-red-500/30' : 'text-gray-400 hover:text-white'"
+                    >
+                      <span>Cancelled</span>
+                      <span class="text-[10px] font-mono opacity-80">{{ cancelledBookingsCount }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 3. Date Filter -->
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                    Date
+                  </label>
+                  <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                    <button
+                      type="button"
+                      @click="bookingDateFilter = 'all'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                      :class="bookingDateFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      All Dates
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingDateFilter = 'upcoming'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                      :class="bookingDateFilter === 'upcoming' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      Upcoming
+                    </button>
+                    <button
+                      type="button"
+                      @click="bookingDateFilter = 'past'"
+                      class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                      :class="bookingDateFilter === 'past' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                    >
+                      Past
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Active Filter Summary & Done -->
+                <div class="pt-2 border-t border-[#2A2A2E] flex items-center justify-between">
+                  <span class="text-[11px] text-gray-400 font-mono">
+                    {{ filteredBookings.length }} {{ filteredBookings.length === 1 ? 'booking' : 'bookings' }}
+                  </span>
+                  <button
+                    type="button"
+                    @click="isFilterDropdownOpen = false"
+                    class="px-3 py-1 rounded-lg bg-[#2A2A2E] hover:bg-[#3A3A3E] text-white text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reset Button (Visible if active filters) -->
+            <button
+              v-if="hasActiveFilters"
+              type="button"
+              @click="resetBookingFilters"
+              class="px-3 py-2.5 rounded-xl text-xs font-medium text-gray-400 hover:text-white bg-[#1C1C1F] hover:bg-[#2A2A2E] transition-all cursor-pointer flex items-center gap-1 border border-[#2A2A2E] shrink-0"
+              title="Reset all filters"
+            >
+              <Icon name="ic:round-refresh" class="text-sm" />
+              <span class="hidden sm:inline">Reset</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bookings Results Container -->
+        <div>
+          <!-- Empty State -->
+          <div
+            v-if="filteredBookings.length === 0"
+            class="text-center py-16 px-4 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3 flex flex-col items-center justify-center min-h-80"
+          >
             <Icon name="ic:outline-event-busy" class="text-3xl text-gray-500 mx-auto" />
-            <p class="text-sm font-semibold text-white">No Confirmed Events Yet</p>
-            <p class="text-xs text-gray-400">Discover local talent on TONO and book your first live performance.</p>
+            <p class="text-sm font-semibold text-white">
+              {{ hasActiveFilters ? 'No Bookings Match Your Filter Criteria' : 'No Confirmed Bookings Yet' }}
+            </p>
+            <p class="text-xs text-gray-400 max-w-md">
+              {{ hasActiveFilters ? 'Try adjusting your search query or resetting filters.' : 'Discover local talent on TONO and book your first live performance.' }}
+            </p>
+            <button
+              v-if="hasActiveFilters"
+              type="button"
+              @click="resetBookingFilters"
+              class="mt-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-[#2A2A2E] text-white hover:bg-[#3A3A3E] transition-all cursor-pointer"
+            >
+              Reset Filters
+            </button>
           </div>
 
-          <!-- Deduplicated Event Cards Grid -->
+          <!-- Cards Grid (Matching Artistprofile.vue Gigs Card Formatting) -->
           <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div
-              v-for="booking in activeBookings"
+              v-for="booking in filteredBookings"
               :key="booking.Booking_ID"
-              class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-4 transition-all shadow-lg flex flex-col justify-between"
+              @click="openBookingDetailModal(booking)"
+              class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] hover:bg-[#1E1E23] rounded-2xl p-5 sm:p-6 space-y-3.5 transition-all shadow-lg cursor-pointer group flex flex-col justify-between"
             >
               <div class="space-y-3">
-                <!-- Header with Origin Type and Status Badge -->
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <span class="text-[10px] font-mono uppercase tracking-wider text-[#D0D4F7]">
-                      {{ booking.Job_ID ? 'JOB LISTING GIG' : 'DIRECT ARTIST BOOKING' }}
+                <!-- TOP OF CARD: BK ID & Status Badges -->
+                <div class="flex items-center justify-between gap-2 border-b border-[#2A2A2E]/60 pb-2.5">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <Icon name="ic:outline-confirmation-number" class="text-xs text-[#D0D4F7] shrink-0" />
+                    <span class="text-xs font-mono font-bold text-white tracking-wide truncate group-hover:text-[#D0D4F7] transition-colors">
+                      {{ booking.Contract_Code || booking.Booking_ID }}
                     </span>
-                    <h3 class="text-base sm:text-lg font-bold text-white mt-0.5">
-                      {{ booking.Job_ID ? booking.JOB_LISTING?.Event_Title : (booking.Booking_Type || 'Direct Performance') }}
-                    </h3>
                   </div>
 
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    <span v-if="!booking.Job_ID" class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-700/40 text-gray-300 border border-gray-600/50">
+                      Private
+                    </span>
                     <span v-if="booking.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
                       <Icon name="ic:baseline-bolt" class="text-xs" />
                       <span>Rush</span>
                     </span>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      {{ booking.Status }}
+                    <span v-if="booking.Status === 'Cancelled' || booking.Status === 'Declined'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+                      <span>Cancelled</span>
+                    </span>
+                    <span v-else-if="booking.Status === 'Completed'" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Completed
+                    </span>
+                    <span v-else-if="isEventHappeningNow(booking)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                      <span>Happening Now</span>
+                    </span>
+                    <span v-else-if="isEventFinished(booking)" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      Ended / Finished
+                    </span>
+                    <span v-else class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Confirmed
                     </span>
                   </div>
                 </div>
 
-                <!-- Artist Details -->
+                <!-- Origin Pill & Event Title -->
+                <div>
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold"
+                    :class="!booking.Job_ID
+                      ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                      : 'bg-[#d0d4f6]/10 text-[#d0d4f6] border border-[#d0d4f6]/30'">
+                    {{ !booking.Job_ID ? 'Direct Artist Booking' : 'Job Listing Contract' }}
+                  </span>
+                  <h3 class="text-base sm:text-lg font-bold text-white mt-1 group-hover:text-[#D0D4F7] transition-colors">
+                    {{ booking.Job_ID ? booking.JOB_LISTING?.Event_Title : (booking.Booking_Type || 'Direct Performance') }}
+                  </h3>
+                </div>
+
+                <!-- Performer Details Card -->
                 <div class="flex items-center gap-3 p-3 rounded-xl bg-[#141416] border border-[#2A2A2E]/70">
                   <div class="w-10 h-10 rounded-full bg-[#1E1E24] overflow-hidden border border-[#46464D]/50 shrink-0 flex items-center justify-center">
                     <img
@@ -825,8 +1221,8 @@ const handleLogout = async () => {
                   </div>
                 </div>
 
-                <!-- Schedule & Venue Details -->
-                <div class="space-y-1.5 text-xs text-gray-300 font-Sora">
+                <!-- Necessary Details: Schedule & Venue -->
+                <div class="space-y-1.5 text-xs text-gray-300">
                   <div class="flex items-center gap-2">
                     <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
                     <span>
@@ -840,21 +1236,29 @@ const handleLogout = async () => {
                     <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
                     <span class="truncate">{{ booking.Job_ID ? (booking.JOB_LISTING?.Location || booking.Venue_Location) : booking.Venue_Location }}</span>
                   </div>
-
-                  <div class="flex items-center gap-2 text-gray-400 font-mono text-[11px]">
-                    <Icon name="ic:outline-receipt-long" class="text-[#D0D4F7] text-sm shrink-0" />
-                    <span>Code: {{ booking.Contract_Code || booking.Booking_ID }}</span>
-                  </div>
                 </div>
               </div>
 
-              <!-- Action Footer -->
-              <div class="pt-3 border-t border-[#2A2A2E]/70 flex items-center justify-between flex-wrap gap-2">
-                <span class="text-[11px] text-gray-500 font-mono">Protected by TONO Guarantee</span>
+              <!-- Action Footer (@click.stop) -->
+              <div class="pt-3 border-t border-[#2A2A2E] flex flex-wrap items-center justify-between gap-3" @click.stop>
+                <button
+                  type="button"
+                  @click="openBookingDetailModal(booking)"
+                  class="text-xs text-gray-400 hover:text-[#D0D4F7] transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Icon name="ic:outline-visibility" class="text-sm" />
+                  <span>{{ !booking.Job_ID && !isEventFinished(booking) ? 'View / Edit Booking' : 'View Agreement' }}</span>
+                </button>
+
                 <div class="flex items-center gap-2">
-                  <!-- Case 1: Concluded / Finished and not completed -> Mark as Complete -->
+                  <!-- Case 1: Cancelled -->
+                  <template v-if="booking.Status === 'Cancelled' || booking.Status === 'Declined'">
+                    <span class="text-[11px] text-red-400/80 font-mono">Cancelled</span>
+                  </template>
+
+                  <!-- Case 2: Concluded / Finished and not completed -> Mark as Complete -->
                   <button
-                    v-if="booking.Status !== 'Completed' && isEventFinished(booking)"
+                    v-else-if="booking.Status !== 'Completed' && isEventFinished(booking)"
                     type="button"
                     :disabled="completingBookingId === booking.Booking_ID"
                     @click="handleCompleteBooking(booking)"
@@ -864,20 +1268,20 @@ const handleLogout = async () => {
                     <span>{{ completingBookingId === booking.Booking_ID ? 'Completing...' : 'Mark as Complete' }}</span>
                   </button>
 
-                  <!-- Case 2: Completed -> Rate Artist -->
+                  <!-- Case 3: Completed -> Rate Artist -->
                   <button
                     v-else-if="booking.Status === 'Completed'"
                     type="button"
                     :disabled="reviewedBookingIds.has(booking.Booking_ID)"
                     @click="openReviewForBooking(booking)"
-                    class="px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                    class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
                     :class="reviewedBookingIds.has(booking.Booking_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
                   >
                     <Icon :name="reviewedBookingIds.has(booking.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
                     <span>{{ reviewedBookingIds.has(booking.Booking_ID) ? 'Reviewed' : 'Rate Artist' }}</span>
                   </button>
 
-                  <!-- Case 3: Active / Upcoming -> Cancel Booking -->
+                  <!-- Case 4: Active / Upcoming -> Cancel Booking -->
                   <button
                     v-else
                     type="button"
@@ -889,7 +1293,7 @@ const handleLogout = async () => {
               </div>
             </div>
           </div>
-        </section>
+        </div>
       </div>
 
       <!-- TAB 2: SENT BOOKING REQUESTS -->
@@ -992,10 +1396,26 @@ const handleLogout = async () => {
       :is-open="isReviewModalOpen"
       :booking="selectedBookingForReview"
       :reviewer-account-id="currentAccountId"
-      :target-artist-id="selectedTargetArtistId || undefined"
+      :booking-id="selectedBookingForReview?.Booking_ID"
+      :contract-code="selectedBookingForReview?.Contract_Code"
+      :event-title="selectedBookingForReview?.JOB_LISTING?.Event_Title || 'Direct Booking Gig'"
+      :event-date="selectedBookingForReview?.Start_Date || selectedBookingForReview?.Event_Date"
+      :target-artist-id="selectedTargetArtistId || selectedBookingForReview?.Provider_Artist_ID || undefined"
       :target-name="selectedTargetArtistName"
       @close="isReviewModalOpen = false"
       @submitted="handleUserReviewSubmitted"
+    />
+
+    <!-- User Booking Detail & Direct Booking Edit Modal -->
+    <UserBookingDetailModal
+      :is-open="isBookingDetailModalOpen"
+      :booking="selectedBookingForDetail"
+      :current-account-id="currentAccountId"
+      @close="isBookingDetailModalOpen = false"
+      @updated="fetchUserBookings"
+      @cancel="initiateCancelBooking"
+      @complete="handleCompleteBooking"
+      @review="openReviewForBooking"
     />
 
     <!-- Toast Notification -->

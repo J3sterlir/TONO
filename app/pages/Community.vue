@@ -115,12 +115,17 @@ const handleSharePost = async (post: CommunityPostItem) => {
   }
 }
 
-// Report action placeholder
+const { openReportModal } = useModerationReport()
+
+// Report post action
 const handleReportPost = (post: CommunityPostItem) => {
-  shareToast.value = `Report ticket submitted for post by ${post.authorName}.`
-  setTimeout(() => {
-    shareToast.value = ''
-  }, 4000)
+  openReportModal({
+    targetType: 'Post',
+    targetId: post.POST_ID,
+    targetAccountId: post.authorAccountId || post.ARTIST_ID || undefined,
+    targetName: post.authorName,
+    previewSnippet: post.Caption || (post.Media ? '[Media Post]' : undefined)
+  })
 }
 
 const initialRole = computed<'artist' | 'user' | 'business' | 'guest'>(() => {
@@ -420,7 +425,7 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
                       class="text-[#C7C5CE] hover:text-rose-400 transition-colors cursor-pointer"
                       title="Report Post"
                     >
-                      <Icon name="ic:outline-flag" class="text-lg" />
+                      <Icon name="ic:round-flag" class="text-xl sm:text-2xl" />
                     </button>
                   </div>
                 </div>

@@ -340,6 +340,19 @@ const handleConfirmUnsend = async () => {
   }
 }
 
+// Moderation Reporting
+const { openReportModal } = useModerationReport()
+
+const handleReportChatMessage = (msg: MessageItem) => {
+  openReportModal({
+    targetType: 'Message',
+    targetId: msg.id,
+    targetName: activeThread.value?.participant.displayName || 'Sender',
+    previewText: msg.content || (msg.attachments.length > 0 ? 'Sent an attachment' : 'Message'),
+    previewMedia: msg.attachments.find(a => a.type.startsWith('image/'))?.url || null
+  })
+}
+
 // Menu dropdown state (click to open, click outside to close)
 const currentUserId = ref<string>('')
 const activeMenuMessageId = ref<string | null>(null)
@@ -1011,6 +1024,39 @@ onBeforeUnmount(() => {
                       <div class="flex items-center justify-end gap-1.5 mt-1 select-none text-[10px] text-[#8E8B94]">
                         <span v-if="msg.isEdited" class="italic">(edited)</span>
                         <span>{{ formatClockTime(msg.createdAt) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Incoming Action Trigger (Report Message) -->
+                  <div
+                    class="transition-opacity duration-150 flex items-center gap-1 mb-1 text-[#8E8B94]"
+                    :class="activeMenuMessageId === msg.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+                  >
+                    <div class="relative">
+                      <button
+                        type="button"
+                        @click.stop="toggleActionMenu(msg.id)"
+                        title="Message options"
+                        class="flex p-1.5 hover:text-white hover:bg-[#2A2A2E] rounded-full transition-colors cursor-pointer"
+                      >
+                        <Icon name="mdi:dots-horizontal" class="text-base" />
+                      </button>
+
+                      <!-- Action Menu Popup (Click-based) -->
+                      <div
+                        v-if="activeMenuMessageId === msg.id"
+                        @click.stop
+                        class="absolute bottom-full left-0 mb-1 flex flex-col w-36 p-1.5 bg-[#1C1C1F] border border-[#46464D]/60 rounded-xl shadow-xl z-20"
+                      >
+                        <button
+                          type="button"
+                          @click="handleReportChatMessage(msg); activeMenuMessageId = null"
+                          class="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-left text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Icon name="ic:round-flag" class="text-sm" />
+                          <span>Report Message</span>
+                        </button>
                       </div>
                     </div>
                   </div>

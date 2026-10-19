@@ -4,6 +4,31 @@ export const useTonoEvents = () => {
   const supabase = useSupabaseClient()
   const db = supabase as any
 
+  const cleanDateStr = (dateVal: any): string => {
+    if (!dateVal) return ''
+    if (dateVal instanceof Date) {
+      if (isNaN(dateVal.getTime())) return ''
+      const y = dateVal.getFullYear()
+      const m = String(dateVal.getMonth() + 1).padStart(2, '0')
+      const d = String(dateVal.getDate()).padStart(2, '0')
+      return `${y}-${m}-${d}`
+    }
+    const s = String(dateVal).trim()
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      return s.substring(0, 10)
+    }
+    try {
+      const d = new Date(s)
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+    } catch {}
+    return s
+  }
+
   /**
    * Checks if an event is currently ongoing today.
    * Supports either an object { Start_Date, End_Date, Start_Time, End_Time } or individual args.
@@ -20,24 +45,26 @@ export const useTonoEvents = () => {
     let eTime = endTime
 
     if (eventOrStartDate && typeof eventOrStartDate === 'object') {
-      sDate = eventOrStartDate.Start_Date || eventOrStartDate.Event_Date
-      eDate = eventOrStartDate.End_Date || sDate
-      sTime = eventOrStartDate.Start_Time
-      eTime = eventOrStartDate.End_Time
+      sDate = eventOrStartDate.Start_Date || eventOrStartDate.Event_Date || eventOrStartDate.Date || eventOrStartDate.JOB_LISTING?.Start_Date || eventOrStartDate.JOB_LISTING?.Date
+      eDate = eventOrStartDate.End_Date || eventOrStartDate.JOB_LISTING?.End_Date || sDate
+      sTime = eventOrStartDate.Start_Time || eventOrStartDate.Time || eventOrStartDate.JOB_LISTING?.Start_Time || eventOrStartDate.JOB_LISTING?.Time
+      eTime = eventOrStartDate.End_Time || eventOrStartDate.JOB_LISTING?.End_Time
     }
 
-    if (!sDate) return false
+    const cleanStart = cleanDateStr(sDate)
+    const cleanEnd = cleanDateStr(eDate) || cleanStart
+    if (!cleanStart) return false
+
     const now = new Date()
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const finalEnd = eDate || sDate
 
-    // Check if today falls in the date window [startDate, finalEnd]
-    if (todayStr < sDate || todayStr > finalEnd) {
+    // Check if today falls in the date window [cleanStart, cleanEnd]
+    if (todayStr < cleanStart || todayStr > cleanEnd) {
       return false
     }
 
     // If today is the final end date and an end time is provided, verify it hasn't ended yet
-    if (todayStr === finalEnd && eTime) {
+    if (todayStr === cleanEnd && eTime) {
       const parts = eTime.split(':')
       const endH = parts[0] !== undefined ? Number(parts[0]) : NaN
       const endM = parts[1] !== undefined ? Number(parts[1]) : NaN
@@ -68,23 +95,25 @@ export const useTonoEvents = () => {
     let eTime = endTime
 
     if (eventOrStartDate && typeof eventOrStartDate === 'object') {
-      sDate = eventOrStartDate.Start_Date || eventOrStartDate.Event_Date
-      eDate = eventOrStartDate.End_Date || sDate
-      eTime = eventOrStartDate.End_Time
+      sDate = eventOrStartDate.Start_Date || eventOrStartDate.Event_Date || eventOrStartDate.Date || eventOrStartDate.JOB_LISTING?.Start_Date || eventOrStartDate.JOB_LISTING?.Date
+      eDate = eventOrStartDate.End_Date || eventOrStartDate.JOB_LISTING?.End_Date || sDate
+      eTime = eventOrStartDate.End_Time || eventOrStartDate.JOB_LISTING?.End_Time
     }
 
-    if (!sDate) return false
+    const cleanStart = cleanDateStr(sDate)
+    const cleanEnd = cleanDateStr(eDate) || cleanStart
+    if (!cleanStart) return false
+
     const now = new Date()
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const finalEnd = eDate || sDate
 
     // If the calendar end date has passed (yesterday or earlier)
-    if (todayStr > finalEnd) {
+    if (todayStr > cleanEnd) {
       return true
     }
 
     // If today is the end date and endTime has passed
-    if (todayStr === finalEnd && eTime) {
+    if (todayStr === cleanEnd && eTime) {
       const parts = eTime.split(':')
       const endH = parts[0] !== undefined ? Number(parts[0]) : NaN
       const endM = parts[1] !== undefined ? Number(parts[1]) : NaN

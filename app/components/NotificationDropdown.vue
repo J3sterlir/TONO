@@ -20,7 +20,7 @@
       <!-- Dynamic Unread Counter Badge -->
       <span
         v-if="unreadCount > 0"
-        class="flex items-center justify-center absolute -top-0.5 -right-0.5 px-0.2 py-0.2 rounded-full text-[10px] font-mono font-bold bg-[#D0D4F7] text-[#131315] shadow-md min-w-4.5 h-4.5 text-center leading-tight ring-2 ring-[#131315]"
+        class="flex items-center justify-center absolute top-1 -right-px px-0.2 py-0.2 rounded-full text-[10px] font-mono font-bold bg-[#D0D4F7] text-[#131315] shadow-md min-w-4.5 h-4.5 text-center leading-tight ring-2 ring-[#131315]"
       >
         {{ unreadCount > 99 ? '99+' : unreadCount }}
       </span>
