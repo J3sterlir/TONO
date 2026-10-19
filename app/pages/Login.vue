@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+const route = useRoute()
 const { resolveLoginEmail, signInWithTonoAccount } = useTonoAuth()
 const showPassword = ref(false)
+const passwordResetSuccess = ref(
+  route.query.reset === 'success' ? 'Password reset successfully! Please log in with your new password.' : ''
+)
 const loginForm = ref({
-  emailOrUsername: '',
+  emailOrUsername: (route.query.identifier as string) || '',
   password: '',
 })
 const loginError = ref('')
@@ -72,7 +76,13 @@ const handleLogin = async () => {
         </div>
         <div class="flex justify-between items-center mt-2">
           <p class="font-light">PASSWORD</p>
-          <p class="text-[#D0D4F7] cursor-pointer">Forgot Password?</p>
+          <button
+            type="button"
+            class="text-[#D0D4F7] hover:underline cursor-pointer text-sm transition"
+            @click="navigateTo('/forgot-password')"
+          >
+            Forgot Password?
+          </button>
         </div>
         <div class="relative">
           <Icon name="ic:outline-lock" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
@@ -84,6 +94,11 @@ const handleLogin = async () => {
             @click="showPassword = !showPassword">
             <Icon class="text-2xl" :name="showPassword ? 'ic:outline-visibility-off' : 'ic:outline-visibility'" />
           </button>
+        </div>
+
+        <div v-if="passwordResetSuccess" class="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200 flex items-center gap-2">
+          <Icon name="material-symbols:check-circle" class="text-lg text-emerald-400 shrink-0" />
+          <span>{{ passwordResetSuccess }}</span>
         </div>
 
         <div v-if="loginError" class="rounded-md border border-red-500/60 bg-red-500/10 px-3 py-2 text-sm text-red-200">
