@@ -460,17 +460,25 @@
               v-if="item.actionPrimary"
               type="button"
               @click.stop="$emit('action-primary', item)"
-              class="px-3.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7] transition-all cursor-pointer shadow-sm active:scale-95"
+              class="px-3.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+              :class="item.actionPrimary === 'Report'
+                ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+                : 'bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7]'"
             >
-              {{ item.actionPrimary }}
+              <Icon v-if="item.actionPrimary === 'Report'" name="ic:round-flag" class="text-xs" />
+              <span>{{ item.actionPrimary }}</span>
             </button>
             <button
               v-if="item.actionSecondary"
               type="button"
               @click.stop="$emit('action-secondary', item)"
-              class="px-3 py-1 rounded-lg text-xs font-medium bg-[#2A2A2E] hover:bg-[#38383E] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+              class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+              :class="item.actionSecondary === 'Report'
+                ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+                : 'bg-[#2A2A2E] hover:bg-[#38383E] text-gray-300 hover:text-white'"
             >
-              {{ item.actionSecondary }}
+              <Icon v-if="item.actionSecondary === 'Report'" name="ic:round-flag" class="text-xs" />
+              <span>{{ item.actionSecondary }}</span>
             </button>
           </div>
 
@@ -655,14 +663,31 @@
             {{ item.time }}
           </span>
 
-          <!-- Action Button if any -->
-          <div v-if="item.hasActions && item.actionPrimary" class="flex items-center gap-2 pt-1.5">
+          <!-- Action Buttons if any -->
+          <div v-if="item.hasActions" class="flex items-center gap-2 pt-1.5">
             <button
+              v-if="item.actionPrimary"
               type="button"
               @click.stop="$emit('action-primary', item)"
-              class="px-3.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7] transition-all cursor-pointer shadow-sm active:scale-95"
+              class="px-3.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+              :class="item.actionPrimary === 'Report'
+                ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+                : 'bg-[#D0D4F7]/20 hover:bg-[#D0D4F7]/30 border border-[#D0D4F7]/40 text-[#D0D4F7]'"
             >
-              {{ item.actionPrimary }}
+              <Icon v-if="item.actionPrimary === 'Report'" name="ic:round-flag" class="text-xs" />
+              <span>{{ item.actionPrimary }}</span>
+            </button>
+            <button
+              v-if="item.actionSecondary"
+              type="button"
+              @click.stop="$emit('action-secondary', item)"
+              class="px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+              :class="item.actionSecondary === 'Report'
+                ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300'
+                : 'bg-[#2A2A2E] hover:bg-[#38383E] text-gray-300 hover:text-white'"
+            >
+              <Icon v-if="item.actionSecondary === 'Report'" name="ic:round-flag" class="text-xs" />
+              <span>{{ item.actionSecondary }}</span>
             </button>
           </div>
         </div>

@@ -17,6 +17,8 @@ export interface NotificationItem {
   entityId?: string
   entityType?: string
   actionLink?: string
+  senderAccountId?: string
+  metadata?: Record<string, any>
   bandName?: string
   role?: string
   createdAt?: string
@@ -100,6 +102,21 @@ export const useNotifications = () => {
     const candidateName = senderAcc?.Username || meta.sender_name || meta.band_name || row.Avatar_Text || row.avatar_text || row.Title || 'TONO'
     const avatarText = getTwoLetterInitials(candidateName)
 
+    const notifType = row.Type || row.type || 'system'
+    const isContractCancel = notifType === 'contract_cancel'
+    const rawActionPrimary = row.Action_Primary || row.action_primary
+    const rawActionSecondary = row.Action_Secondary || row.action_secondary
+    const actionPrimary = rawActionPrimary || (isContractCancel ? 'Report' : undefined)
+    const actionSecondary = rawActionSecondary || undefined
+
+    let resolvedEntityId = row.Entity_ID || row.entity_id || meta.booking_id || meta.contract_id || undefined
+    if (!resolvedEntityId && isContractCancel) {
+      const match = (row.Title || row.title || '').match(/BK-\d+-\d+/i) || (row.Content || row.content || '').match(/BK-\d+-\d+/i)
+      if (match) {
+        resolvedEntityId = match[0]
+      }
+    }
+
     return {
       id: row.Notification_ID || row.notification_id,
       title: row.Title || row.title || 'Notification',
@@ -107,19 +124,18 @@ export const useNotifications = () => {
       time: formatRelativeTime(createdRaw),
       isUnread,
       category,
-      type: row.Type || row.type || 'system',
+      type: notifType,
       svgType: row.Svg_Type || row.svg_type || 'job_posted',
       avatarText,
       avatarUrl: senderPic,
-      hasActions: !!(
-        row.Action_Primary || row.action_primary ||
-        row.Action_Secondary || row.action_secondary
-      ),
-      actionPrimary: row.Action_Primary || row.action_primary || undefined,
-      actionSecondary: row.Action_Secondary || row.action_secondary || undefined,
-      entityId: row.Entity_ID || row.entity_id || undefined,
-      entityType: row.Entity_Type || row.entity_type || undefined,
+      hasActions: !!(actionPrimary || actionSecondary),
+      actionPrimary,
+      actionSecondary,
+      entityId: resolvedEntityId,
+      entityType: row.Entity_Type || row.entity_type || (isContractCancel ? 'BOOKING_CONTRACT' : undefined),
       actionLink: row.Action_Link || row.action_link || undefined,
+      senderAccountId: row.Sender_Account_ID || row.sender_account_id || meta.sender_account_id || undefined,
+      metadata: meta,
       bandName: meta.band_name || undefined,
       role: meta.instrument_role || undefined,
       createdAt: createdRaw

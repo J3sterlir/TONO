@@ -161,6 +161,7 @@ async function fetchArtistEvents() {
         Requested_Song_Lineup,
         Status,
         Is_Rush_Booking,
+        Slots,
         Posted_By_BUSINESS_ID,
         BUSINESS_PROFILE:Posted_By_BUSINESS_ID (
           Business_Name,
@@ -171,16 +172,28 @@ async function fetchArtistEvents() {
           Status
         )
       `)
-      .eq('Status', 'Open')
+      .in('Status', ['Open', 'Closed'])
       .order('Start_Date', { ascending: true })
 
     if (jobsData) {
-      // Condition: if there is an active contract tied with that job listing, it is closed
+      // Condition: if active contracts < Slots, the gig remains OPEN for applications!
       openJobs.value = jobsData.filter((j: any) => {
-        const hasActiveContract = j.BOOKING_CONTRACT?.some((c: any) =>
+        if (['Cancelled', 'Draft', 'Completed'].includes(j.Status)) return false
+        if (isEventFinished(j)) return false
+
+        const activeContractsCount = (j.BOOKING_CONTRACT || []).filter((c: any) =>
           !['Cancelled', 'Declined'].includes(c.Status)
-        )
-        return !hasActiveContract
+        ).length
+        const totalSlots = Number(j.Slots) || 1
+        const hasOpenSlots = activeContractsCount < totalSlots
+
+        // If slots are not yet filled but marked Closed, ensure DB record is set to Open
+        if (hasOpenSlots && j.Status !== 'Open') {
+          j.Status = 'Open'
+          db.from('JOB_LISTING').update({ Status: 'Open' }).eq('Job_ID', j.Job_ID).then()
+        }
+
+        return hasOpenSlots
       })
     }
 
@@ -381,17 +394,43 @@ async function fetchArtistEvents() {
         }
       }
 
-      // D. Combine both sources deduplicated by Job_ID
+      // D. Combine both sources grouped by Job_ID so all performers are gathered
       const combinedEvents: any[] = []
-      const processedJobIds = new Set<string>()
+      const jobContractsMap = new Map<string, any[]>()
+      const standaloneContracts: any[] = []
 
-      // First add confirmed contracts tied to job listings (richer performer data)
       if (publicContractsData) {
         for (const contract of publicContractsData) {
           if (contract.JOB_LISTING && contract.JOB_LISTING.Is_Public === false) continue
-          if (contract.Job_ID) processedJobIds.add(contract.Job_ID)
-          combinedEvents.push(contract)
+          if (contract.Job_ID) {
+            if (!jobContractsMap.has(contract.Job_ID)) {
+              jobContractsMap.set(contract.Job_ID, [])
+            }
+            jobContractsMap.get(contract.Job_ID)!.push(contract)
+          } else {
+            standaloneContracts.push(contract)
+          }
         }
+      }
+
+      // Add standalone contracts
+      for (const contract of standaloneContracts) {
+        combinedEvents.push(contract)
+      }
+
+      const processedJobIds = new Set<string>()
+
+      // Process grouped contracts by Job_ID
+      for (const [jobId, contracts] of jobContractsMap.entries()) {
+        processedJobIds.add(jobId)
+        const primary = { ...contracts[0] }
+        const artistNames = contracts
+          .map((c: any) => c.ARTIST?.BandName?.Band_Name || c.ARTIST?.StageName?.Artist_Name || c.ARTIST?.USER_ACCOUNT?.Username || '')
+          .filter(Boolean)
+        const distinctArtists = [...new Set(artistNames)]
+        primary._allArtists = distinctArtists
+        primary._allContracts = contracts
+        combinedEvents.push(primary)
       }
 
       // Then add any open or published job listings not already covered
@@ -401,14 +440,18 @@ async function fetchArtistEvents() {
           if (processedJobIds.has(job.Job_ID)) continue
           processedJobIds.add(job.Job_ID)
 
-          const activeContract = Array.isArray(job.BOOKING_CONTRACT)
-            ? job.BOOKING_CONTRACT.find((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status) && c.Provider_Artist_ID)
-            : null
-          const resolvedArtist = activeContract ? (artistLookup[activeContract.Provider_Artist_ID] || '') : ''
+          const activeContracts = Array.isArray(job.BOOKING_CONTRACT)
+            ? job.BOOKING_CONTRACT.filter((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status) && c.Provider_Artist_ID)
+            : []
+          const artistNames = activeContracts
+            .map((c: any) => artistLookup[c.Provider_Artist_ID] || '')
+            .filter(Boolean)
+          const distinctArtists = [...new Set(artistNames)]
 
           combinedEvents.push({
             ...job,
-            _resolvedArtistName: resolvedArtist
+            _allArtists: distinctArtists,
+            _resolvedArtistName: distinctArtists.join(', ')
           })
         }
       }
@@ -496,9 +539,11 @@ const formatJobListingEvent = (item: any) => {
     item.BUSINESS_PROFILE?.Business_Name ||
     'Venue TBA'
 
-  const artistName = item.ARTIST
-    ? (item.ARTIST.BandName?.Band_Name || item.ARTIST.StageName?.Artist_Name || item.ARTIST.USER_ACCOUNT?.Username || '')
-    : (item._resolvedArtistName || '')
+  const artistName = (item._allArtists && item._allArtists.length > 0)
+    ? item._allArtists.join(', ')
+    : (item.ARTIST
+        ? (item.ARTIST.BandName?.Band_Name || item.ARTIST.StageName?.Artist_Name || item.ARTIST.USER_ACCOUNT?.Username || '')
+        : (item._resolvedArtistName || ''))
 
   const title = item.Event_Title || item.JOB_LISTING?.Event_Title || 'Live Music Gig'
   let eventTitle = title
@@ -512,11 +557,14 @@ const formatJobListingEvent = (item: any) => {
 
   const time = formatGigTime(item.Start_Time || item.Time || item.JOB_LISTING?.Start_Time || item.JOB_LISTING?.Time)
 
-  const isContractActive = item.Booking_ID
-    ? ['Confirmed', 'Active'].includes(item.Status)
-    : (Array.isArray(item.BOOKING_CONTRACT) && item.BOOKING_CONTRACT.some((c: any) => ['Confirmed', 'Active'].includes(c.Status)))
+  const totalSlots = Number(item.Slots || item.JOB_LISTING?.Slots) || 1
+  const activeContractsCount = Array.isArray(item.BOOKING_CONTRACT)
+    ? item.BOOKING_CONTRACT.filter((c: any) => !['Cancelled', 'Declined'].includes(c.Status)).length
+    : (item.Booking_ID && !['Cancelled', 'Declined'].includes(item.Status) ? 1 : 0)
 
-  const isClosed = isContractActive || ['Closed', 'Filled', 'Completed'].includes(item.Status) || ['Closed', 'Filled', 'Completed'].includes(item.JOB_LISTING?.Status)
+  const isAllSlotsFilled = activeContractsCount >= totalSlots
+  const isContractActive = activeContractsCount > 0
+  const isClosed = isAllSlotsFilled || ['Filled', 'Completed'].includes(item.Status) || ['Filled', 'Completed'].includes(item.JOB_LISTING?.Status)
 
   // Robust rawJob payload
   const rawJob = item.JOB_LISTING

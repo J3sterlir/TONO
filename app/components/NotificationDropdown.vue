@@ -216,6 +216,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useNotifications, type NotificationItem } from '~/composables/useNotifications'
+import { useModerationReport } from '~/composables/useModerationReport'
 import NotificationFeedContent from '~/components/NotificationFeedContent.vue'
 
 const props = withDefaults(
@@ -257,6 +258,8 @@ const {
   handleBandInvite,
   routeToContract
 } = useNotifications()
+
+const { openReportModal } = useModerationReport()
 
 // Inline Guard Rail State: which item has active confirmation prompt
 const confirmingActionItem = ref<{ id: string; action: 'Accept' | 'Decline'; item: NotificationItem } | null>(null)
@@ -321,16 +324,31 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
 }
 
-// Handle notification actions (Accept/Decline with Guard Rails or Review Contract)
+// Handle notification actions (Accept/Decline with Guard Rails, Review Contract, or Report Cancellation)
 const handleActionPrimary = (item: NotificationItem) => {
   if (item.actionPrimary === 'Accept' && (item.type === 'band_invite' || item.entityType === 'BAND_MEMBERS')) {
     confirmingActionItem.value = { id: item.id, action: 'Accept', item }
     return
   }
 
-  if (item.actionPrimary === 'Review Contract' || item.actionPrimary === 'View Contract') {
+  if (item.actionPrimary === 'Review Contract' || item.actionPrimary === 'View Contract' || item.actionPrimary === 'Review & Sign') {
     isOpen.value = false
     routeToContract(item, props.currentRole)
+    return
+  }
+
+  if (item.actionPrimary === 'Report') {
+    isOpen.value = false
+    markAsRead(item)
+    openReportModal({
+      targetType: 'Contract',
+      targetId: item.entityId || '',
+      targetAccountId: item.senderAccountId || null,
+      targetName: item.title,
+      previewText: item.title,
+      previewSnippet: item.subtitle,
+      defaultCategory: 'Frequent Cancellation / Last-Minute Modification'
+    })
     return
   }
 
@@ -347,6 +365,21 @@ const handleActionPrimary = (item: NotificationItem) => {
 const handleActionSecondary = (item: NotificationItem) => {
   if (item.actionSecondary === 'Decline' && (item.type === 'band_invite' || item.entityType === 'BAND_MEMBERS')) {
     confirmingActionItem.value = { id: item.id, action: 'Decline', item }
+    return
+  }
+
+  if (item.actionSecondary === 'Report') {
+    isOpen.value = false
+    markAsRead(item)
+    openReportModal({
+      targetType: 'Contract',
+      targetId: item.entityId || '',
+      targetAccountId: item.senderAccountId || null,
+      targetName: item.title,
+      previewText: item.title,
+      previewSnippet: item.subtitle,
+      defaultCategory: 'Frequent Cancellation / Last-Minute Modification'
+    })
     return
   }
 

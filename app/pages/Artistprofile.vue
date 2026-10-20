@@ -2064,13 +2064,16 @@ const handleLogout = async () => {
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <h2 class="text-base font-Sora font-semibold text-white">Uploaded Songs</h2>
-                    <span class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]">
+                    <span
+                      v-if="!activeEditingSection"
+                      class="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1E1E24] border border-[#46464D]/50 text-[#D0D4F7]"
+                    >
                       {{ myArtistSongs.length }} / 4
                     </span>
                   </div>
 
                   <button
-                    v-if="myArtistSongs.length < 4"
+                    v-if="!activeEditingSection && isOwner && myArtistSongs.length < 4"
                     @click="isAudioTrimmerOpen = true"
                     class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2] transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
                     title="Upload 1-Minute Custom Track"

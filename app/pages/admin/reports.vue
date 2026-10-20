@@ -37,6 +37,7 @@ interface ModerationReport {
   targetPostId?: string | null
   targetCommentId?: string | null
   targetContractId?: string | null
+  reportType: string
   category: string
   severity: string
   description: string
@@ -93,6 +94,7 @@ const fetchReports = async () => {
         Target_Post_ID,
         Target_Comment_ID,
         Target_Booking_ID,
+        Report_Type,
         Category,
         Description,
         Evidence_Snapshot,
@@ -136,7 +138,7 @@ const fetchReports = async () => {
       if (cat.includes('blackmail') || cat.includes('scam') || cat.includes('phishing') || cat.includes('hate') || cat.includes('explicit')) {
         return 'Critical'
       }
-      if (cat.includes('harassment') || cat.includes('late cancellation') || cat.includes('no-show') || cat.includes('breach') || cat.includes('fraud') || cat.includes('dispute')) {
+      if (cat.includes('harassment') || cat.includes('late cancellation') || cat.includes('frequent cancellation') || cat.includes('no-show') || cat.includes('breach') || cat.includes('fraud') || cat.includes('dispute')) {
         return 'High'
       }
       if (cat.includes('spam') || cat.includes('unsolicited') || cat.includes('inappropriate') || cat.includes('modification')) {
@@ -176,6 +178,7 @@ const fetchReports = async () => {
         targetPostId: row.Target_Post_ID,
         targetCommentId: row.Target_Comment_ID,
         targetContractId: row.Target_Booking_ID,
+        reportType: row.Report_Type || 'Profile',
         category: row.Category || 'General',
         severity: deriveSeverity(row),
         description: row.Description || 'No description provided.',
@@ -261,6 +264,7 @@ const getTargetEntityLabel = (report: ModerationReport): string => {
   if (report.category === 'Bug') return 'Bug'
   if (report.category === 'Feedback') return 'Feedback'
   if (report.category === 'Appeal') return 'Appeal'
+  if (report.reportType && report.reportType !== 'Profile') return report.reportType
   if (report.targetPostId) return 'Post'
   if (report.targetCommentId) return 'Comment'
   if (report.targetMessageId) return 'Message'
@@ -382,7 +386,7 @@ const executeAdminAction = async () => {
       </button>
     </header>
 
-    <main class="p-6 sm:p-10 max-w-7xl w-full mx-auto flex flex-col gap-8 flex-1">
+    <main class="p-6 sm:py-5 sm:px-0.5 max-w-7xl w-full mx-auto flex flex-col gap-8 flex-1">
       <!-- 2. Controls & Filtering Bar -->
       <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#131315] p-3 rounded-2xl border border-[#2A2A2E]">
         <!-- Status Filter Tabs -->
@@ -508,7 +512,7 @@ const executeAdminAction = async () => {
 
               <td class="p-4">
                 <div class="flex flex-col gap-1 items-start">
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold text-rose-300">
                     {{ report.category }}
                   </span>
                 </div>
@@ -715,37 +719,79 @@ const executeAdminAction = async () => {
 
                 <!-- Snapshot Content Renderer -->
                 <div class="bg-[#0E0E10] border border-[#2A2A2E] rounded-xl p-4 text-xs font-Geist space-y-3">
+                  <!-- Profile Snapshot -->
+                  <div
+                    v-if="selectedReport.reportType === 'Profile' || selectedReport.evidenceSnapshot.publicProfileUrl || selectedReport.evidenceSnapshot.profileUrl"
+                    class="space-y-2.5"
+                  >
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] text-gray-400 font-mono uppercase tracking-wider">
+                        {{ selectedReport.evidenceSnapshot.profileType || 'Public' }} Profile
+                      </span>
+                      <NuxtLink
+                        v-if="selectedReport.evidenceSnapshot.publicProfileUrl || selectedReport.evidenceSnapshot.profileUrl"
+                        :to="selectedReport.evidenceSnapshot.publicProfileUrl || selectedReport.evidenceSnapshot.profileUrl"
+                        target="_blank"
+                        class="px-2.5 py-1 rounded-lg bg-[#D0D4F7]/15 hover:bg-[#D0D4F7]/25 text-[#D0D4F7] text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-[#D0D4F7]/30"
+                      >
+                        <span>Open Public Profile</span>
+                        <Icon name="ic:round-open-in-new" class="text-xs" />
+                      </NuxtLink>
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-[#131315] border border-[#222226] space-y-1 text-left">
+                      <p class="text-sm font-semibold text-white">
+                        {{ selectedReport.evidenceSnapshot.displayName || selectedReport.evidenceSnapshot.businessName || selectedReport.evidenceSnapshot.artistName || selectedReport.targetUsername }}
+                      </p>
+                      <p
+                        v-if="selectedReport.evidenceSnapshot.publicProfileUrl || selectedReport.evidenceSnapshot.profileUrl"
+                        class="text-xs font-mono text-[#D0D4F7]"
+                      >
+                        {{ selectedReport.evidenceSnapshot.publicProfileUrl || selectedReport.evidenceSnapshot.profileUrl }}
+                      </p>
+                      <p
+                        v-if="selectedReport.evidenceSnapshot.bio"
+                        class="text-xs text-gray-300 italic pt-1 leading-relaxed"
+                      >
+                        "{{ selectedReport.evidenceSnapshot.bio }}"
+                      </p>
+                    </div>
+                  </div>
+
                   <!-- Post Snapshot -->
-                  <div v-if="selectedReport.evidenceSnapshot.caption || selectedReport.evidenceSnapshot.mediaUrl" class="space-y-2">
+                  <div v-else-if="selectedReport.reportType === 'Post' || selectedReport.evidenceSnapshot.caption || selectedReport.evidenceSnapshot.media" class="space-y-2">
+                    <span class="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Post Content:</span>
                     <p v-if="selectedReport.evidenceSnapshot.caption" class="text-gray-200 whitespace-pre-line">
                       "{{ selectedReport.evidenceSnapshot.caption }}"
                     </p>
-                    <div v-if="selectedReport.evidenceSnapshot.mediaUrl" class="rounded-lg overflow-hidden border border-[#2A2A2E] max-h-60 bg-black flex items-center justify-center">
-                      <img :src="selectedReport.evidenceSnapshot.mediaUrl" class="max-h-60 object-contain" />
+                    <div v-if="selectedReport.evidenceSnapshot.media || selectedReport.evidenceSnapshot.mediaUrl" class="rounded-lg overflow-hidden border border-[#2A2A2E] max-h-60 bg-black flex items-center justify-center">
+                      <img :src="selectedReport.evidenceSnapshot.media || selectedReport.evidenceSnapshot.mediaUrl" class="max-h-60 object-contain" />
                     </div>
                   </div>
 
                   <!-- Comment Snapshot -->
-                  <div v-else-if="selectedReport.evidenceSnapshot.content" class="space-y-1">
-                    <span class="text-[10px] text-gray-500 font-mono">Comment Content:</span>
-                    <p class="text-gray-200">"{{ selectedReport.evidenceSnapshot.content }}"</p>
+                  <div v-else-if="selectedReport.reportType === 'Comment' || selectedReport.evidenceSnapshot.commentContent || selectedReport.evidenceSnapshot.commentId" class="space-y-1">
+                    <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Comment Content:</span>
+                    <p class="text-gray-200">"{{ selectedReport.evidenceSnapshot.commentContent || selectedReport.evidenceSnapshot.content }}"</p>
+                    <p v-if="selectedReport.evidenceSnapshot.parentPostSnippet" class="text-[10px] text-gray-500 font-mono">On Post: "{{ selectedReport.evidenceSnapshot.parentPostSnippet }}"</p>
                   </div>
 
                   <!-- Message Snapshot -->
-                  <div v-else-if="selectedReport.evidenceSnapshot.messageContent" class="space-y-1">
-                    <span class="text-[10px] text-gray-500 font-mono">Chat Message Content:</span>
-                    <p class="text-gray-200">"{{ selectedReport.evidenceSnapshot.messageContent }}"</p>
-                    <p class="text-[10px] text-gray-500 font-mono">Timestamp: {{ selectedReport.evidenceSnapshot.timestamp }}</p>
+                  <div v-else-if="selectedReport.reportType === 'Message' || selectedReport.evidenceSnapshot.messageContent || selectedReport.evidenceSnapshot.messageId" class="space-y-1">
+                    <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Chat Message Content:</span>
+                    <p class="text-gray-200">"{{ selectedReport.evidenceSnapshot.content || selectedReport.evidenceSnapshot.messageContent }}"</p>
+                    <p v-if="selectedReport.evidenceSnapshot.senderUsername" class="text-[10px] text-gray-500 font-mono">Sender: {{ selectedReport.evidenceSnapshot.senderUsername }}</p>
                   </div>
 
                   <!-- Contract Snapshot -->
-                  <div v-else-if="selectedReport.evidenceSnapshot.contractCode" class="space-y-1.5">
+                  <div v-else-if="selectedReport.reportType === 'Contract' || selectedReport.evidenceSnapshot.contractCode || selectedReport.evidenceSnapshot.bookingId" class="space-y-1.5">
                     <div class="flex items-center justify-between font-mono text-[11px] text-[#D0D4F7]">
-                      <span>Code: {{ selectedReport.evidenceSnapshot.contractCode }}</span>
-                      <span>Fee: ₱{{ Number(selectedReport.evidenceSnapshot.agreedFee || 0).toLocaleString() }}</span>
+                      <span>Code: {{ selectedReport.evidenceSnapshot.contractCode || selectedReport.evidenceSnapshot.bookingId }}</span>
+                      <span v-if="selectedReport.evidenceSnapshot.agreedFee">Fee: ₱{{ Number(selectedReport.evidenceSnapshot.agreedFee || 0).toLocaleString() }}</span>
                     </div>
-                    <p class="text-gray-300">Venue: {{ selectedReport.evidenceSnapshot.venueLocation }}</p>
-                    <p class="text-amber-300">Late Cancellation: {{ selectedReport.evidenceSnapshot.isLateCancellation ? 'YES (≤5 days)' : 'NO' }}</p>
+                    <p v-if="selectedReport.evidenceSnapshot.venueLocation" class="text-gray-300">Venue: {{ selectedReport.evidenceSnapshot.venueLocation }}</p>
+                    <p v-if="selectedReport.evidenceSnapshot.eventDate" class="text-gray-300">Date: {{ selectedReport.evidenceSnapshot.eventDate }}</p>
+                    <p v-if="selectedReport.evidenceSnapshot.isLateCancellation !== undefined" class="text-amber-300">Late Cancellation: {{ selectedReport.evidenceSnapshot.isLateCancellation ? 'YES (≤5 days)' : 'NO' }}</p>
                     <p v-if="selectedReport.evidenceSnapshot.cancellationReason" class="text-rose-300">
                       Cancellation Reason: {{ selectedReport.evidenceSnapshot.cancellationReason }}
                     </p>

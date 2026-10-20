@@ -207,17 +207,43 @@ const fetchUserEvents = async () => {
         }
       }
 
-      // D. Combine both sources deduplicated by Job_ID
+      // D. Combine both sources grouped by Job_ID so all performers are gathered
       const combinedEvents: any[] = []
-      const processedJobIds = new Set<string>()
+      const jobContractsMap = new Map<string, any[]>()
+      const standaloneContracts: any[] = []
 
-      // First add confirmed contracts tied to job listings (richer performer data)
       if (publicContractsData) {
         for (const contract of publicContractsData) {
           if (contract.JOB_LISTING && contract.JOB_LISTING.Is_Public === false) continue
-          if (contract.Job_ID) processedJobIds.add(contract.Job_ID)
-          combinedEvents.push(contract)
+          if (contract.Job_ID) {
+            if (!jobContractsMap.has(contract.Job_ID)) {
+              jobContractsMap.set(contract.Job_ID, [])
+            }
+            jobContractsMap.get(contract.Job_ID)!.push(contract)
+          } else {
+            standaloneContracts.push(contract)
+          }
         }
+      }
+
+      // Add standalone contracts
+      for (const contract of standaloneContracts) {
+        combinedEvents.push(contract)
+      }
+
+      const processedJobIds = new Set<string>()
+
+      // Process grouped contracts by Job_ID
+      for (const [jobId, contracts] of jobContractsMap.entries()) {
+        processedJobIds.add(jobId)
+        const primary = { ...contracts[0] }
+        const artistNames = contracts
+          .map((c: any) => c.ARTIST?.BandName?.Band_Name || c.ARTIST?.StageName?.Artist_Name || c.ARTIST?.USER_ACCOUNT?.Username || '')
+          .filter(Boolean)
+        const distinctArtists = [...new Set(artistNames)]
+        primary._allArtists = distinctArtists
+        primary._allContracts = contracts
+        combinedEvents.push(primary)
       }
 
       // Then add any open or published job listings not already covered
@@ -227,14 +253,18 @@ const fetchUserEvents = async () => {
           if (processedJobIds.has(job.Job_ID)) continue
           processedJobIds.add(job.Job_ID)
 
-          const activeContract = Array.isArray(job.BOOKING_CONTRACT)
-            ? job.BOOKING_CONTRACT.find((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status) && c.Provider_Artist_ID)
-            : null
-          const resolvedArtist = activeContract ? (artistLookup[activeContract.Provider_Artist_ID] || '') : ''
+          const activeContracts = Array.isArray(job.BOOKING_CONTRACT)
+            ? job.BOOKING_CONTRACT.filter((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status) && c.Provider_Artist_ID)
+            : []
+          const artistNames = activeContracts
+            .map((c: any) => artistLookup[c.Provider_Artist_ID] || '')
+            .filter(Boolean)
+          const distinctArtists = [...new Set(artistNames)]
 
           combinedEvents.push({
             ...job,
-            _resolvedArtistName: resolvedArtist
+            _allArtists: distinctArtists,
+            _resolvedArtistName: distinctArtists.join(', ')
           })
         }
       }
@@ -303,9 +333,11 @@ const formatJobListingEvent = (item: any) => {
     item.BUSINESS_PROFILE?.Business_Name ||
     'Venue TBA'
 
-  const artistName = item.ARTIST
-    ? (item.ARTIST.BandName?.Band_Name || item.ARTIST.StageName?.Artist_Name || item.ARTIST.USER_ACCOUNT?.Username || '')
-    : (item._resolvedArtistName || '')
+  const artistName = (item._allArtists && item._allArtists.length > 0)
+    ? item._allArtists.join(', ')
+    : (item.ARTIST
+        ? (item.ARTIST.BandName?.Band_Name || item.ARTIST.StageName?.Artist_Name || item.ARTIST.USER_ACCOUNT?.Username || '')
+        : (item._resolvedArtistName || ''))
 
   const title = item.Event_Title || item.JOB_LISTING?.Event_Title || 'Live Music Gig'
   let eventTitle = title

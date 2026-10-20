@@ -347,8 +347,10 @@ const handleReportChatMessage = (msg: MessageItem) => {
   openReportModal({
     targetType: 'Message',
     targetId: msg.id,
+    targetAccountId: msg.senderId || activeThread.value?.participant.accountId,
     targetName: activeThread.value?.participant.displayName || 'Sender',
     previewText: msg.content || (msg.attachments.length > 0 ? 'Sent an attachment' : 'Message'),
+    previewSnippet: msg.content || undefined,
     previewMedia: msg.attachments.find(a => a.type.startsWith('image/'))?.url || null
   })
 }

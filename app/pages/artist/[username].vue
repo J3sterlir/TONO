@@ -841,7 +841,9 @@ const handleReportPost = (post: any) => {
     targetId: post.POST_ID,
     targetAccountId: artistRecord.value?.ACCOUNT_ID || undefined,
     targetName: displayName.value || `@${username.value}`,
-    previewText: post.Caption || 'Post media'
+    previewText: post.Caption || 'Post media',
+    previewSnippet: post.Caption || undefined,
+    previewMedia: post.Media || undefined
   })
 }
 
@@ -1183,7 +1185,7 @@ const isScrolled = computed(() => scrollY.value > 200)
               <!-- Report Artist Action Button -->
               <div
                 v-if="!isOwner && (artistRecord?.ACCOUNT_ID || artistRecord?.ARTIST_ID)"
-                @click="openReportModal({ targetType: 'Profile', targetId: artistRecord.ARTIST_ID || artistRecord.ACCOUNT_ID, targetAccountId: artistRecord.ACCOUNT_ID, targetName: displayName || `@${username}`, previewText: artistBio || undefined })"
+                @click="openReportModal({ targetType: 'Profile', targetId: artistRecord.ARTIST_ID || artistRecord.ACCOUNT_ID, targetAccountId: artistRecord.ACCOUNT_ID, targetName: displayName || `@${username}`, previewSnippet: `/artist/${username}` })"
                 class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
                 title="Report Profile"
               >

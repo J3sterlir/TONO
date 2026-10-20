@@ -176,6 +176,14 @@ const cleanupRealtimeChannel = () => {
 }
 
 // Form States
+const todayDateStr = computed(() => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+})
+
 const bookingType = ref('Direct')
 const venueLocation = ref('')
 const startDate = ref('')
@@ -437,6 +445,16 @@ const handleSaveContract = async () => {
 
   if (!startDate.value) {
     errorMessage.value = 'Please select an Event Start Date.'
+    return
+  }
+
+  if (startDate.value < todayDateStr.value) {
+    errorMessage.value = 'Event start date cannot be in the past. Only today and future dates are permitted.'
+    return
+  }
+
+  if (endDate.value && endDate.value < startDate.value) {
+    errorMessage.value = 'End date cannot be earlier than start date.'
     return
   }
 
@@ -777,6 +795,7 @@ const handleSaveContract = async () => {
                     <input
                       type="date"
                       v-model="startDate"
+                      :min="todayDateStr"
                       class="bg-transparent border-0 outline-none text-[#E5E1E4] block w-full text-sm sm:text-base font-medium cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
                     <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-gray-400">
                       <Icon name="ic:baseline-calendar-month" class="text-lg" />
@@ -789,6 +808,7 @@ const handleSaveContract = async () => {
                     <input
                       type="date"
                       v-model="endDate"
+                      :min="startDate || todayDateStr"
                       class="bg-transparent border-0 outline-none text-[#E5E1E4] block w-full text-sm sm:text-base font-medium cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
                     <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-gray-400">
                       <Icon name="ic:baseline-calendar-month" class="text-lg" />

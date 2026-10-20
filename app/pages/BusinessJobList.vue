@@ -67,6 +67,14 @@ const generateFallbackJobCode = () => {
   return `JB-${month}${day}01-${year}`
 }
 
+const todayDateStr = computed(() => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+})
+
 const jobListingForm = reactive({
   jobId: generateFallbackJobCode(),
   businessName: '',
@@ -80,6 +88,7 @@ const jobListingForm = reactive({
   compensationFee: null as number | null,
   description: '',
   isPublic: true,
+  slots: 1
 })
 
 const refreshJobCode = async () => {
@@ -137,6 +146,7 @@ const resetJobForm = async () => {
   jobListingForm.compensationFee = null
   jobListingForm.description = ''
   jobListingForm.isPublic = true
+  jobListingForm.slots = 1
   jobSongLineupList.value = []
   isCreatingListing.value = false
   await refreshJobCode()
@@ -189,10 +199,16 @@ const fetchBusinessAndJobs = async () => {
           Compensation_Fee,
           Description,
           Status,
+          Slots,
           Created_at,
           Requested_Song_Lineup,
           Is_Public,
-          APPLICATION (count)
+          APPLICATION (count),
+          BOOKING_CONTRACT (
+            Booking_ID,
+            Status,
+            Provider_Artist_ID
+          )
         `)
         .eq('Posted_By_BUSINESS_ID', businessId.value)
         .order('Created_at', { ascending: false })
@@ -312,6 +328,22 @@ const handleSaveDraft = async () => {
   submissionFeedback.value = null
 
   try {
+    if (jobListingForm.startDate && jobListingForm.startDate < todayDateStr.value) {
+      submissionFeedback.value = {
+        status: 'error',
+        message: 'Event start date cannot be in the past. Only today and future dates are permitted.'
+      }
+      return
+    }
+
+    if (jobListingForm.startDate && jobListingForm.endDate && jobListingForm.endDate < jobListingForm.startDate) {
+      submissionFeedback.value = {
+        status: 'error',
+        message: 'End date cannot be earlier than start date.'
+      }
+      return
+    }
+
     const draftPayload = {
       Posted_By_BUSINESS_ID: businessId.value,
       Job_Code: jobListingForm.jobId,
@@ -324,6 +356,7 @@ const handleSaveDraft = async () => {
       Compensation_Fee: jobListingForm.compensationFee || null,
       Description: jobListingForm.description || null,
       Requested_Song_Lineup: jobSongLineupList.value,
+      Slots: Math.max(1, jobListingForm.slots || 1),
       Status: 'Draft',
       Is_Rush_Booking: false,
       Is_Public: jobListingForm.isPublic
@@ -416,6 +449,24 @@ const handlePostJobListing = async () => {
       }
     }
 
+    if (jobListingForm.startDate < todayDateStr.value) {
+      submissionFeedback.value = {
+        status: 'error',
+        message: 'Event start date cannot be in the past. Only today and future dates are permitted.'
+      }
+      isSubmittingJob.value = false
+      return
+    }
+
+    if (jobListingForm.endDate && jobListingForm.endDate < jobListingForm.startDate) {
+      submissionFeedback.value = {
+        status: 'error',
+        message: 'End date cannot be earlier than start date.'
+      }
+      isSubmittingJob.value = false
+      return
+    }
+
     const payload: any = {
       Posted_By_BUSINESS_ID: businessId.value,
       Job_Code: jobListingForm.jobId,
@@ -428,6 +479,7 @@ const handlePostJobListing = async () => {
       Compensation_Fee: jobListingForm.compensationFee,
       Description: jobListingForm.description,
       Requested_Song_Lineup: jobSongLineupList.value,
+      Slots: Math.max(1, jobListingForm.slots || 1),
       Is_Rush_Booking: isRush,
       Is_Late_Modification: isLateMod,
       Is_Public: jobListingForm.isPublic
@@ -566,6 +618,7 @@ const handleEditJobListing = (job: any) => {
   jobListingForm.compensationFee = job.Compensation_Fee ? Number(job.Compensation_Fee) : null
   jobListingForm.description = job.Description || ''
   jobListingForm.isPublic = job.Is_Public !== false
+  jobListingForm.slots = job.Slots || 1
   jobSongLineupList.value = Array.isArray(job.Requested_Song_Lineup) ? [...job.Requested_Song_Lineup] : []
 
   isCreatingListing.value = true
@@ -588,12 +641,18 @@ const resumeDraft = (job: any) => {
   jobListingForm.compensationFee = job.Compensation_Fee ? Number(job.Compensation_Fee) : null
   jobListingForm.description = job.Description || ''
   jobListingForm.isPublic = job.Is_Public !== false
+  jobListingForm.slots = job.Slots || 1
   jobSongLineupList.value = Array.isArray(job.Requested_Song_Lineup) ? [...job.Requested_Song_Lineup] : []
 
   isCreatingListing.value = true
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+}
+
+const getHiredArtistsCount = (job: any): number => {
+  if (!Array.isArray(job.BOOKING_CONTRACT)) return 0
+  return job.BOOKING_CONTRACT.filter((c: any) => ['Confirmed', 'Active', 'Completed'].includes(c.Status)).length
 }
 
 // Delete a Draft
@@ -1012,6 +1071,7 @@ onMounted(() => {
                 <input
                   type="date"
                   v-model="jobListingForm.startDate"
+                  :min="todayDateStr"
                   class="bg-transparent border-0 outline-none text-white text-sm font-medium cursor-pointer"
                 />
               </div>
@@ -1020,6 +1080,7 @@ onMounted(() => {
                 <input
                   type="date"
                   v-model="jobListingForm.endDate"
+                  :min="jobListingForm.startDate || todayDateStr"
                   class="bg-transparent border-0 outline-none text-white text-sm font-medium cursor-pointer"
                 />
               </div>
@@ -1041,8 +1102,8 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Start Time & End Time & Fee -->
-            <div class="grid grid-cols-3 gap-3">
+            <!-- Start Time & End Time & Fee & Slots -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <div class="flex items-center justify-between">
                   <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
@@ -1075,6 +1136,20 @@ onMounted(() => {
                   type="number"
                   v-model="jobListingForm.compensationFee"
                   placeholder="5000"
+                  class="bg-transparent border-0 outline-none text-white text-sm font-medium placeholder-gray-500 w-full"
+                />
+              </div>
+              <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">SLOTS / ARTISTS</span>
+                  <span class="text-[10px] font-mono text-[#D0D4F7]">{{ jobListingForm.slots || 1 }} needed</span>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  v-model.number="jobListingForm.slots"
+                  placeholder="1"
                   class="bg-transparent border-0 outline-none text-white text-sm font-medium placeholder-gray-500 w-full"
                 />
               </div>
@@ -1298,7 +1373,7 @@ onMounted(() => {
                   :class="{
                     'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': job.Status === 'Open',
                     'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20': job.Status === 'Filled',
-                    'bg-purple-500/10 text-purple-300 border border-purple-500/20': job.Status === 'Closed',
+                    'bg-[#ced3f5]/10 text-[#ced3f5] border border-[#ced3f5]/20': job.Status === 'Closed',
                     'bg-blue-500/10 text-blue-300 border border-blue-500/20': job.Status === 'Completed'
                   }"
                 >
@@ -1329,13 +1404,23 @@ onMounted(() => {
 
             <!-- Applicants Summary & Actions -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 border-t border-[#2A2A2E] text-xs">
-              <NuxtLink
-                :to="`/businessjobapp?jobId=${job.Job_ID}`"
-                class="inline-flex items-center gap-1.5 text-[#D0D4F7] hover:text-white font-medium transition-colors w-fit"
-              >
-                <Icon name="ic:baseline-people" class="text-base" />
-                <span>{{ job.APPLICATION?.[0]?.count || 0 }} {{ (job.APPLICATION?.[0]?.count || 0) === 1 ? 'Applicant' : 'Applicants' }}</span>
-              </NuxtLink>
+              <div class="flex items-center gap-3 flex-wrap">
+                <NuxtLink
+                  :to="`/businessjobapp?jobId=${job.Job_ID}`"
+                  class="inline-flex items-center gap-1.5 text-[#D0D4F7] hover:text-white font-medium transition-colors w-fit"
+                >
+                  <Icon name="ic:baseline-people" class="text-base" />
+                  <span>{{ job.APPLICATION?.[0]?.count || 0 }} {{ (job.APPLICATION?.[0]?.count || 0) === 1 ? 'Applicant' : 'Applicants' }}</span>
+                </NuxtLink>
+
+                <span
+                  class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium flex items-center gap-1"
+                  :class="getHiredArtistsCount(job) >= (job.Slots || 1) ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'"
+                >
+                  <Icon name="ic:outline-groups" class="text-xs" />
+                  <span>{{ getHiredArtistsCount(job) }} / {{ job.Slots || 1 }} Hired</span>
+                </span>
+              </div>
 
               <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
                 <!-- Case 1: Ended / Finished and not completed -> ONLY "Mark as Complete" -->

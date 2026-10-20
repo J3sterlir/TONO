@@ -12,8 +12,15 @@ const db = supabase as any
 const { fetchCurrentUserProfile } = useTonoAuth()
 const { openReportModal } = useModerationReport()
 
-const activeTab = ref<'active' | 'pending' | 'history'>('active')
+const activeTab = ref<'all' | 'active' | 'pending' | 'completed' | 'cancelled'>('active')
 const isLoading = ref(true)
+
+// Search & Filter Popover State
+const contractSearchQuery = ref('')
+const contractStatusFilter = ref<'all' | 'active' | 'pending' | 'completed' | 'cancelled'>('all')
+const contractTypeFilter = ref<'all' | 'job' | 'direct'>('all')
+const contractDateFilter = ref<'all' | 'upcoming' | 'past'>('all')
+const isFilterDropdownOpen = ref(false)
 
 // Business Profile Context
 const businessProfile = ref<any>(null)
@@ -182,11 +189,13 @@ const checkQueryTriggers = () => {
   const target = contracts.value.find(c => c.Booking_ID === contractId)
   if (target) {
     if (['Confirmed', 'Active'].includes(target.Status)) {
-      activeTab.value = 'active'
+      setTab('active')
     } else if (['Pending_Artist_Approval', 'Pending'].includes(target.Status)) {
-      activeTab.value = 'pending'
+      setTab('pending')
+    } else if (target.Status === 'Completed') {
+      setTab('completed')
     } else {
-      activeTab.value = 'history'
+      setTab('cancelled')
     }
     openContractDetails(target)
   }
@@ -370,15 +379,97 @@ const handleCompleteContract = async (contract: any) => {
 // Filtered Views
 // -----------------------------------------------------------------------------
 const activeContracts = computed(() => {
-  return contracts.value.filter(c => c.Status === 'Confirmed' || c.Status === 'Active')
+  return contracts.value.filter(c => ['Confirmed', 'Active'].includes(c.Status))
 })
 
 const pendingContracts = computed(() => {
-  return contracts.value.filter(c => c.Status === 'Pending_Artist_Approval' || c.Status === 'Pending')
+  return contracts.value.filter(c => ['Pending_Artist_Approval', 'Pending'].includes(c.Status))
 })
 
-const historyContracts = computed(() => {
-  return contracts.value.filter(c => c.Status === 'Completed' || c.Status === 'Cancelled' || c.Status === 'Declined')
+const completedContracts = computed(() => {
+  return contracts.value.filter(c => c.Status === 'Completed')
+})
+
+const cancelledContracts = computed(() => {
+  return contracts.value.filter(c => ['Cancelled', 'Declined'].includes(c.Status))
+})
+
+const isContractPast = (contract: any): boolean => {
+  if (['Completed', 'Cancelled', 'Declined'].includes(contract.Status)) return true
+  const targetDate = contract.End_Date || contract.Start_Date || contract.Event_Date
+  if (!targetDate) return false
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return targetDate < todayStr
+}
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (contractTypeFilter.value !== 'all') count++
+  if (contractStatusFilter.value !== 'all') count++
+  if (contractDateFilter.value !== 'all') count++
+  return count
+})
+
+const hasActiveFilters = computed(() => {
+  return (
+    contractSearchQuery.value.trim() !== '' ||
+    contractTypeFilter.value !== 'all' ||
+    contractStatusFilter.value !== 'all' ||
+    contractDateFilter.value !== 'all'
+  )
+})
+
+const resetContractFilters = () => {
+  contractSearchQuery.value = ''
+  contractTypeFilter.value = 'all'
+  contractStatusFilter.value = 'all'
+  contractDateFilter.value = 'all'
+}
+
+const setTab = (tab: 'all' | 'active' | 'pending' | 'completed' | 'cancelled') => {
+  activeTab.value = tab
+  contractStatusFilter.value = tab
+}
+
+const setStatusFilter = (status: 'all' | 'active' | 'pending' | 'completed' | 'cancelled') => {
+  contractStatusFilter.value = status
+  activeTab.value = status
+}
+
+const filteredContracts = computed(() => {
+  return contracts.value.filter((contract: any) => {
+    // 1. Tab Status Filter
+    if (activeTab.value === 'active' && !['Confirmed', 'Active'].includes(contract.Status)) return false
+    if (activeTab.value === 'pending' && !['Pending_Artist_Approval', 'Pending'].includes(contract.Status)) return false
+    if (activeTab.value === 'completed' && contract.Status !== 'Completed') return false
+    if (activeTab.value === 'cancelled' && !['Cancelled', 'Declined'].includes(contract.Status)) return false
+
+    // 2. Type Filter (Direct Booking vs Job Listing)
+    if (contractTypeFilter.value === 'job' && !contract.Job_ID) return false
+    if (contractTypeFilter.value === 'direct' && contract.Job_ID) return false
+
+    // 3. Date Filter (Upcoming vs Past)
+    if (contractDateFilter.value !== 'all') {
+      const past = isContractPast(contract)
+      if (contractDateFilter.value === 'upcoming' && past) return false
+      if (contractDateFilter.value === 'past' && !past) return false
+    }
+
+    // 4. Text Search
+    if (contractSearchQuery.value.trim()) {
+      const q = contractSearchQuery.value.toLowerCase().trim()
+      const code = (contract.Contract_Code || '').toLowerCase()
+      const artist = getArtistName(contract).toLowerCase()
+      const gig = (contract.JOB_LISTING?.Event_Title || '').toLowerCase()
+      const venue = (contract.Venue_Location || '').toLowerCase()
+      if (!code.includes(q) && !artist.includes(q) && !gig.includes(q) && !venue.includes(q)) {
+        return false
+      }
+    }
+
+    return true
+  })
 })
 
 const getArtistName = (contract: any) => {
@@ -457,15 +548,228 @@ onBeforeUnmount(() => {
     <!-- ========================================================================= -->
     <div class="space-y-6">
 
+      <!-- Search and Filter Bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <!-- Search Input -->
+        <div class="relative flex-1 max-w-md">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+            <Icon name="ic:baseline-search" class="text-lg" />
+          </div>
+          <input
+            type="text"
+            v-model="contractSearchQuery"
+            placeholder="Search by artist, contract code, gig title, venue..."
+            class="w-full bg-[#1C1C1F] border border-[#2A2A2E] focus:border-[#D0D4F7] rounded-xl pl-10 pr-9 py-2.5 text-xs text-white placeholder-gray-500 outline-none transition-all shadow-inner"
+          />
+          <button
+            v-if="contractSearchQuery"
+            type="button"
+            @click="contractSearchQuery = ''"
+            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white cursor-pointer"
+          >
+            <Icon name="ic:round-close" class="text-sm" />
+          </button>
+        </div>
+
+        <!-- Filter Icon Dropdown Container (Design matching Artistprofile.vue) -->
+        <div class="relative shrink-0">
+          <button
+            type="button"
+            @click="isFilterDropdownOpen = !isFilterDropdownOpen"
+            class="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm select-none"
+            :class="isFilterDropdownOpen || activeFilterCount > 0
+              ? 'bg-[#D0D4F7] text-[#131315] border-[#D0D4F7]'
+              : 'bg-[#1C1C1F] hover:bg-[#252529] text-gray-300 hover:text-white border-[#2A2A2E]'"
+          >
+            <Icon name="ic:outline-filter-alt" class="text-base shrink-0" />
+            <span>Filter</span>
+            <span
+              v-if="activeFilterCount > 0"
+              class="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0"
+              :class="isFilterDropdownOpen || activeFilterCount > 0 ? 'bg-[#131315] text-[#D0D4F7]' : 'bg-[#D0D4F7] text-[#131315]'"
+            >
+              {{ activeFilterCount }}
+            </span>
+            <Icon
+              name="ic:baseline-keyboard-arrow-down"
+              class="text-sm transition-transform duration-200 shrink-0"
+              :class="isFilterDropdownOpen ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <!-- Backdrop to close on click outside -->
+          <div
+            v-if="isFilterDropdownOpen"
+            class="fixed inset-0 z-20"
+            @click="isFilterDropdownOpen = false"
+          ></div>
+
+          <!-- Dropdown Popover -->
+          <div
+            v-if="isFilterDropdownOpen"
+            @click.stop
+            class="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#18181B] border border-[#2A2A2E] rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-2.5">
+              <div class="flex items-center gap-1.5 text-white font-semibold text-xs">
+                <Icon name="ic:outline-filter-alt" class="text-sm text-[#D0D4F7]" />
+                <span>Filter Contracts</span>
+              </div>
+              <button
+                v-if="hasActiveFilters"
+                type="button"
+                @click="resetContractFilters"
+                class="text-[11px] font-mono text-gray-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Reset All
+              </button>
+            </div>
+
+            <!-- 1. Type Filter -->
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                Type
+              </label>
+              <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                <button
+                  type="button"
+                  @click="contractTypeFilter = 'all'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                  :class="contractTypeFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  @click="contractTypeFilter = 'job'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium truncate"
+                  :class="contractTypeFilter === 'job' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  Job Listing
+                </button>
+                <button
+                  type="button"
+                  @click="contractTypeFilter = 'direct'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                  :class="contractTypeFilter === 'direct' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  Direct
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Status Filter -->
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                Status
+              </label>
+              <div class="grid grid-cols-2 gap-1.5 bg-[#131315] p-1.5 rounded-xl border border-[#2A2A2E] text-xs">
+                <button
+                  type="button"
+                  @click="setStatusFilter('all')"
+                  class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between col-span-2"
+                  :class="contractStatusFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  <span>None (Show All)</span>
+                  <span class="text-[10px] font-mono opacity-80">{{ contracts.length }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="setStatusFilter('active')"
+                  class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                  :class="contractStatusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-gray-400 hover:text-white'"
+                >
+                  <span>Active</span>
+                  <span class="text-[10px] font-mono opacity-80">{{ activeContracts.length }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="setStatusFilter('pending')"
+                  class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                  :class="contractStatusFilter === 'pending' ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30' : 'text-gray-400 hover:text-white'"
+                >
+                  <span>Pending</span>
+                  <span class="text-[10px] font-mono opacity-80">{{ pendingContracts.length }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="setStatusFilter('completed')"
+                  class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                  :class="contractStatusFilter === 'completed' ? 'bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30' : 'text-gray-400 hover:text-white'"
+                >
+                  <span>Completed</span>
+                  <span class="text-[10px] font-mono opacity-80">{{ completedContracts.length }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="setStatusFilter('cancelled')"
+                  class="py-1.5 px-2.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between"
+                  :class="contractStatusFilter === 'cancelled' ? 'bg-red-500/20 text-red-300 font-bold border border-red-500/30' : 'text-gray-400 hover:text-white'"
+                >
+                  <span>Cancelled</span>
+                  <span class="text-[10px] font-mono opacity-80">{{ cancelledContracts.length }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Date Filter -->
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-mono uppercase tracking-wider text-gray-400 block">
+                Date
+              </label>
+              <div class="grid grid-cols-3 gap-1 bg-[#131315] p-1 rounded-xl border border-[#2A2A2E] text-xs">
+                <button
+                  type="button"
+                  @click="contractDateFilter = 'all'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                  :class="contractDateFilter === 'all' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  @click="contractDateFilter = 'upcoming'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                  :class="contractDateFilter === 'upcoming' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  Upcoming
+                </button>
+                <button
+                  type="button"
+                  @click="contractDateFilter = 'past'"
+                  class="py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer font-medium"
+                  :class="contractDateFilter === 'past' ? 'bg-[#D0D4F7] text-[#131315] font-bold shadow-sm' : 'text-gray-400 hover:text-white'"
+                >
+                  Past
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Navigation Filter Tabs -->
       <div class="flex items-center gap-2 border-b border-[#2A2A2E] pb-3 text-xs overflow-x-auto">
         <button
           type="button"
-          @click="activeTab = 'active'"
+          @click="setTab('all')"
+          class="px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+          :class="activeTab === 'all' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
+        >
+          <span>All Contracts</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'all' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
+            {{ contracts.length }}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          @click="setTab('active')"
           class="px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
           :class="activeTab === 'active' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
         >
-          <span>Active Contracts</span>
+          <span>Active</span>
           <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'active' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
             {{ activeContracts.length }}
           </span>
@@ -473,11 +777,11 @@ onBeforeUnmount(() => {
 
         <button
           type="button"
-          @click="activeTab = 'pending'"
+          @click="setTab('pending')"
           class="px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
           :class="activeTab === 'pending' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
         >
-          <span>Pending Artist Approval</span>
+          <span>Pending Approval</span>
           <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'pending' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
             {{ pendingContracts.length }}
           </span>
@@ -485,13 +789,25 @@ onBeforeUnmount(() => {
 
         <button
           type="button"
-          @click="activeTab = 'history'"
+          @click="setTab('completed')"
           class="px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
-          :class="activeTab === 'history' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
+          :class="activeTab === 'completed' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
         >
-          <span>History &amp; Cancelled</span>
-          <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'history' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
-            {{ historyContracts.length }}
+          <span>Completed</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'completed' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
+            {{ completedContracts.length }}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          @click="setTab('cancelled')"
+          class="px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+          :class="activeTab === 'cancelled' ? 'bg-[#D0D4F7] text-[#0E0E10] font-bold shadow' : 'bg-[#1C1C1F] text-gray-300 border border-[#3A3A3C] hover:bg-white/5'"
+        >
+          <span>Cancelled</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono" :class="activeTab === 'cancelled' ? 'bg-[#0E0E10]/20 text-[#0E0E10]' : 'bg-white/10 text-gray-300'">
+            {{ cancelledContracts.length }}
           </span>
         </button>
       </div>
@@ -501,249 +817,291 @@ onBeforeUnmount(() => {
         <div v-for="i in 4" :key="i" class="h-44 bg-[#1C1C1F] rounded-2xl border border-[#2A2A2E]"></div>
       </div>
 
-      <!-- TAB 1: ACTIVE CONTRACTS -->
-      <div v-else-if="activeTab === 'active'">
-        <div v-if="activeContracts.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
+      <!-- Contracts Grid View -->
+      <div v-else>
+        <!-- Empty State -->
+        <div
+          v-if="filteredContracts.length === 0"
+          class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3"
+        >
           <Icon name="ic:outline-assignment" class="text-4xl text-gray-500 mx-auto" />
-          <h3 class="text-base font-semibold text-white">No Active Contracts</h3>
+          <h3 class="text-base font-semibold text-white">
+            <span v-if="activeTab === 'all'">No Contracts Found</span>
+            <span v-else-if="activeTab === 'active'">No Active Contracts</span>
+            <span v-else-if="activeTab === 'pending'">No Pending Contract Offers</span>
+            <span v-else-if="activeTab === 'completed'">No Completed Contracts</span>
+            <span v-else>No Cancelled Contracts</span>
+          </h3>
+          <p v-if="hasActiveFilters" class="text-xs text-gray-400">
+            No contracts match your current search or filter criteria.
+          </p>
+          <button
+            v-if="hasActiveFilters"
+            type="button"
+            @click="resetContractFilters"
+            class="mt-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+          >
+            Reset All Filters
+          </button>
         </div>
 
+        <!-- Populated Cards Grid -->
         <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div
-            v-for="contract in activeContracts"
+            v-for="contract in filteredContracts"
             :key="contract.Booking_ID"
             @click="openContractDetails(contract)"
-            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] hover:border-[#46464D] rounded-2xl p-5 sm:p-6 space-y-4 transition-all shadow-lg group cursor-pointer"
+            class="bg-[#1C1C1F]/80 border rounded-2xl p-5 sm:p-6 space-y-4 transition-all shadow-lg group cursor-pointer"
+            :class="{
+              'border-[#2A2A2E] hover:border-[#46464D]': ['Confirmed', 'Active'].includes(contract.Status),
+              'border-amber-500/20 hover:border-amber-500/50': ['Pending_Artist_Approval', 'Pending'].includes(contract.Status),
+              'border-blue-500/20 hover:border-blue-500/50': contract.Status === 'Completed',
+              'border-red-500/20 hover:border-red-500/50 bg-[#1C1C1F]/50': ['Cancelled', 'Declined'].includes(contract.Status)
+            }"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">{{ contract.Contract_Code }}</span>
-                <h3 class="text-lg font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">
-                  {{ getArtistName(contract) }}
-                </h3>
-                <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
-                  Gig: {{ contract.JOB_LISTING.Event_Title }}
+            <!-- 1. ACTIVE CONTRACT CARD -->
+            <template v-if="['Confirmed', 'Active'].includes(contract.Status)">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">{{ contract.Contract_Code }}</span>
+                  <h3 class="text-lg font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">
+                    {{ getArtistName(contract) }}
+                  </h3>
+                  <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
+                    Gig: {{ contract.JOB_LISTING.Event_Title }}
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                  <span v-if="contract.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                    <Icon name="ic:baseline-bolt" class="text-xs" />
+                    <span>Rush</span>
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    {{ contract.Status }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Schedule & Location -->
+              <div class="space-y-1.5 text-xs text-gray-300">
+                <div class="flex items-center gap-2">
+                  <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span>
+                    {{ contract.Start_Date || contract.Event_Date }}
+                    <span v-if="contract.End_Date && contract.End_Date !== contract.Start_Date"> to {{ contract.End_Date }}</span>
+                    <span v-if="contract.Start_Time"> • {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span>
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="truncate">{{ contract.Venue_Location }}</span>
+                </div>
+                <div v-if="contract.Agreed_Fee" class="flex items-center gap-2">
+                  <Icon name="ic:baseline-payments" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="font-mono text-emerald-400 font-semibold">Fee: ₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
+                </div>
+              </div>
+
+              <!-- Footer Actions -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E] text-xs">
+                <span class="text-[10px] font-mono text-gray-400">
+                  Type: {{ contract.Booking_Type || 'Direct' }}
+                </span>
+
+                <!-- For Direct Bookings: Show completion & cancellation controls -->
+                <div v-if="!contract.Job_ID" class="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+                  <button
+                    v-if="canCompleteContract(contract)"
+                    type="button"
+                    :disabled="completingBookingId !== null"
+                    @click.stop="handleCompleteContract(contract)"
+                    class="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 font-semibold shadow-sm"
+                  >
+                    <Icon name="ic:round-check-circle" class="text-sm text-emerald-400" />
+                    <span>{{ completingBookingId === contract.Booking_ID ? 'Completing...' : 'Mark as Completed' }}</span>
+                  </button>
+
+                  <button
+                    v-else
+                    type="button"
+                    @click.stop="initiateCancelContract(contract)"
+                    class="w-full sm:w-auto px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer flex items-center justify-center"
+                  >
+                    Cancel Contract
+                  </button>
+                </div>
+
+                <!-- For Job-Tied Bookings: Managed centrally via Job Listings -->
+                <div v-else class="flex items-center gap-2">
+                  <span class="text-[11px] text-gray-400 italic">Managed via Job Listing</span>
+                  <NuxtLink
+                    to="/businessjoblist"
+                    @click.stop
+                    class="px-3 py-1 rounded-full text-xs font-medium border border-[#3A3A3C] text-[#D0D4F7] hover:bg-white/5 transition-colors flex items-center gap-1"
+                  >
+                    <span>View Job</span>
+                    <Icon name="ic:round-arrow-forward" class="text-xs" />
+                  </NuxtLink>
+                </div>
+              </div>
+            </template>
+
+            <!-- 2. PENDING CONTRACT CARD -->
+            <template v-else-if="['Pending_Artist_Approval', 'Pending'].includes(contract.Status)">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider">{{ contract.Contract_Code }}</span>
+                  <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ getArtistName(contract) }}</h3>
+                  <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
+                    Gig: {{ contract.JOB_LISTING.Event_Title }}
+                  </p>
+                </div>
+
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  Awaiting Artist Review
+                </span>
+              </div>
+
+              <div class="space-y-1.5 text-xs text-gray-300">
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span>{{ contract.Start_Date || contract.Event_Date }} <span v-if="contract.Start_Time">• {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span></span>
+                </p>
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="truncate">{{ contract.Venue_Location }}</span>
+                </p>
+                <p v-if="contract.Agreed_Fee" class="flex items-center gap-2">
+                  <Icon name="ic:baseline-payments" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="font-mono text-emerald-400">Offered Fee: ₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
                 </p>
               </div>
 
-              <div class="flex items-center gap-1.5">
-                <span v-if="contract.Is_Rush_Booking" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
-                  <Icon name="ic:baseline-bolt" class="text-xs" />
-                  <span>Rush</span>
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {{ contract.Status }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Schedule & Location -->
-            <div class="space-y-1.5 text-xs text-gray-300">
-              <div class="flex items-center gap-2">
-                <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span>
-                  {{ contract.Start_Date || contract.Event_Date }}
-                  <span v-if="contract.End_Date && contract.End_Date !== contract.Start_Date"> to {{ contract.End_Date }}</span>
-                  <span v-if="contract.Start_Time"> • {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span>
-                </span>
-              </div>
-              <div class="flex items-center gap-2">
-                <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span class="truncate">{{ contract.Venue_Location }}</span>
-              </div>
-              <div v-if="contract.Agreed_Fee" class="flex items-center gap-2">
-                <Icon name="ic:baseline-payments" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span class="font-mono text-emerald-400 font-semibold">Fee: ₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
-              </div>
-            </div>
-
-            <!-- Footer Actions -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#2A2A2E] text-xs">
-              <span class="text-[10px] font-mono text-gray-400">
-                Type: {{ contract.Booking_Type || 'Direct' }}
-              </span>
-
-              <!-- For Direct Bookings: Show completion & cancellation controls -->
-              <div v-if="!contract.Job_ID" class="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
-                <!-- If finished/ended: ONLY Mark as Completed -->
+              <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
+                <span class="text-[10px] text-gray-500 italic">Artist reviewing contract &amp; setlist</span>
                 <button
-                  v-if="canCompleteContract(contract)"
-                  type="button"
-                  :disabled="completingBookingId !== null"
-                  @click.stop="handleCompleteContract(contract)"
-                  class="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-full border border-emerald-500/40 text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 font-semibold shadow-sm"
-                >
-                  <Icon name="ic:round-check-circle" class="text-sm text-emerald-400" />
-                  <span>{{ completingBookingId === contract.Booking_ID ? 'Completing...' : 'Mark as Completed' }}</span>
-                </button>
-
-                <!-- If NOT finished: Show Cancel Contract -->
-                <button
-                  v-else
+                  v-if="!contract.Job_ID"
                   type="button"
                   @click.stop="initiateCancelContract(contract)"
-                  class="w-full sm:w-auto px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer flex items-center justify-center"
+                  class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
                 >
-                  Cancel Contract
+                  Withdraw Offer
                 </button>
-              </div>
-
-              <!-- For Job-Tied Bookings: Managed centrally via Job Listings -->
-              <div v-else class="flex items-center gap-2">
-                <span class="text-[11px] text-gray-400 italic">Managed via Job Listing</span>
                 <NuxtLink
+                  v-else
                   to="/businessjoblist"
                   @click.stop
-                  class="px-3 py-1 rounded-full text-xs font-medium border border-[#3A3A3C] text-[#D0D4F7] hover:bg-white/5 transition-colors flex items-center gap-1"
+                  class="text-[11px] text-[#D0D4F7] hover:underline flex items-center gap-1"
                 >
-                  <span>View Job</span>
+                  <span>Managed in Job Listings</span>
                   <Icon name="ic:round-arrow-forward" class="text-xs" />
                 </NuxtLink>
               </div>
-            </div>
-          </div>
-        </div>  
-       </div>   
+            </template>
 
-      <!-- TAB 2: PENDING ARTIST APPROVAL -->
-      <div v-else-if="activeTab === 'pending'">
-        <div v-if="pendingContracts.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
-          <Icon name="ic:outline-pending-actions" class="text-4xl text-gray-500 mx-auto" />
-          <h3 class="text-base font-semibold text-white">No Pending Contract Offers</h3>
-        </div>
+            <!-- 3. COMPLETED CONTRACT CARD -->
+            <template v-else-if="contract.Status === 'Completed'">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider">{{ contract.Contract_Code }}</span>
+                  <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ getArtistName(contract) }}</h3>
+                  <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
+                    Gig: {{ contract.JOB_LISTING.Event_Title }}
+                  </p>
+                </div>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div
-            v-for="contract in pendingContracts"
-            :key="contract.Booking_ID"
-            @click="openContractDetails(contract)"
-            class="bg-[#1C1C1F]/80 border border-[#2A2A2E] rounded-2xl p-5 sm:p-6 space-y-4 shadow-lg hover:border-[#46464D] transition-all cursor-pointer group"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider">{{ contract.Contract_Code }}</span>
-                <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ getArtistName(contract) }}</h3>
-                <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
-                  Gig: {{ contract.JOB_LISTING.Event_Title }}
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/20 flex items-center gap-1">
+                  <Icon name="ic:round-check-circle" class="text-xs" />
+                  <span>Completed</span>
+                </span>
+              </div>
+
+              <div class="space-y-1.5 text-xs text-gray-300">
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span>{{ contract.Start_Date || contract.Event_Date }} <span v-if="contract.Start_Time">• {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span></span>
+                </p>
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="truncate">{{ contract.Venue_Location }}</span>
+                </p>
+                <p v-if="contract.Agreed_Fee" class="flex items-center gap-2">
+                  <Icon name="ic:baseline-payments" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="font-mono text-emerald-400 font-semibold">Total Fee: ₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
                 </p>
               </div>
 
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                Awaiting Artist Review
-              </span>
-            </div>
-
-            <div class="space-y-1.5 text-xs text-gray-300">
-              <p class="flex items-center gap-2">
-                <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span>{{ contract.Start_Date || contract.Event_Date }} <span v-if="contract.Start_Time">• {{ formatTimeRange12(contract.Start_Time, contract.End_Time) }}</span></span>
-              </p>
-              <p class="flex items-center gap-2">
-                <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span class="truncate">{{ contract.Venue_Location }}</span>
-              </p>
-              <p v-if="contract.Agreed_Fee" class="flex items-center gap-2">
-                <Icon name="ic:baseline-payments" class="text-[#D0D4F7] text-sm shrink-0" />
-                <span class="font-mono text-emerald-400">Offered Fee: ₱{{ Number(contract.Agreed_Fee).toLocaleString() }}</span>
-              </p>
-            </div>
-
-            <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
-              <span class="text-[10px] text-gray-500 italic">Artist reviewing contract &amp; setlist</span>
-              <button
-                v-if="!contract.Job_ID"
-                type="button"
-                @click.stop="initiateCancelContract(contract)"
-                class="px-3.5 py-1.5 rounded-full border border-red-500/30 text-red-300 hover:bg-red-500/10 hover:border-red-500/60 transition-all cursor-pointer"
-              >
-                Withdraw Offer
-              </button>
-              <NuxtLink
-                v-else
-                to="/businessjoblist"
-                @click.stop
-                class="text-[11px] text-[#D0D4F7] hover:underline flex items-center gap-1"
-              >
-                <span>Managed in Job Listings</span>
-                <Icon name="ic:round-arrow-forward" class="text-xs" />
-              </NuxtLink>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 3: HISTORY & CANCELLED -->
-      <div v-else-if="activeTab === 'history'">
-        <div v-if="historyContracts.length === 0" class="text-center py-16 bg-[#131315]/50 border border-dashed border-[#2A2A2E] rounded-2xl space-y-3">
-          <Icon name="ic:outline-history" class="text-4xl text-gray-500 mx-auto" />
-          <h3 class="text-base font-semibold text-white">No Past or Cancelled Contracts</h3>
-        </div>
-
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div
-            v-for="contract in historyContracts"
-            :key="contract.Booking_ID"
-            @click="openContractDetails(contract)"
-            class="bg-[#1C1C1F]/40 border border-[#2A2A2E]/50 rounded-2xl p-5 sm:p-6 space-y-3 opacity-90 hover:border-[#46464D] transition-all cursor-pointer group"
-          >
-            <div class="flex items-center justify-between">
-              <span class="text-[10px] font-mono text-gray-400 uppercase">{{ contract.Contract_Code }}</span>
-              <span
-                class="px-2.5 py-0.5 rounded-full text-[10px] font-mono"
-                :class="contract.Status === 'Completed' ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20' : 'bg-red-500/10 text-red-300 border border-red-500/20'"
-              >
-                {{ contract.Status }}
-              </span>
-            </div>
-            <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors">{{ getArtistName(contract) }}</h3>
-            <p class="text-xs text-gray-400 flex items-center gap-2 flex-wrap">
-              <span class="flex items-center gap-1">
-                <Icon name="ic:baseline-calendar-today" class="text-xs text-[#D0D4F7]" />
-                {{ contract.Start_Date || contract.Event_Date }}
-              </span>
-              <span>•</span>
-              <span class="flex items-center gap-1">
-                <Icon name="ic:baseline-location-on" class="text-xs text-[#D0D4F7]" />
-                {{ contract.Venue_Location }}
-              </span>
-            </p>
-            <p v-if="contract.Cancellation_Reason" class="text-xs text-red-300">
-              Reason: {{ contract.Cancellation_Reason }}
-            </p>
-
-            <!-- Late Cancellation Flag & Report -->
-            <div
-              v-if="contract.Is_Late_Cancellation"
-              class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2"
-            >
-              <div class="flex items-center gap-1.5 text-xs text-amber-300">
-                <Icon name="ic:baseline-warning" class="text-base text-amber-400 shrink-0" />
-                <span>Last-Minute Cancellation (&le;5 days)</span>
+              <!-- Rating & Feedback Actions -->
+              <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs">
+                <span class="text-[11px] text-gray-400">Performance completed</span>
+                <button
+                  type="button"
+                  :disabled="reviewedBookingIds.has(contract.Booking_ID)"
+                  @click.stop="openReviewForContract(contract)"
+                  class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                  :class="reviewedBookingIds.has(contract.Booking_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-[#D0D4F7] hover:bg-white text-[#0E0E10] shadow'"
+                >
+                  <Icon :name="reviewedBookingIds.has(contract.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
+                  <span>{{ reviewedBookingIds.has(contract.Booking_ID) ? 'Reviewed' : 'Rate Performer' }}</span>
+                </button>
               </div>
-              <button
-                type="button"
-                @click.stop="openReportModal({ targetType: 'Contract', targetId: contract.Booking_ID, targetAccountId: contract.ARTIST?.USER_ACCOUNT?.ACCOUNT_ID || contract.ARTIST?.ARTIST_ID, targetName: getArtistName(contract), previewSnippet: `Late cancellation on ${contract.Start_Date || contract.Event_Date}. Reason: ${contract.Cancellation_Reason || 'None provided'}` })"
-                class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 text-rose-300 text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <Icon name="ic:round-flag" class="text-xs" />
-                <span>Report</span>
-              </button>
-            </div>
+            </template>
 
-            <!-- Review Action for Completed Contracts -->
-            <div v-if="contract.Status === 'Completed'" class="pt-2 border-t border-[#2A2A2E]/60 flex items-center justify-between">
-              <span class="text-[11px] text-gray-400">Performance completed</span>
-              <button
-                type="button"
-                :disabled="reviewedBookingIds.has(contract.Booking_ID)"
-                @click.stop="openReviewForContract(contract)"
-                class="px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-                :class="reviewedBookingIds.has(contract.Booking_ID) ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 cursor-default' : 'bg-amber-400/10 border border-amber-400/30 text-amber-300 hover:bg-amber-400/20 shadow-sm'"
+            <!-- 4. CANCELLED CONTRACT CARD -->
+            <template v-else>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-mono text-gray-400 uppercase tracking-wider">{{ contract.Contract_Code }}</span>
+                  <h3 class="text-base font-bold text-white group-hover:text-[#D0D4F7] transition-colors mt-0.5">{{ getArtistName(contract) }}</h3>
+                  <p v-if="contract.JOB_LISTING?.Event_Title" class="text-xs text-gray-400">
+                    Gig: {{ contract.JOB_LISTING.Event_Title }}
+                  </p>
+                </div>
+
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-red-500/10 text-red-300 border border-red-500/20">
+                  {{ contract.Status }}
+                </span>
+              </div>
+
+              <div class="space-y-1.5 text-xs text-gray-300">
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-calendar-today" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span>{{ contract.Start_Date || contract.Event_Date }}</span>
+                </p>
+                <p class="flex items-center gap-2">
+                  <Icon name="ic:baseline-location-on" class="text-[#D0D4F7] text-sm shrink-0" />
+                  <span class="truncate">{{ contract.Venue_Location }}</span>
+                </p>
+                <p v-if="contract.Cancellation_Reason" class="text-xs text-red-300 font-medium">
+                  Reason: {{ contract.Cancellation_Reason }}
+                </p>
+              </div>
+
+              <!-- Late Cancellation Flag & Report -->
+              <div
+                v-if="contract.Is_Late_Cancellation"
+                class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2"
               >
-                <Icon :name="reviewedBookingIds.has(contract.Booking_ID) ? 'ic:round-check' : 'ic:round-star'" class="text-sm" />
-                <span>{{ reviewedBookingIds.has(contract.Booking_ID) ? 'Reviewed' : 'Rate Performer' }}</span>
-              </button>
-            </div>
+                <div class="flex items-center gap-1.5 text-xs text-amber-300">
+                  <Icon name="ic:baseline-warning" class="text-base text-amber-400 shrink-0" />
+                  <span>Last-Minute Cancellation (&le;5 days)</span>
+                </div>
+                <button
+                  type="button"
+                  @click.stop="openReportModal({ targetType: 'Contract', targetId: contract.Booking_ID, targetAccountId: contract.ARTIST?.USER_ACCOUNT?.ACCOUNT_ID || contract.ARTIST?.ARTIST_ID, targetName: getArtistName(contract), previewSnippet: `Late cancellation on ${contract.Start_Date || contract.Event_Date}. Reason: ${contract.Cancellation_Reason || 'None provided'}` })"
+                  class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 text-rose-300 text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name="ic:round-flag" class="text-xs" />
+                  <span>Report</span>
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between pt-3 border-t border-[#2A2A2E] text-xs text-gray-500">
+                <span>Cancelled Performance Agreement</span>
+                <span class="text-[#D0D4F7] group-hover:underline text-[11px]">View Details &rarr;</span>
+              </div>
+            </template>
           </div>
         </div>
       </div>

@@ -180,7 +180,7 @@ const handleArtistAccept = async () => {
 
     if (contractErr) throw contractErr
 
-    // 2. If attached to a Job_ID, update application status to Accepted and others to Declined
+    // 2. If attached to a Job_ID, update application status to Accepted and check if all slots filled before closing
     if (props.contract.Job_ID) {
       await db
         .from('APPLICATION')
@@ -188,10 +188,28 @@ const handleArtistAccept = async () => {
         .eq('Job_ID', props.contract.Job_ID)
         .eq('Artist_ID', props.contract.Provider_Artist_ID)
 
-      await db
+      // Query Slots for this Job_ID
+      const { data: jobData } = await db
         .from('JOB_LISTING')
-        .update({ Status: 'Closed' })
+        .select('Slots')
         .eq('Job_ID', props.contract.Job_ID)
+        .single()
+
+      const totalSlots = Number(jobData?.Slots) || 1
+
+      // Count confirmed/active contracts for this job
+      const { count } = await db
+        .from('BOOKING_CONTRACT')
+        .select('Booking_ID', { count: 'exact', head: true })
+        .eq('Job_ID', props.contract.Job_ID)
+        .not('Status', 'in', '("Cancelled","Declined")')
+
+      if ((count || 0) >= totalSlots) {
+        await db
+          .from('JOB_LISTING')
+          .update({ Status: 'Closed' })
+          .eq('Job_ID', props.contract.Job_ID)
+      }
     }
 
     // 3. Clear draft
@@ -227,15 +245,24 @@ const handleArtistReject = async () => {
         .eq('Job_ID', props.contract.Job_ID)
         .eq('Artist_ID', props.contract.Provider_Artist_ID)
 
-      // Free slots for this listing if no other active/pending contracts exist
-      const { data: otherContracts } = await db
+      // Query Slots and Status for this Job_ID
+      const { data: jobData } = await db
+        .from('JOB_LISTING')
+        .select('Slots, Status')
+        .eq('Job_ID', props.contract.Job_ID)
+        .single()
+
+      const totalSlots = Number(jobData?.Slots) || 1
+
+      // Count remaining active contracts
+      const { count } = await db
         .from('BOOKING_CONTRACT')
-        .select('Booking_ID')
+        .select('Booking_ID', { count: 'exact', head: true })
         .eq('Job_ID', props.contract.Job_ID)
         .neq('Booking_ID', props.contract.Booking_ID)
         .not('Status', 'in', '("Cancelled","Declined")')
 
-      if (!otherContracts || otherContracts.length === 0) {
+      if ((count || 0) < totalSlots && jobData?.Status === 'Closed') {
         await db
           .from('JOB_LISTING')
           .update({ Status: 'Open' })

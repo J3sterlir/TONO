@@ -334,7 +334,9 @@ const handleReportPost = (post: PostItem) => {
     targetId: post.POST_ID,
     targetAccountId: business.value?.ACCOUNT_ID || undefined,
     targetName: business.value?.Business_Name || 'Business Post',
-    previewText: post.Caption || 'Post media'
+    previewText: post.Caption || 'Post media',
+    previewSnippet: post.Caption || undefined,
+    previewMedia: post.Media || undefined
   })
 }
 
@@ -614,7 +616,7 @@ const scrollToTop = () => {
                 <!-- Report Business Action Button -->
                 <div
                   v-if="!isOwner && (business.ACCOUNT_ID || business.BUSINESS_ID)"
-                  @click="openReportModal({ targetType: 'Profile', targetId: business.BUSINESS_ID || business.ACCOUNT_ID, targetAccountId: business.ACCOUNT_ID, targetName: business.Business_Name, previewSnippet: business.Business_Bio || business.Business_Address || undefined })"
+                  @click="openReportModal({ targetType: 'Profile', targetId: business.BUSINESS_ID || business.ACCOUNT_ID, targetAccountId: business.ACCOUNT_ID, targetName: business.Business_Name, previewSnippet: `/business/${business.BUSINESS_ID || business.ACCOUNT_ID}` })"
                   class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
                   title="Report Profile"
                 >

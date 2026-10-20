@@ -22,20 +22,35 @@ const isJobClosed = computed(() => {
   if (!props.job) return false
 
   const status = props.job.Status
-  if (['Closed', 'Filled', 'Completed', 'Cancelled', 'Active', 'Confirmed'].includes(status)) {
+  if (['Completed', 'Cancelled'].includes(status)) {
     return true
   }
 
-  // If tied to contracts from BOOKING_CONTRACT join
-  if (Array.isArray(props.job.BOOKING_CONTRACT) && props.job.BOOKING_CONTRACT.length > 0) {
-    const hasActiveContract = props.job.BOOKING_CONTRACT.some((c: any) =>
-      ['Confirmed', 'Active', 'Completed', 'Pending_Artist_Approval', 'Pending'].includes(c.Status)
-    )
-    if (hasActiveContract) return true
+  const totalSlots = Number(props.job.Slots || props.job.JOB_LISTING?.Slots) || 1
+  const activeContracts = Array.isArray(props.job.BOOKING_CONTRACT)
+    ? props.job.BOOKING_CONTRACT.filter((c: any) =>
+        ['Confirmed', 'Active', 'Completed', 'Pending_Artist_Approval', 'Pending'].includes(c.Status)
+      )
+    : []
+
+  const areSlotsFilled = activeContracts.length >= totalSlots
+
+  // If tied to contracts from BOOKING_CONTRACT join, close only if slots are filled
+  if (areSlotsFilled) {
+    return true
   }
 
-  // If this object is created from a booking contract
-  if (props.job.Booking_ID && !['Cancelled', 'Declined'].includes(props.job.Status)) {
+  // If status is closed or filled, verify if slots are truly filled
+  if (['Closed', 'Filled'].includes(status)) {
+    return areSlotsFilled
+  }
+
+  if (['Active', 'Confirmed'].includes(status)) {
+    return areSlotsFilled
+  }
+
+  // If this object is created from a standalone booking contract without a job listing
+  if (props.job.Booking_ID && !props.job.Job_ID && !['Cancelled', 'Declined'].includes(props.job.Status)) {
     return true
   }
 
@@ -46,21 +61,30 @@ const displayStatus = computed(() => {
   if (!props.job) return { label: 'Open', color: 'emerald' }
 
   const status = props.job.Status
-  if (status === 'Active' || status === 'Confirmed' || props.job.Booking_ID || props.job.Contract_Code) {
-    return { label: 'Closed', color: 'blue' }
-  }
-  if (Array.isArray(props.job.BOOKING_CONTRACT) && props.job.BOOKING_CONTRACT.some((c: any) => ['Confirmed', 'Active'].includes(c.Status))) {
-    return { label: 'Closed', color: 'blue' }
-  }
-  if (status === 'Closed' || status === 'Filled') {
-    return { label: 'Listing Closed', color: 'amber' }
-  }
   if (status === 'Completed') {
     return { label: 'Completed', color: 'zinc' }
   }
   if (status === 'Cancelled') {
     return { label: 'Cancelled', color: 'red' }
   }
+
+  const totalSlots = Number(props.job.Slots || props.job.JOB_LISTING?.Slots) || 1
+  const activeContracts = Array.isArray(props.job.BOOKING_CONTRACT)
+    ? props.job.BOOKING_CONTRACT.filter((c: any) =>
+        ['Confirmed', 'Active', 'Completed', 'Pending_Artist_Approval', 'Pending'].includes(c.Status)
+      )
+    : []
+
+  const areSlotsFilled = activeContracts.length >= totalSlots
+
+  if (areSlotsFilled) {
+    return { label: 'Listing Closed (Filled)', color: 'blue' }
+  }
+
+  if (status === 'Closed' && areSlotsFilled) {
+    return { label: 'Listing Closed', color: 'amber' }
+  }
+
   return { label: 'Open for Applications', color: 'emerald' }
 })
 

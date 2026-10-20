@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useModerationReport } from '~/composables/useModerationReport'
+import { useModerationReport, CONTRACT_REPORT_CATEGORIES } from '~/composables/useModerationReport'
 
 const { isReportModalOpen, reportConfig, closeReportModal } = useModerationReport()
 
@@ -46,11 +46,7 @@ const commentCategories = [
 ]
 
 const contractCategories = [
-  'Late Cancellation (Within 5 Days)',
-  'Unilateral Schedule Modification',
-  'No-Show / Breach of Contract',
-  'Payment Dispute',
-  'Other Contract Violation'
+  ...CONTRACT_REPORT_CATEGORIES
 ]
 
 const availableCategories = computed(() => {
@@ -100,8 +96,13 @@ const handleSubmit = async () => {
       body: {
         targetType: reportConfig.value.targetType,
         targetId: reportConfig.value.targetId,
+        targetAccountId: reportConfig.value.targetAccountId || null,
+        targetName: reportConfig.value.targetName || null,
         category: selectedCategory.value,
-        description: description.value.trim()
+        description: description.value.trim(),
+        previewSnippet: reportConfig.value.previewSnippet || null,
+        previewText: reportConfig.value.previewText || null,
+        previewMedia: reportConfig.value.previewMedia || null
       }
     })
 
@@ -148,16 +149,13 @@ const handleSubmit = async () => {
           <!-- Top Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-[#2A2A2E] bg-[#141416]">
             <div class="flex items-center gap-2.5">
-              <div class="p-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
+              <div class="flex p-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
                 <Icon name="ic:round-flag" class="text-lg" />
               </div>
               <div>
                 <h3 class="text-sm font-semibold font-Sora text-white">
                   Report {{ reportConfig.targetType }}
                 </h3>
-                <p class="text-[11px] text-[#8E8B94]">
-                  Escalates to TONO Platform Moderation
-                </p>
               </div>
             </div>
 
@@ -187,12 +185,27 @@ const handleSubmit = async () => {
                 <span>Target {{ reportConfig.targetType }}</span>
                 <span v-if="reportConfig.targetName" class="text-[#D0D4F7]">by {{ reportConfig.targetName }}</span>
               </span>
-              <p
-                v-if="reportConfig.previewText || reportConfig.previewSnippet"
-                class="text-xs text-gray-300 line-clamp-3 leading-relaxed italic wrap-break-word"
-              >
-                "{{ reportConfig.previewText || reportConfig.previewSnippet }}"
-              </p>
+
+              <!-- If Profile: Dedicated Public Profile Preview -->
+              <div v-if="reportConfig.targetType === 'Profile'" class="pt-0.5 space-y-1">
+                <div class="flex items-center gap-2 text-xs text-[#D0D4F7] font-mono bg-[#18181D] px-2.5 py-1.5 rounded-lg border border-[#2E2E36]">
+                  <Icon name="ic:round-public" class="text-sm shrink-0 text-[#D0D4F7]" />
+                  <span class="truncate">Public Profile: {{ reportConfig.previewSnippet || reportConfig.previewText || (reportConfig.targetName ? `@${reportConfig.targetName}` : 'Live Profile') }}</span>
+                </div>
+              </div>
+
+              <!-- Other types (Contract, Message, Post, Comment) -->
+              <div v-else-if="reportConfig.previewText || reportConfig.previewSnippet" class="space-y-0.5">
+                <p v-if="reportConfig.previewText" class="text-xs font-semibold text-white">
+                  {{ reportConfig.previewText }}
+                </p>
+                <p
+                  v-if="reportConfig.previewSnippet && reportConfig.previewSnippet !== reportConfig.previewText"
+                  class="text-xs text-gray-300 line-clamp-3 leading-relaxed italic wrap-break-word"
+                >
+                  "{{ reportConfig.previewSnippet }}"
+                </p>
+              </div>
               <div v-if="reportConfig.previewMedia" class="mt-1 w-20 h-20 rounded-xl overflow-hidden border border-white/10">
                 <img :src="reportConfig.previewMedia" alt="Reported Media" class="w-full h-full object-cover" />
               </div>
