@@ -74,7 +74,7 @@ const handleSeek = (e: Event) => {
           <button
             type="button"
             @click="replaySong"
-            class="p-1.5 text-gray-400 hover:text-white transition-colors cursor-pointer"
+            class="flex p-1.5 text-gray-400 hover:text-white transition-colors cursor-pointer"
             title="Replay from start"
           >
             <Icon name="ic:round-replay" class="text-base" />
@@ -84,7 +84,7 @@ const handleSeek = (e: Event) => {
           <button
             type="button"
             @click="toggleSongLike(currentSong.Song_ID)"
-            class="p-1.5 transition-colors cursor-pointer"
+            class="flex p-1.5 transition-colors cursor-pointer"
             :class="currentSong.userHasLiked ? 'text-[#D0D4F7]' : 'text-gray-400 hover:text-[#D0D4F7]'"
             title="Like Track"
           >
@@ -111,7 +111,7 @@ const handleSeek = (e: Event) => {
           <button
             type="button"
             @click="closePlayer"
-            class="p-1.5 text-gray-400 hover:text-white transition-colors ml-1 cursor-pointer"
+            class="flex p-1.5 text-gray-400 hover:text-white transition-colors ml-1 cursor-pointer"
             title="Close Player"
           >
             <Icon name="ic:round-close" class="text-lg" />

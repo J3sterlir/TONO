@@ -118,7 +118,7 @@ const getInitials = (name: string) => {
             </h2>
             <button
               @click="emit('close')"
-              class="p-1 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              class="flex p-1 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
               title="Close"
             >
               <Icon name="ic:round-close" class="text-xl" />
@@ -196,7 +196,7 @@ const getInitials = (name: string) => {
                 {{ searchQuery ? 'No users matching your search' : (activeTab === 'followers' ? 'No followers yet' : 'Not following anyone yet') }}
               </p>
               <p v-if="!searchQuery" class="text-[11px] text-gray-500 max-w-xs">
-                {{ activeTab === 'followers' ? 'When people follow this profile, they will appear here.' : 'Accounts followed will appear here.' }}
+                {{ activeTab === 'followers' ? '' : '' }}
               </p>
             </div>
 
@@ -228,9 +228,18 @@ const getInitials = (name: string) => {
 
                 <!-- User Name & Handle -->
                 <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-xs sm:text-sm font-semibold text-white truncate font-Sora group-hover:text-[#D0D4F7] transition-colors">
-                    {{ user.displayName }}
-                  </span>
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="text-xs sm:text-sm font-semibold text-white truncate font-Sora group-hover:text-[#D0D4F7] transition-colors">
+                      {{ user.displayName }}
+                    </span>
+                    <span
+                      v-if="user.userType && user.userType !== 'User'"
+                      class="text-[10px] px-1.5 py-0.2 rounded-md font-medium shrink-0"
+                      :class="user.userType === 'Business' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : 'bg-[#D0D4F7]/10 text-[#D0D4F7] border border-[#D0D4F7]/20'"
+                    >
+                      {{ user.userType }}
+                    </span>
+                  </div>
                   <span class="text-[11px] text-[#8E8B94] truncate">
                     @{{ user.username }}
                   </span>

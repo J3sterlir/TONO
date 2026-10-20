@@ -122,7 +122,23 @@ const conflictingGigs = computed(() => {
   })
 })
 
+const isFormFilled = computed(() => {
+  return !!(
+    title.value.trim() &&
+    startDate.value &&
+    (!isMultipleDays.value || endDate.value) &&
+    startTime.value &&
+    endTime.value
+  )
+})
+
+const canSave = computed(() => {
+  return isFormFilled.value && !isSubmitting.value && !isDeleting.value
+})
+
 const handleSave = async () => {
+  if (!canSave.value) return
+
   if (!title.value.trim()) {
     errorMessage.value = 'Please enter a title for your custom activity.'
     return
@@ -417,8 +433,8 @@ const handleDelete = async () => {
             </button>
             <button
               type="submit"
-              :disabled="isSubmitting || isDeleting"
-              class="px-5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] font-bold transition-all text-xs cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
+              :disabled="!canSave"
+              class="px-5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] font-bold transition-all text-xs cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#D0D4F7]"
             >
               <Icon v-if="isSubmitting" name="ic:baseline-sync" class="animate-spin text-sm" />
               <Icon v-else name="ic:round-check" class="text-sm" />

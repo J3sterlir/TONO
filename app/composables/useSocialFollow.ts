@@ -250,11 +250,18 @@ export const useSocialFollow = () => {
             Profile_Picture,
             ARTIST (
               ARTIST_ID,
-              StageName
+              Artist_Type,
+              SOLO_ARTIST (
+                Artist_Name
+              ),
+              BAND (
+                Band_Name
+              )
             ),
             BUSINESS_PROFILE (
               BUSINESS_ID,
-              Business_Name
+              Business_Name,
+              Profile_Picture
             )
           )
         `)
@@ -268,22 +275,30 @@ export const useSocialFollow = () => {
         const artist = Array.isArray(acc?.ARTIST) ? acc.ARTIST[0] : acc?.ARTIST
         const business = Array.isArray(acc?.BUSINESS_PROFILE) ? acc.BUSINESS_PROFILE[0] : acc?.BUSINESS_PROFILE
 
+        const soloArtist = Array.isArray(artist?.SOLO_ARTIST) ? artist.SOLO_ARTIST[0] : artist?.SOLO_ARTIST
+        const bandArtist = Array.isArray(artist?.BAND) ? artist.BAND[0] : artist?.BAND
+        const artistStageName = soloArtist?.Artist_Name || bandArtist?.Band_Name
+
         let displayName = acc?.Username || 'User'
         let profileRoute = ''
+        let userType = 'User'
 
-        if (artist?.StageName) {
-          displayName = artist.StageName
-          profileRoute = `/artist/${acc?.Username}`
-        } else if (business?.Business_Name) {
-          displayName = business.Business_Name
-          profileRoute = `/business/${business.BUSINESS_ID}`
+        if (artist) {
+          displayName = artistStageName || acc?.Username || 'Artist'
+          profileRoute = acc?.Username ? `/artist/${acc.Username}` : ''
+          userType = artist.Artist_Type || 'Artist'
+        } else if (business) {
+          displayName = business.Business_Name || acc?.Username || 'Business'
+          profileRoute = business.BUSINESS_ID ? `/business/${business.BUSINESS_ID}` : ''
+          userType = 'Business'
         }
 
         return {
           accountId: row.Follower_Account_ID,
           username: acc?.Username || 'User',
           displayName,
-          profilePicture: acc?.Profile_Picture || null,
+          profilePicture: acc?.Profile_Picture || business?.Profile_Picture || null,
+          userType,
           profileRoute,
           followedAt: row.Created_at
         }
@@ -312,11 +327,18 @@ export const useSocialFollow = () => {
             Profile_Picture,
             ARTIST (
               ARTIST_ID,
-              StageName
+              Artist_Type,
+              SOLO_ARTIST (
+                Artist_Name
+              ),
+              BAND (
+                Band_Name
+              )
             ),
             BUSINESS_PROFILE (
               BUSINESS_ID,
-              Business_Name
+              Business_Name,
+              Profile_Picture
             )
           )
         `)
@@ -330,22 +352,30 @@ export const useSocialFollow = () => {
         const artist = Array.isArray(acc?.ARTIST) ? acc.ARTIST[0] : acc?.ARTIST
         const business = Array.isArray(acc?.BUSINESS_PROFILE) ? acc.BUSINESS_PROFILE[0] : acc?.BUSINESS_PROFILE
 
+        const soloArtist = Array.isArray(artist?.SOLO_ARTIST) ? artist.SOLO_ARTIST[0] : artist?.SOLO_ARTIST
+        const bandArtist = Array.isArray(artist?.BAND) ? artist.BAND[0] : artist?.BAND
+        const artistStageName = soloArtist?.Artist_Name || bandArtist?.Band_Name
+
         let displayName = acc?.Username || 'User'
         let profileRoute = ''
+        let userType = 'User'
 
-        if (artist?.StageName) {
-          displayName = artist.StageName
-          profileRoute = `/artist/${acc?.Username}`
-        } else if (business?.Business_Name) {
-          displayName = business.Business_Name
-          profileRoute = `/business/${business.BUSINESS_ID}`
+        if (artist) {
+          displayName = artistStageName || acc?.Username || 'Artist'
+          profileRoute = acc?.Username ? `/artist/${acc.Username}` : ''
+          userType = artist.Artist_Type || 'Artist'
+        } else if (business) {
+          displayName = business.Business_Name || acc?.Username || 'Business'
+          profileRoute = business.BUSINESS_ID ? `/business/${business.BUSINESS_ID}` : ''
+          userType = 'Business'
         }
 
         return {
           accountId: row.Following_Account_ID,
           username: acc?.Username || 'User',
           displayName,
-          profilePicture: acc?.Profile_Picture || null,
+          profilePicture: acc?.Profile_Picture || business?.Profile_Picture || null,
+          userType,
           profileRoute,
           followedAt: row.Created_at
         }

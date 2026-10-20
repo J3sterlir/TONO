@@ -240,7 +240,7 @@ const scrollTo = (id: string) => {
                         Us</h2>
                 </div>
 
-                <div class="grid w-full max-w-4xl gap-4 sm:gap-6 sm:grid-cols-2">
+                <div class="grid w-full max-w-4xl gap-4 sm:gap-6 sm:grid-cols-1">
                     <!-- General Inquiries -->
                     <div
                         class="rounded-2xl border border-white/15 bg-[#1E1E24]/60 p-6 sm:p-8 backdrop-blur-xl flex flex-col justify-between">
