@@ -92,9 +92,8 @@ const fetchReports = async () => {
         Target_Message_ID,
         Target_Post_ID,
         Target_Comment_ID,
-        Target_Contract_ID,
+        Target_Booking_ID,
         Category,
-        Severity,
         Description,
         Evidence_Snapshot,
         Is_Resolved,
@@ -130,6 +129,22 @@ const fetchReports = async () => {
 
     if (error) throw error
 
+    const deriveSeverity = (r: any): string => {
+      if (r.Evidence_Snapshot?.severity) return r.Evidence_Snapshot.severity
+      if (r.Evidence_Snapshot?.diagnostics?.severity) return r.Evidence_Snapshot.diagnostics.severity
+      const cat = (r.Category || '').toLowerCase()
+      if (cat.includes('blackmail') || cat.includes('scam') || cat.includes('phishing') || cat.includes('hate') || cat.includes('explicit')) {
+        return 'Critical'
+      }
+      if (cat.includes('harassment') || cat.includes('late cancellation') || cat.includes('no-show') || cat.includes('breach') || cat.includes('fraud') || cat.includes('dispute')) {
+        return 'High'
+      }
+      if (cat.includes('spam') || cat.includes('unsolicited') || cat.includes('inappropriate') || cat.includes('modification')) {
+        return 'Medium'
+      }
+      return 'Low'
+    }
+
     reports.value = (data || []).map((row: any) => {
       const reporter = row.Reporter
       const target = row.Target
@@ -160,9 +175,9 @@ const fetchReports = async () => {
         targetMessageId: row.Target_Message_ID,
         targetPostId: row.Target_Post_ID,
         targetCommentId: row.Target_Comment_ID,
-        targetContractId: row.Target_Contract_ID,
+        targetContractId: row.Target_Booking_ID,
         category: row.Category || 'General',
-        severity: row.Severity || 'Medium',
+        severity: deriveSeverity(row),
         description: row.Description || 'No description provided.',
         evidenceSnapshot: row.Evidence_Snapshot || null,
         isResolved: !!row.Is_Resolved,
@@ -350,17 +365,11 @@ const executeAdminAction = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#0E0E10] text-white font-Sora flex flex-col">
+  <div class="min-h-screen bg-[#131315] text-white font-Sora flex flex-col">
     <!-- Top Header Ribbon -->
-    <header class="flex items-center justify-between px-6 sm:px-10 h-20 border-b border-[#2A2A2E] sticky top-0 bg-[#0E0E10]/90 backdrop-blur-xl z-20">
-      <div>
-        <h1 class="text-[#D0D4F7] text-xl sm:text-2xl font-bold flex items-center gap-2">
-          <Icon name="ic:round-flag" class="text-2xl text-[#D0D4F7]" />
-          <span>Reports & Moderation Command Center</span>
-        </h1>
-        <p class="text-xs text-gray-400 mt-0.5 font-Geist">
-          Investigate reported content, review immutable snapshots, triage bugs & feedback, and issue community strikes.
-        </p>
+    <header class="flex items-center justify-between px-6 sm:px-16 h-16 sm:h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10 pl-16 sm:pl-16">
+      <div class="flex items-center gap-3">
+        <h1 class="text-[#D0D4F7] text-lg sm:text-[24px] font-medium tracking-tight">Welcome Back Admin!</h1>
       </div>
 
       <button
@@ -374,34 +383,6 @@ const executeAdminAction = async () => {
     </header>
 
     <main class="p-6 sm:p-10 max-w-7xl w-full mx-auto flex flex-col gap-8 flex-1">
-      <!-- 1. Key Metrics Ribbon -->
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div class="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-[#2A2A2E] flex flex-col gap-1 shadow-md">
-          <span class="text-xs text-gray-400 font-medium">Total Tickets</span>
-          <span class="text-2xl sm:text-3xl font-bold text-gray-100 font-mono">{{ totalCount }}</span>
-        </div>
-
-        <div class="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-amber-500/20 flex flex-col gap-1 shadow-md">
-          <span class="text-xs text-amber-400 font-medium">Pending Review</span>
-          <span class="text-2xl sm:text-3xl font-bold text-amber-300 font-mono">{{ pendingCount }}</span>
-        </div>
-
-        <div class="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-rose-500/20 flex flex-col gap-1 shadow-md">
-          <span class="text-xs text-rose-400 font-medium">Contested Appeals</span>
-          <span class="text-2xl sm:text-3xl font-bold text-rose-300 font-mono">{{ appealsCount }}</span>
-        </div>
-
-        <div class="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-[#D0D4F7]/20 flex flex-col gap-1 shadow-md">
-          <span class="text-xs text-[#D0D4F7] font-medium">Bugs & Feedback</span>
-          <span class="text-2xl sm:text-3xl font-bold text-[#D0D4F7] font-mono">{{ bugsFeedbackCount }}</span>
-        </div>
-
-        <div class="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-emerald-500/20 flex flex-col gap-1 shadow-md col-span-2 lg:col-span-1">
-          <span class="text-xs text-emerald-400 font-medium">Resolved</span>
-          <span class="text-2xl sm:text-3xl font-bold text-emerald-300 font-mono">{{ resolvedCount }}</span>
-        </div>
-      </div>
-
       <!-- 2. Controls & Filtering Bar -->
       <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-[#131315] p-3 rounded-2xl border border-[#2A2A2E]">
         <!-- Status Filter Tabs -->
@@ -488,7 +469,7 @@ const executeAdminAction = async () => {
         </div>
         <h3 class="text-base font-bold text-gray-200">No reports found</h3>
         <p class="text-xs text-gray-500 max-w-sm font-Geist">
-          {{ statusFilter === 'pending' ? 'All clear! There are no pending tickets requiring administrative intervention.' : 'No tickets match the selected filters.' }}
+          {{ statusFilter === 'pending' ? 'All clear!' : 'All clear!' }}
         </p>
       </div>
 
@@ -499,7 +480,8 @@ const executeAdminAction = async () => {
             <tr class="border-b border-[#2A2A2E] bg-[#18181B]/80 text-gray-400 font-medium">
               <th class="p-4">Reported</th>
               <th class="p-4">Type</th>
-              <th class="p-4">Category & Severity</th>
+              <th class="p-4">Category</th>
+              <th class="p-4">Severity</th>
               <th class="p-4">Accused / Target</th>
               <th class="p-4">Reporter</th>
               <th class="p-4">Description Snippet</th>
@@ -529,6 +511,11 @@ const executeAdminAction = async () => {
                   <span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-300 border border-rose-500/20">
                     {{ report.category }}
                   </span>
+                </div>
+              </td>
+
+              <td class="p-4">
+                <div class="flex flex-col gap-1 items-start">
                   <span
                     v-if="report.severity === 'Critical' || report.severity === 'High'"
                     class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 font-bold"
@@ -587,7 +574,7 @@ const executeAdminAction = async () => {
                   @click="openInspector(report)"
                   class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-[#1E1E24] hover:bg-[#D0D4F7] text-gray-200 hover:text-[#0E0E10] border border-[#2A2A2E] transition-all cursor-pointer shadow-sm"
                 >
-                  Inspect &amp; Act
+                  Review
                 </button>
               </td>
             </tr>
@@ -608,7 +595,7 @@ const executeAdminAction = async () => {
       >
         <div
           v-if="isInspectorOpen && selectedReport"
-          class="fixed inset-0 z-50 flex items-center justify-end bg-black/80 backdrop-blur-md"
+          class="fixed inset-0 z-60 flex items-center justify-end bg-black/80 backdrop-blur-md"
           @click="closeInspector"
         >
           <div
@@ -687,7 +674,7 @@ const executeAdminAction = async () => {
                     <div v-else class="w-8 h-8 rounded-full bg-[#2A2A2E] flex items-center justify-center text-xs text-gray-300">
                       <Icon name="ic:baseline-person" />
                     </div>
-                    <div class="min-w-0">
+                    <div class="flex items-center justify-center gap-1 min-w-0">
                       <p class="text-xs font-bold text-white truncate">{{ selectedReport.targetUsername }}</p>
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <span

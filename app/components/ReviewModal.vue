@@ -108,15 +108,15 @@ const resolvedTargetRole = computed(() => {
 })
 
 const resolvedTargetArtistId = computed(() => {
-  return props.targetArtistId || props.booking?.Provider_Artist_ID || null
+  return props.targetArtistId || props.booking?.Provider_Artist_ID || props.booking?.ARTIST?.ARTIST_ID || null
 })
 
 const resolvedTargetBusinessId = computed(() => {
-  return props.targetBusinessId || props.booking?.Provider_Business_ID || props.booking?.JOB_LISTING?.Posted_By_BUSINESS_ID || null
+  return props.targetBusinessId || props.booking?.Provider_Business_ID || props.booking?.BUSINESS_PROFILE?.BUSINESS_ID || props.booking?.JOB_LISTING?.Posted_By_BUSINESS_ID || null
 })
 
 const resolvedTargetAccountId = computed(() => {
-  return props.targetAccountId || props.booking?.Requester_Account_ID || null
+  return props.targetAccountId || props.booking?.Requester_Account_ID || props.booking?.ARTIST?.ACCOUNT_ID || props.booking?.BUSINESS_PROFILE?.ACCOUNT_ID || null
 })
 
 const resolvedReviewerAccountId = computed(() => {

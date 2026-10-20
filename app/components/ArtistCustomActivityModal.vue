@@ -39,6 +39,7 @@ const endDate = ref('')
 const startTime = ref('09:00')
 const endTime = ref('17:00')
 const description = ref('')
+const isPublic = ref(true)
 const hasAcknowledgedConflict = ref(false)
 
 const isEditMode = computed(() => !!props.activity?.Schedule_ID)
@@ -68,6 +69,7 @@ watch(
       startTime.value = props.activity.Start_Time || '09:00'
       endTime.value = props.activity.End_Time || '17:00'
       description.value = props.activity.Description || ''
+      isPublic.value = props.activity.Is_Public !== false
     } else {
       title.value = ''
       startDate.value = props.initialDate || todayStr.value
@@ -76,6 +78,7 @@ watch(
       startTime.value = '09:00'
       endTime.value = '17:00'
       description.value = ''
+      isPublic.value = true
     }
   },
   { immediate: true }
@@ -169,7 +172,8 @@ const handleSave = async () => {
       End_Date: finalEndDate,
       Start_Time: startTime.value,
       End_Time: endTime.value,
-      Description: description.value.trim() || null
+      Description: description.value.trim() || null,
+      Is_Public: isPublic.value
     }
 
     if (isEditMode.value) {
@@ -245,9 +249,6 @@ const handleDelete = async () => {
             <h3 class="text-lg sm:text-xl font-bold text-white tracking-tight">
               {{ isEditMode ? 'Edit Custom Activity' : 'Add Custom Activity' }}
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">
-              Personal rehearsals, studio sessions, or blocked calendar dates.
-            </p>
           </div>
         </div>
 
@@ -319,6 +320,45 @@ const handleDelete = async () => {
             placeholder="e.g. Band Rehearsal, Studio Recording, Personal Leave"
             class="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1C1F] border border-[#2A2A2E] text-white placeholder-gray-500 focus:outline-none focus:border-[#D0D4F7] transition-all text-xs"
           />
+        </div>
+
+        <!-- Event Visibility: Public vs Private -->
+        <div class="space-y-2 p-3 rounded-xl bg-[#18181B] border border-[#2A2A2E]">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-mono uppercase tracking-wider text-gray-300 block">
+              Event Visibility
+            </label>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-md" :class="isPublic ? 'bg-[#D0D4F7]/15 text-[#D0D4F7]' : 'bg-amber-500/15 text-amber-300'">
+              {{ isPublic ? 'Public Event' : 'Private Activity' }}
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              @click="isPublic = true"
+              class="flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all cursor-pointer"
+              :class="isPublic
+                ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                : 'bg-[#121214] border-[#2A2A2E] text-gray-400 hover:text-white hover:bg-white/5'"
+            >
+              <Icon name="ic:outline-public" class="text-base text-[#D0D4F7]" />
+              <span>Public Event</span>
+            </button>
+            <button
+              type="button"
+              @click="isPublic = false"
+              class="flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium transition-all cursor-pointer"
+              :class="!isPublic
+                ? 'bg-amber-500/20 border-amber-400 text-white font-semibold shadow-sm'
+                : 'bg-[#121214] border-[#2A2A2E] text-gray-400 hover:text-white hover:bg-white/5'"
+            >
+              <Icon name="material-symbols:lock-outline" class="text-base text-amber-400" />
+              <span>Private Activity</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-400 leading-relaxed pt-0.5">
+            {{ isPublic ? 'Public events will be visible on your profile events section and public gig calendar.' : 'Private activities are omitted from public view and only block your booking schedule.' }}
+          </p>
         </div>
 
         <!-- Date Mode Toggle -->

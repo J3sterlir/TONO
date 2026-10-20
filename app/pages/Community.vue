@@ -248,6 +248,7 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
                 <div class="relative w-13 h-13 rounded-full p-0.5 bg-linear-to-tr from-[#D0D4F7] to-purple-500">
                   <img
                     :src="song.artistAvatar || '/images/default-avatar.png'"
+                    @error="($event.target as HTMLImageElement).src = '/images/default-avatar.png'"
                     class="w-full h-full rounded-full object-cover border-2 border-[#1B1B1D]"
                   />
                   <div class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0E0E10] text-[#D0D4F7] flex items-center justify-center text-[10px] font-bold border border-[#46464D]">
@@ -323,6 +324,7 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
                     <NuxtLink :to="post.authorRoute" class="shrink-0">
                       <img
                         :src="post.authorAvatar || '/images/default-avatar.png'"
+                        @error="($event.target as HTMLImageElement).src = '/images/default-avatar.png'"
                         alt="Author Avatar"
                         class="w-10 h-10 rounded-full object-cover border border-[#46464D]/50 hover:scale-105 transition-transform"
                       />

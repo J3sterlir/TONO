@@ -181,21 +181,76 @@ const handleLogout = async () => {
     await signOutAdmin()
 }
 
-// Search & Filter
+// Search & Filter State
 const searchQuery = ref('')
+const roleFilter = ref<'all' | 'User' | 'Artist' | 'Business'>('all')
+const statusFilter = ref<'all' | 'Active' | 'Banned' | 'Pending' | 'Rejected'>('all')
+const artistTypeFilter = ref<'all' | 'Solo' | 'Band'>('all')
+const isFilterDropdownOpen = ref(false)
+
+const activeFilterCount = computed(() => {
+    let count = 0
+    if (roleFilter.value !== 'all') count++
+    if (statusFilter.value !== 'all') count++
+    if (artistTypeFilter.value !== 'all') count++
+    return count
+})
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0 || !!searchQuery.value)
+
+const resetFilters = () => {
+    searchQuery.value = ''
+    roleFilter.value = 'all'
+    statusFilter.value = 'all'
+    artistTypeFilter.value = 'all'
+}
+
 const filteredUsers = computed(() => {
-    if (!searchQuery.value) return users.value
-    const query = searchQuery.value.toLowerCase()
-    return users.value.filter(u => 
-        u.name.toLowerCase().includes(query) || 
-        (u.stageName && u.stageName.toLowerCase().includes(query)) ||
-        (u.businessName && u.businessName.toLowerCase().includes(query)) ||
-        u.email.toLowerCase().includes(query) || 
-        u.id.toLowerCase().includes(query) ||
-        u.role.toLowerCase().includes(query) ||
-        (u.genres && u.genres.some((g: string) => g.toLowerCase().includes(query))) ||
-        (u.instruments && u.instruments.some((i: string) => i.toLowerCase().includes(query)))
-    )
+    const query = searchQuery.value.trim().toLowerCase()
+
+    return users.value.filter(u => {
+        // Search query match
+        if (query) {
+            const matchName = u.name?.toLowerCase().includes(query)
+            const matchStage = u.stageName?.toLowerCase().includes(query)
+            const matchBusiness = u.businessName?.toLowerCase().includes(query)
+            const matchEmail = u.email?.toLowerCase().includes(query)
+            const matchId = u.id?.toLowerCase().includes(query)
+            const matchRole = u.role?.toLowerCase().includes(query)
+            const matchCity = u.city?.toLowerCase().includes(query)
+            const matchBarangay = u.barangay?.toLowerCase().includes(query)
+            const matchGenres = u.genres && u.genres.some((g: string) => g.toLowerCase().includes(query))
+            const matchInstruments = u.instruments && u.instruments.some((i: string) => i.toLowerCase().includes(query))
+
+            if (!matchName && !matchStage && !matchBusiness && !matchEmail && !matchId && !matchRole && !matchCity && !matchBarangay && !matchGenres && !matchInstruments) {
+                return false
+            }
+        }
+
+        // Role filter
+        if (roleFilter.value !== 'all') {
+            if (u.role !== roleFilter.value) {
+                return false
+            }
+        }
+
+        // Status filter
+        if (statusFilter.value !== 'all') {
+            if (statusFilter.value === 'Banned' && !u.isBanned) return false
+            if (statusFilter.value === 'Active' && (u.isBanned || u.status === 'Pending' || u.status === 'Rejected')) return false
+            if (statusFilter.value === 'Pending' && u.status !== 'Pending') return false
+            if (statusFilter.value === 'Rejected' && u.status !== 'Rejected') return false
+        }
+
+        // Artist Type filter
+        if (artistTypeFilter.value !== 'all') {
+            if (u.role !== 'Artist' || u.artistType !== artistTypeFilter.value) {
+                return false
+            }
+        }
+
+        return true
+    })
 })
 
 // Pagination State
@@ -207,7 +262,7 @@ const paginatedUsers = computed(() => {
     return filteredUsers.value.slice(start, start + pageSize.value)
 })
 
-watch([searchQuery, pageSize], () => {
+watch([searchQuery, roleFilter, statusFilter, artistTypeFilter, pageSize], () => {
     currentPage.value = 1
 })
 
@@ -390,7 +445,7 @@ const confirmDeleteUser = async () => {
 <template>
     <div>
         <nav class="flex items-center px-16 h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10">
-            <h1 class="text-[#D0D4F7] text-[24px] font-medium">Welcome Back Admin!</h1>
+            <h1 class="text-[#D0D4F7] text-lg sm:text-[24px] font-medium tracking-tight">Welcome Back Admin!</h1>
         </nav>
         <main class="p-16">
             <div class="flex flex-col gap-6">
@@ -400,16 +455,182 @@ const confirmDeleteUser = async () => {
                     <h1 class="font-light text-[16px]">Manage platform users, verify artists, and manage user sanctions.</h1>
                 </div>
 
-                <div class="bg-[#1C1C1F]/60 border border-[#2A2A2E] p-6 rounded-xl">
-                    <div class="w-fit flex items-center justify-center">
-                        <div class="relative group">
-                            <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400">
-                                <Icon name="ic:outline-search" class="absolute text-2xl text-[#ffffff]" />
-                            </div>
-                            <input type="search" v-model="searchQuery" placeholder="Search by name, email, ID or Role..."
-                                class="w-101.5 py-2 pl-12 pr-5 bg-[#0E0E10] placeholder:text-[#6B7280] rounded-lg text-white outline-none focus:ring-2 focus:ring-[#D0D4F7]/30" />
-                        </div>
+                <div class="flex items-center justify-end">
+                    <span class="text-xs font-mono text-zinc-400">
+                        {{ filteredUsers.length }} {{ filteredUsers.length === 1 ? 'user' : 'users' }}
+                        <template v-if="users.some(u => u.isBanned)"> ({{ users.filter(u => u.isBanned).length }} banned)</template>
+                    </span>
+                </div>
+
+                <!-- SEARCH AND FILTER CONTROLS BAR (Matches verifications.vue Style) -->
+                <div class="bg-[#141416] p-3 sm:p-4 rounded-2xl border border-[#2A2A2E] space-y-3 font-Sora">
+                  <div class="flex items-center gap-2.5 sm:gap-3">
+                    <!-- Search Input -->
+                    <div class="relative flex-1 min-w-0">
+                      <Icon name="ic:baseline-search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base" />
+                      <input
+                        v-model="searchQuery"
+                        type="text"
+                        placeholder="Search by name, stage name, business, email, city, or role..."
+                        class="w-full pl-9 pr-9 py-2.5 rounded-xl bg-[#1C1C1F] border border-[#2A2A2E] text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#D0D4F7] transition-all"
+                      />
+                      <button
+                        v-if="searchQuery"
+                        type="button"
+                        @click="searchQuery = ''"
+                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white cursor-pointer"
+                      >
+                        <Icon name="ic:round-close" class="text-sm" />
+                      </button>
                     </div>
+
+                    <!-- Single Filter Icon Dropdown Container -->
+                    <div class="relative shrink-0">
+                      <button
+                        type="button"
+                        @click="isFilterDropdownOpen = !isFilterDropdownOpen"
+                        class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm select-none"
+                        :class="isFilterDropdownOpen || activeFilterCount > 0
+                          ? 'bg-[#D0D4F7] text-[#131315] border-[#D0D4F7]'
+                          : 'bg-[#1C1C1F] hover:bg-[#252529] text-gray-300 hover:text-white border-[#2A2A2E]'"
+                      >
+                        <Icon name="ic:outline-filter-alt" class="text-base shrink-0" />
+                        <span>Filter</span>
+                        <span
+                          v-if="activeFilterCount > 0"
+                          class="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0"
+                          :class="isFilterDropdownOpen || activeFilterCount > 0 ? 'bg-[#131315] text-[#D0D4F7]' : 'bg-[#D0D4F7] text-[#131315]'"
+                        >
+                          {{ activeFilterCount }}
+                        </span>
+                        <Icon
+                          name="ic:baseline-keyboard-arrow-down"
+                          class="text-sm transition-transform duration-200 shrink-0"
+                          :class="isFilterDropdownOpen ? 'rotate-180' : ''"
+                        />
+                      </button>
+
+                      <!-- Backdrop to close on click outside -->
+                      <div
+                        v-if="isFilterDropdownOpen"
+                        class="fixed inset-0 z-20"
+                        @click="isFilterDropdownOpen = false"
+                      ></div>
+
+                      <!-- Dropdown Popover -->
+                      <div
+                        v-if="isFilterDropdownOpen"
+                        @click.stop
+                        class="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#18181B] border border-[#2A2A2E] rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-white"
+                      >
+                        <!-- Header -->
+                        <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-2.5">
+                          <div class="flex items-center gap-1.5 text-white font-semibold text-xs">
+                            <Icon name="ic:outline-filter-alt" class="text-sm text-[#D0D4F7]" />
+                            <span>Filter Directory</span>
+                          </div>
+                          <button
+                            v-if="hasActiveFilters"
+                            type="button"
+                            @click="resetFilters"
+                            class="text-[11px] text-gray-400 hover:text-[#D0D4F7] transition-colors cursor-pointer"
+                          >
+                            Reset All
+                          </button>
+                        </div>
+
+                        <!-- Filter 1: Role -->
+                        <div class="space-y-1.5">
+                          <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400 block">
+                            Account Role
+                          </label>
+                          <div class="grid grid-cols-4 gap-1.5">
+                            <button
+                              v-for="r in [
+                                { label: 'All', value: 'all' },
+                                { label: 'User', value: 'User' },
+                                { label: 'Artist', value: 'Artist' },
+                                { label: 'Business', value: 'Business' }
+                              ]"
+                              :key="r.value"
+                              type="button"
+                              @click="roleFilter = r.value as any"
+                              class="px-2 py-1.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer"
+                              :class="roleFilter === r.value
+                                ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                                : 'bg-[#1C1C1F] border-[#2A2A2E] text-gray-400 hover:text-white'"
+                            >
+                              {{ r.label }}
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Filter 2: Account Status -->
+                        <div class="space-y-1.5">
+                          <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400 block">
+                            Account Status
+                          </label>
+                          <div class="grid grid-cols-3 gap-1.5">
+                            <button
+                              v-for="s in [
+                                { label: 'All', value: 'all' },
+                                { label: 'Active', value: 'Active' },
+                                { label: 'Banned', value: 'Banned' },
+                                { label: 'Pending', value: 'Pending' },
+                                { label: 'Rejected', value: 'Rejected' }
+                              ]"
+                              :key="s.value"
+                              type="button"
+                              @click="statusFilter = s.value as any"
+                              class="px-2 py-1.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer"
+                              :class="statusFilter === s.value
+                                ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                                : 'bg-[#1C1C1F] border-[#2A2A2E] text-gray-400 hover:text-white'"
+                            >
+                              {{ s.label }}
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Filter 3: Artist Type (Shown if role is all or Artist) -->
+                        <div v-if="roleFilter === 'all' || roleFilter === 'Artist'" class="space-y-1.5">
+                          <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400 block">
+                            Artist Type
+                          </label>
+                          <div class="grid grid-cols-3 gap-1.5">
+                            <button
+                              v-for="t in [
+                                { label: 'All', value: 'all' },
+                                { label: 'Solo', value: 'Solo' },
+                                { label: 'Band', value: 'Band' }
+                              ]"
+                              :key="t.value"
+                              type="button"
+                              @click="artistTypeFilter = t.value as any"
+                              class="px-2.5 py-1.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer"
+                              :class="artistTypeFilter === t.value
+                                ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                                : 'bg-[#1C1C1F] border-[#2A2A2E] text-gray-400 hover:text-white'"
+                            >
+                              {{ t.label }}
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Result summary in popover -->
+                        <div class="pt-2 border-t border-[#2A2A2E] flex items-center justify-between text-[11px] text-gray-400">
+                          <span>{{ filteredUsers.length }} of {{ users.length }} users</span>
+                          <button
+                            type="button"
+                            @click="isFilterDropdownOpen = false"
+                            class="px-3 py-1 rounded-lg bg-[#D0D4F7] hover:bg-white text-[#131315] font-semibold text-xs transition-colors cursor-pointer"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Flexible row container: table + user preview card -->
@@ -435,7 +656,21 @@ const confirmDeleteUser = async () => {
                                             <td colspan="5" class="px-6 py-8 text-center text-zinc-400">Loading users...</td>
                                         </tr>
                                         <tr v-else-if="filteredUsers.length === 0" class="border-t border-zinc-800">
-                                            <td colspan="5" class="px-6 py-8 text-center text-zinc-400">No users found.</td>
+                                            <td colspan="5" class="px-6 py-12 text-center text-zinc-400 font-Geist">
+                                                <div class="flex flex-col items-center justify-center gap-2">
+                                                    <Icon name="material-symbols:person-search" class="text-3xl text-zinc-600" />
+                                                    <p class="text-sm font-medium text-zinc-300">No users match your criteria</p>
+                                                    <p class="text-xs text-zinc-500">Try adjusting your search terms or filters</p>
+                                                    <button
+                                                        v-if="hasActiveFilters"
+                                                        type="button"
+                                                        @click="resetFilters"
+                                                        class="mt-2 px-3 py-1 text-xs rounded-lg bg-[#242428] hover:bg-[#D0D4F7] text-gray-300 hover:text-[#131315] border border-zinc-700 transition-colors cursor-pointer"
+                                                    >
+                                                        Reset All Filters
+                                                    </button>
+                                                </div>
+                                            </td>
                                         </tr>
                                         <tr v-for="user in paginatedUsers" :key="user.id"
                                             class="border-t border-zinc-800 transition-colors"

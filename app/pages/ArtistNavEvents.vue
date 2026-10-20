@@ -512,6 +512,30 @@ const formatJobListingEvent = (item: any) => {
 
   const time = formatGigTime(item.Start_Time || item.Time || item.JOB_LISTING?.Start_Time || item.JOB_LISTING?.Time)
 
+  const isContractActive = item.Booking_ID
+    ? ['Confirmed', 'Active'].includes(item.Status)
+    : (Array.isArray(item.BOOKING_CONTRACT) && item.BOOKING_CONTRACT.some((c: any) => ['Confirmed', 'Active'].includes(c.Status)))
+
+  const isClosed = isContractActive || ['Closed', 'Filled', 'Completed'].includes(item.Status) || ['Closed', 'Filled', 'Completed'].includes(item.JOB_LISTING?.Status)
+
+  // Robust rawJob payload
+  const rawJob = item.JOB_LISTING
+    ? {
+        ...item.JOB_LISTING,
+        ...item,
+        Job_Code: item.JOB_LISTING.Job_Code || item.Job_Code || null,
+        Contract_Code: item.Contract_Code || null,
+        Status: item.Status || item.JOB_LISTING.Status,
+        Event_Title: item.JOB_LISTING.Event_Title || item.Event_Title || title,
+        Location: item.JOB_LISTING.Location || item.Venue_Location || venueOrCity,
+        Compensation_Fee: item.JOB_LISTING.Compensation_Fee ?? item.Agreed_Fee ?? null,
+        Description: item.JOB_LISTING.Description || item.Description || null,
+        BUSINESS_PROFILE: item.JOB_LISTING.BUSINESS_PROFILE || item.BUSINESS_PROFILE || null,
+        _resolvedArtistName: artistName,
+        ARTIST: item.ARTIST || null
+      }
+    : (item.Job_ID ? { ...item, _resolvedArtistName: artistName } : null)
+
   return {
     id: item.Booking_ID || item.Job_ID || Math.random().toString(),
     month,
@@ -519,7 +543,9 @@ const formatJobListingEvent = (item: any) => {
     venueOrCity,
     eventTitle,
     time: time || 'TBA',
-    rawJob: item.JOB_LISTING ? { ...item.JOB_LISTING, ...item } : (item.Job_ID ? item : null),
+    isContractActive,
+    isClosed,
+    rawJob,
     rawContract: item.Booking_ID ? item : null
   }
 }
@@ -597,6 +623,33 @@ const openForm2Modal = (contract: any) => {
 const openJobDetails = (job: any) => {
   selectedJobForDetails.value = job
   isJobDetailsModalOpen.value = true
+}
+
+const isOwnEvent = (ev: any): boolean => {
+  if (!ev || !artistId.value) return false
+  if (ev.rawContract && ev.rawContract.Provider_Artist_ID === artistId.value) return true
+  if (ev.rawJob) {
+    if (ev.rawJob.Provider_Artist_ID === artistId.value) return true
+    if (ev.rawJob.ARTIST?.ARTIST_ID === artistId.value) return true
+    if (Array.isArray(ev.rawJob.BOOKING_CONTRACT) && ev.rawJob.BOOKING_CONTRACT.some((c: any) => c.Provider_Artist_ID === artistId.value)) {
+      return true
+    }
+  }
+  return false
+}
+
+const handleEventClick = (ev: any) => {
+  // Only open modal if this event is specifically for the current logged-in artist
+  if (isOwnEvent(ev)) {
+    if (ev.rawContract) {
+      openForm2Modal(ev.rawContract)
+    } else if (ev.rawJob?.Booking_ID) {
+      openForm2Modal(ev.rawJob)
+    } else if (ev.rawJob) {
+      openJobDetails(ev.rawJob)
+    }
+  }
+  // If not for this specific artist, do not open any modal to protect private booking/business details
 }
 
 // Deep Linking: Auto-open modal if navigated from notification
@@ -713,8 +766,9 @@ onBeforeUnmount(() => {
           <div
             v-for="ev in liveEvents"
             :key="ev.id"
-            @click="ev.rawJob ? openJobDetails(ev.rawJob) : (ev.rawContract && openForm2Modal(ev.rawContract))"
-            class="flex items-center justify-between py-4 sm:py-5 px-4 sm:px-6 hover:bg-white/3 transition-colors gap-4 sm:gap-6 cursor-pointer"
+            @click="isOwnEvent(ev) && handleEventClick(ev)"
+            class="flex items-center justify-between py-4 sm:py-5 px-4 sm:px-6 transition-colors gap-4 sm:gap-6"
+            :class="isOwnEvent(ev) ? 'cursor-pointer hover:bg-white/5' : 'cursor-default hover:bg-white/2'"
           >
             <!-- Left Column: Date (Month / Day) -->
             <div class="w-12 sm:w-16 shrink-0 flex flex-col leading-tight">
@@ -738,6 +792,13 @@ onBeforeUnmount(() => {
 
             <!-- Right Column: Happening Now Badge & Time -->
             <div class="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-3 text-right">
+              <span
+                v-if="isOwnEvent(ev)"
+                class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#D0D4F7]/15 text-[#D0D4F7] border border-[#D0D4F7]/30 flex items-center gap-1.5 shadow-xs shrink-0"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-[#D0D4F7]"></span>
+                <span>Your Gig</span>
+              </span>
               <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-1.5 shadow-xs shrink-0">
                 <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
                 <span>Happening Now</span>
@@ -766,8 +827,9 @@ onBeforeUnmount(() => {
           <div
             v-for="ev in upcomingPublicEvents"
             :key="ev.id"
-            @click="ev.rawJob && openJobDetails(ev.rawJob)"
-            class="flex items-center justify-between py-4 sm:py-5 px-4 sm:px-6 hover:bg-white/3 transition-colors gap-4 sm:gap-6 cursor-pointer"
+            @click="isOwnEvent(ev) && handleEventClick(ev)"
+            class="flex items-center justify-between py-4 sm:py-5 px-4 sm:px-6 transition-colors gap-4 sm:gap-6"
+            :class="isOwnEvent(ev) ? 'cursor-pointer hover:bg-white/5' : 'cursor-default hover:bg-white/2'"
           >
             <!-- Left Column: Date (Month / Day) -->
             <div class="w-12 sm:w-16 shrink-0 flex flex-col leading-tight">
@@ -789,8 +851,8 @@ onBeforeUnmount(() => {
               </p>
             </div>
 
-            <!-- Right Column: Time -->
-            <div class="shrink-0 text-right">
+            <!-- Right Column: Status Badge & Time -->
+            <div class="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-3 text-right">
               <span class="text-xs sm:text-sm text-gray-300 font-medium font-mono">
                 {{ ev.time }}
               </span>

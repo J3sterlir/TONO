@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps<{
   isOpen: boolean
@@ -16,6 +16,78 @@ const emit = defineEmits<{
 const supabase = useSupabaseClient()
 const db = supabase as any
 const user = useSupabaseUser()
+
+// Computed status and state checks
+const isJobClosed = computed(() => {
+  if (!props.job) return false
+
+  const status = props.job.Status
+  if (['Closed', 'Filled', 'Completed', 'Cancelled', 'Active', 'Confirmed'].includes(status)) {
+    return true
+  }
+
+  // If tied to contracts from BOOKING_CONTRACT join
+  if (Array.isArray(props.job.BOOKING_CONTRACT) && props.job.BOOKING_CONTRACT.length > 0) {
+    const hasActiveContract = props.job.BOOKING_CONTRACT.some((c: any) =>
+      ['Confirmed', 'Active', 'Completed', 'Pending_Artist_Approval', 'Pending'].includes(c.Status)
+    )
+    if (hasActiveContract) return true
+  }
+
+  // If this object is created from a booking contract
+  if (props.job.Booking_ID && !['Cancelled', 'Declined'].includes(props.job.Status)) {
+    return true
+  }
+
+  return false
+})
+
+const displayStatus = computed(() => {
+  if (!props.job) return { label: 'Open', color: 'emerald' }
+
+  const status = props.job.Status
+  if (status === 'Active' || status === 'Confirmed' || props.job.Booking_ID || props.job.Contract_Code) {
+    return { label: 'Closed', color: 'blue' }
+  }
+  if (Array.isArray(props.job.BOOKING_CONTRACT) && props.job.BOOKING_CONTRACT.some((c: any) => ['Confirmed', 'Active'].includes(c.Status))) {
+    return { label: 'Closed', color: 'blue' }
+  }
+  if (status === 'Closed' || status === 'Filled') {
+    return { label: 'Listing Closed', color: 'amber' }
+  }
+  if (status === 'Completed') {
+    return { label: 'Completed', color: 'zinc' }
+  }
+  if (status === 'Cancelled') {
+    return { label: 'Cancelled', color: 'red' }
+  }
+  return { label: 'Open for Applications', color: 'emerald' }
+})
+
+const bookedPerformerName = computed(() => {
+  if (!props.job) return ''
+  if (props.job.ARTIST) {
+    return props.job.ARTIST.BandName?.Band_Name || props.job.ARTIST.StageName?.Artist_Name || props.job.ARTIST.USER_ACCOUNT?.Username || ''
+  }
+  return props.job._resolvedArtistName || ''
+})
+
+const isCurrentArtistBooked = computed(() => {
+  if (!props.job || !props.currentArtistId) return false
+  return props.job.Provider_Artist_ID === props.currentArtistId ||
+    props.job.ARTIST?.ARTIST_ID === props.currentArtistId ||
+    (Array.isArray(props.job.BOOKING_CONTRACT) && props.job.BOOKING_CONTRACT.some((c: any) => c.Provider_Artist_ID === props.currentArtistId && ['Confirmed', 'Active'].includes(c.Status)))
+})
+
+const headerDisplayCode = computed(() => {
+  if (!props.job) return 'EVENT'
+  return props.job.Job_Code || props.job.Contract_Code || props.job.Event_Title || 'Gig Details'
+})
+
+const referenceCode = computed(() => {
+  if (!props.job) return 'N/A'
+  return props.job.Job_Code || props.job.Contract_Code || (props.job.Job_ID ? String(props.job.Job_ID).substring(0, 8).toUpperCase() : 'N/A')
+})
 
 const isApplying = ref(false)
 const isWithdrawing = ref(false)
@@ -223,9 +295,11 @@ useModalScrollLock(() => props.isOpen)
       <!-- Top Action Bar (Pinned Header) -->
       <div class="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-7 py-4 sm:py-5 border-b border-[#2A2A2E]/80 bg-[#131315]/95 backdrop-blur-md">
         <div class="min-w-0">
-          <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider block">JOB LISTING APPLICATION</span>
+          <span class="text-[10px] font-mono text-[#D0D4F7] uppercase tracking-wider block">
+            {{ isJobClosed ? 'EVENT DETAILS & SCHEDULE' : 'JOB LISTING APPLICATION' }}
+          </span>
           <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight mt-0.5 truncate">
-            {{ job.Job_Code || 'JB-LISTING' }}
+            {{ headerDisplayCode }}
           </h1>
         </div>
 
@@ -233,7 +307,7 @@ useModalScrollLock(() => props.isOpen)
           <!-- If already applied -->
           <template v-if="existingApp || hasAlreadyApplied">
             <button
-              v-if="!isEditing && existingApp?.Status === 'Pending'"
+              v-if="!isEditing && existingApp?.Status === 'Pending' && !isJobClosed"
               type="button"
               @click="isEditing = true"
               class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-semibold border border-[#D0D4F7] text-[#D0D4F7] hover:bg-[#D0D4F7]/10 transition-all cursor-pointer flex items-center gap-1.5"
@@ -249,6 +323,20 @@ useModalScrollLock(() => props.isOpen)
               <span>{{ existingApp?.Status || 'Applied' }}</span>
             </span>
           </template>
+
+          <!-- Status badge if closed and not applied -->
+          <span
+            v-else-if="isJobClosed"
+            class="px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-xs font-bold"
+            :class="{
+              'bg-blue-500/15 text-blue-300 border border-blue-500/30': displayStatus.color === 'blue',
+              'bg-amber-500/15 text-amber-300 border border-amber-500/30': displayStatus.color === 'amber',
+              'bg-zinc-500/15 text-zinc-300 border border-zinc-500/30': displayStatus.color === 'zinc',
+              'bg-red-500/15 text-red-300 border border-red-500/30': displayStatus.color === 'red'
+            }"
+          >
+            {{ displayStatus.label }}
+          </span>
 
           <button
             type="button"
@@ -290,17 +378,50 @@ useModalScrollLock(() => props.isOpen)
             </div>
             <div class="flex flex-col gap-1 p-3.5 bg-[#141416] border border-[#46464D]/60 rounded-xl">
               <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">BUSINESS ID</span>
-              <p class="text-sm font-medium text-gray-300 font-mono truncate">{{ job.Posted_By_BUSINESS_ID || 'N/A' }}</p>
+              <p class="text-sm font-medium text-gray-300 font-mono truncate">{{ job.Posted_By_BUSINESS_ID || job.BUSINESS_PROFILE?.BUSINESS_ID || 'N/A' }}</p>
             </div>
             <div class="flex flex-col gap-1 p-3.5 bg-[#141416] border border-[#46464D]/60 rounded-xl">
-              <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">JOB CODE</span>
-              <p class="text-sm font-medium text-[#D0D4F7] font-mono">{{ job.Job_Code || 'JB' }}</p>
+              <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">
+                {{ job.Job_Code ? 'JOB CODE' : (job.Contract_Code ? 'CONTRACT CODE' : 'REFERENCE CODE') }}
+              </span>
+              <p class="text-sm font-medium text-[#D0D4F7] font-mono">{{ referenceCode }}</p>
             </div>
             <div class="flex flex-col gap-1 p-3.5 bg-[#141416] border border-[#46464D]/60 rounded-xl">
               <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">STATUS</span>
               <div class="flex items-center gap-2 mt-0.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <p class="text-sm font-medium text-emerald-400">Open for Applications</p>
+                <span
+                  class="w-2 h-2 rounded-full"
+                  :class="{
+                    'bg-emerald-400 animate-pulse': displayStatus.color === 'emerald',
+                    'bg-blue-400': displayStatus.color === 'blue',
+                    'bg-amber-400': displayStatus.color === 'amber',
+                    'bg-zinc-400': displayStatus.color === 'zinc',
+                    'bg-red-400': displayStatus.color === 'red'
+                  }"
+                ></span>
+                <p
+                  class="text-sm font-medium"
+                  :class="{
+                    'text-emerald-400': displayStatus.color === 'emerald',
+                    'text-blue-300': displayStatus.color === 'blue',
+                    'text-amber-300': displayStatus.color === 'amber',
+                    'text-zinc-300': displayStatus.color === 'zinc',
+                    'text-red-300': displayStatus.color === 'red'
+                  }"
+                >
+                  {{ displayStatus.label }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Confirmed Performer info when booked -->
+            <div v-if="bookedPerformerName" class="sm:col-span-2 flex flex-col gap-1 p-3.5 bg-[#141416] border border-[#46464D]/60 rounded-xl">
+              <span class="text-[10px] font-mono tracking-wider text-[#D0D4F7] uppercase">CONFIRMED PERFORMER</span>
+              <div class="flex items-center justify-between">
+                <p class="text-sm font-medium text-white">{{ bookedPerformerName }}</p>
+                <span v-if="isCurrentArtistBooked" class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Booked for You ✓
+                </span>
               </div>
             </div>
           </div>
@@ -327,18 +448,18 @@ useModalScrollLock(() => props.isOpen)
             <div class="grid grid-cols-2 gap-3">
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">START DATE</span>
-                <p class="text-sm font-medium text-white font-mono">{{ job.Start_Date || job.Date }}</p>
+                <p class="text-sm font-medium text-white font-mono">{{ job.Start_Date || job.Date || job.Event_Date }}</p>
               </div>
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">END DATE</span>
-                <p class="text-sm font-medium text-white font-mono">{{ job.End_Date || job.Start_Date || job.Date }}</p>
+                <p class="text-sm font-medium text-white font-mono">{{ job.End_Date || job.Start_Date || job.Date || job.Event_Date }}</p>
               </div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">START TIME</span>
-                <p class="text-sm font-medium text-white font-mono">{{ formatTime12(job.Start_Time || '19:00') }}</p>
+                <p class="text-sm font-medium text-white font-mono">{{ formatTime12(job.Start_Time || job.Time || '19:00') }}</p>
               </div>
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">END TIME</span>
@@ -346,7 +467,7 @@ useModalScrollLock(() => props.isOpen)
               </div>
               <div class="flex flex-col gap-1 p-3 bg-[#141416] border border-[#46464D]/60 rounded-xl">
                 <span class="text-[10px] font-mono tracking-wider text-[#C7C5CE] uppercase">BUDGET / FEE</span>
-                <p class="text-sm font-bold text-emerald-400 font-mono">₱{{ Number(job.Compensation_Fee || 0).toLocaleString() }}</p>
+                <p class="text-sm font-bold text-emerald-400 font-mono">₱{{ Number(job.Compensation_Fee || job.Agreed_Fee || 0).toLocaleString() }}</p>
               </div>
             </div>
           </div>
@@ -393,7 +514,9 @@ useModalScrollLock(() => props.isOpen)
         <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-3">
           <div class="flex items-center gap-2">
             <Icon name="ic:baseline-assignment" class="text-xl text-[#D0D4F7]" />
-            <h2 class="text-base font-semibold text-white">Your Audition Proposal &amp; Application</h2>
+            <h2 class="text-base font-semibold text-white">
+              {{ isJobClosed && !existingApp ? 'Audition & Casting Status' : 'Your Audition Proposal & Application' }}
+            </h2>
           </div>
           <span
             v-if="existingApp"
@@ -406,6 +529,18 @@ useModalScrollLock(() => props.isOpen)
             }"
           >
             Status: {{ existingApp.Status }}
+          </span>
+          <span
+            v-else-if="isJobClosed"
+            class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold"
+            :class="{
+              'bg-blue-500/10 text-blue-300 border border-blue-500/20': displayStatus.color === 'blue',
+              'bg-amber-500/10 text-amber-300 border border-amber-500/20': displayStatus.color === 'amber',
+              'bg-zinc-500/10 text-zinc-300 border border-zinc-500/20': displayStatus.color === 'zinc',
+              'bg-red-500/10 text-red-300 border border-red-500/20': displayStatus.color === 'red'
+            }"
+          >
+            {{ displayStatus.label }}
           </span>
         </div>
 
@@ -445,6 +580,7 @@ useModalScrollLock(() => props.isOpen)
                 <span>Withdraw Application</span>
               </button>
               <button
+                v-if="!isJobClosed"
                 type="button"
                 @click="isEditing = true"
                 class="px-5 py-2 rounded-full font-bold bg-[#D0D4F7] hover:bg-white text-[#131315] transition-all cursor-pointer shadow flex items-center gap-1.5"
@@ -473,7 +609,26 @@ useModalScrollLock(() => props.isOpen)
           </div>
         </div>
 
-        <!-- Mode B: New Application Form OR Editing Existing Proposal -->
+        <!-- Mode B: Job is Closed / Contract Active and Artist has NOT applied -->
+        <div v-else-if="isJobClosed" class="p-6 rounded-2xl bg-[#141416] border border-[#2A2A2E] text-center space-y-3">
+          <div class="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+            <Icon name="ic:outline-lock" class="text-2xl" />
+          </div>
+          <div class="space-y-1.5">
+            <h3 class="text-sm font-bold text-white">Applications Closed</h3>
+            <p v-if="isCurrentArtistBooked" class="text-xs text-emerald-300 max-w-md mx-auto">
+              You are confirmed as the performing artist for this event! You can manage this gig directly in your calendar.
+            </p>
+            <p v-else-if="bookedPerformerName" class="text-xs text-gray-400 max-w-md mx-auto">
+              This gig has been booked with <span class="text-white font-medium">{{ bookedPerformerName }}</span> and is no longer accepting new artist applications.
+            </p>
+            <p v-else class="text-xs text-gray-400 max-w-md mx-auto">
+              This gig is closed and an active booking contract is in place. It is no longer accepting new artist applications.
+            </p>
+          </div>
+        </div>
+
+        <!-- Mode C: New Application Form OR Editing Existing Proposal -->
         <div v-else class="space-y-4">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">

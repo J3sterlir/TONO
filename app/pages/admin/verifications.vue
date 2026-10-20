@@ -19,6 +19,7 @@ interface ArtistVerification {
     isVerified: boolean
     joinDate: string
     appliedDate: string
+    rawCreatedAt?: string
     city: string
     barangay: string
     bio: string
@@ -38,6 +39,27 @@ const supabase = useSupabaseClient<Database>()
 const users = ref<ArtistVerification[]>([])
 const selectedArtist = ref<ArtistVerification | null>(null)
 const isLoading = ref(true)
+
+// Search and Filter State
+const searchQuery = ref('')
+const artistTypeFilter = ref<'all' | 'Solo' | 'Band'>('all')
+const statusFilter = ref<'all' | 'pending' | 'verified' | 'rejected'>('all')
+const isFilterDropdownOpen = ref(false)
+
+const activeFilterCount = computed(() => {
+    let count = 0
+    if (artistTypeFilter.value !== 'all') count++
+    if (statusFilter.value !== 'all') count++
+    return count
+})
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0 || !!searchQuery.value)
+
+const resetFilters = () => {
+    searchQuery.value = ''
+    artistTypeFilter.value = 'all'
+    statusFilter.value = 'all'
+}
 
 const fetchPendingArtists = async () => {
     isLoading.value = true
@@ -106,6 +128,7 @@ const fetchPendingArtists = async () => {
                     isVerified: !!row.Is_Verified,
                     joinDate: formatDate(userAcc?.Created_at),
                     appliedDate: formatDate(row.Created_at),
+                    rawCreatedAt: row.Created_at || userAcc?.Created_at || '',
                     city: userAcc?.City || '',
                     barangay: userAcc?.Barangay || '',
                     bio: row.Bio || '',
@@ -187,16 +210,69 @@ const rejectArtist = async (id: string) => {
     }
 }
 
+// 1. Sort: Pending status has highest priority, then latest artist who registered on top (Created_at desc)
+const sortedArtists = computed(() => {
+    return [...users.value].sort((a, b) => {
+        const isPendingA = !a.isVerified && a.status?.toLowerCase() === 'pending'
+        const isPendingB = !b.isVerified && b.status?.toLowerCase() === 'pending'
+
+        if (isPendingA && !isPendingB) return -1
+        if (!isPendingA && isPendingB) return 1
+
+        const dateA = new Date(a.rawCreatedAt || 0).getTime()
+        const dateB = new Date(b.rawCreatedAt || 0).getTime()
+        return dateB - dateA
+    })
+})
+
+// 2. Filter: Search Query + Artist Type + Status
+const filteredArtists = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase()
+
+    return sortedArtists.value.filter((artist) => {
+        // Search query match
+        if (query) {
+            const matchName = artist.name?.toLowerCase().includes(query)
+            const matchStage = artist.stageName?.toLowerCase().includes(query)
+            const matchEmail = artist.email?.toLowerCase().includes(query)
+            const matchCity = artist.city?.toLowerCase().includes(query)
+            if (!matchName && !matchStage && !matchEmail && !matchCity) {
+                return false
+            }
+        }
+
+        // Artist Type filter
+        if (artistTypeFilter.value !== 'all') {
+            if (artist.artistType !== artistTypeFilter.value) {
+                return false
+            }
+        }
+
+        // Status filter
+        if (statusFilter.value !== 'all') {
+            const isPending = !artist.isVerified && artist.status?.toLowerCase() === 'pending'
+            const isVerified = artist.isVerified || artist.status?.toLowerCase() === 'active'
+            const isRejected = artist.status?.toLowerCase() === 'rejected'
+
+            if (statusFilter.value === 'pending' && !isPending) return false
+            if (statusFilter.value === 'verified' && !isVerified) return false
+            if (statusFilter.value === 'rejected' && !isRejected) return false
+        }
+
+        return true
+    })
+})
+
 // Pagination State
 const currentPage = ref(1)
 const pageSize = ref(10)
 
 const paginatedArtists = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value
-    return users.value.slice(start, start + pageSize.value)
+    return filteredArtists.value.slice(start, start + pageSize.value)
 })
 
-watch(pageSize, () => {
+watch([searchQuery, artistTypeFilter, statusFilter, pageSize], () => {
     currentPage.value = 1
 })
 </script>
@@ -204,15 +280,160 @@ watch(pageSize, () => {
 <template>
     <div>
         <nav class="flex items-center px-16 h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10">
-            <h1 class="text-[#D0D4F7] text-[24px] font-medium">Welcome Back Admin!</h1>
+            <h1 class="text-[#D0D4F7] text-lg sm:text-[24px] font-medium tracking-tight">Welcome Back Admin!</h1>
         </nav>
         <main class="p-8 lg:p-16 flex flex-col gap-6">
             <div>
                 <h1 class="font-semibold text-[40px]">User Verification</h1>
-                <h1 class="font-light text-[16px] text-zinc-400">Review and verify user verification requests</h1>
             </div>
-            <div>
-                <h2 class="text-[16px] font-medium text-zinc-200">Queue</h2>
+            <div class="flex items-center justify-end">
+                <span class="text-xs font-mono text-zinc-400">
+                    {{ filteredArtists.length }} {{ filteredArtists.length === 1 ? 'artist' : 'artists' }} ({{ users.filter(u => !u.isVerified && u.status?.toLowerCase() === 'pending').length }} pending)
+                </span>
+            </div>
+
+            <!-- SEARCH AND FILTER CONTROLS BAR (Matches Artistprofile.vue Gigs Filter Style) -->
+            <div class="bg-[#141416] p-3 sm:p-4 rounded-2xl border border-[#2A2A2E] space-y-3 font-Sora">
+              <div class="flex items-center gap-2.5 sm:gap-3">
+                <!-- Search Input -->
+                <div class="relative flex-1 min-w-0">
+                  <Icon name="ic:baseline-search" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-base" />
+                  <input
+                    v-model="searchQuery"
+                    type="text"
+                    placeholder="Search by artist name, stage name, email, or city..."
+                    class="w-full pl-9 pr-9 py-2.5 rounded-xl bg-[#1C1C1F] border border-[#2A2A2E] text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#D0D4F7] transition-all"
+                  />
+                  <button
+                    v-if="searchQuery"
+                    type="button"
+                    @click="searchQuery = ''"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    <Icon name="ic:round-close" class="text-sm" />
+                  </button>
+                </div>
+
+                <!-- Single Filter Icon Dropdown Container -->
+                <div class="relative shrink-0">
+                  <button
+                    type="button"
+                    @click="isFilterDropdownOpen = !isFilterDropdownOpen"
+                    class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-sm select-none"
+                    :class="isFilterDropdownOpen || activeFilterCount > 0
+                      ? 'bg-[#D0D4F7] text-[#131315] border-[#D0D4F7]'
+                      : 'bg-[#1C1C1F] hover:bg-[#252529] text-gray-300 hover:text-white border-[#2A2A2E]'"
+                  >
+                    <Icon name="ic:outline-filter-alt" class="text-base shrink-0" />
+                    <span>Filter</span>
+                    <span
+                      v-if="activeFilterCount > 0"
+                      class="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0"
+                      :class="isFilterDropdownOpen || activeFilterCount > 0 ? 'bg-[#131315] text-[#D0D4F7]' : 'bg-[#D0D4F7] text-[#131315]'"
+                    >
+                      {{ activeFilterCount }}
+                    </span>
+                    <Icon
+                      name="ic:baseline-keyboard-arrow-down"
+                      class="text-sm transition-transform duration-200 shrink-0"
+                      :class="isFilterDropdownOpen ? 'rotate-180' : ''"
+                    />
+                  </button>
+
+                  <!-- Backdrop to close on click outside -->
+                  <div
+                    v-if="isFilterDropdownOpen"
+                    class="fixed inset-0 z-20"
+                    @click="isFilterDropdownOpen = false"
+                  ></div>
+
+                  <!-- Dropdown Popover -->
+                  <div
+                    v-if="isFilterDropdownOpen"
+                    @click.stop
+                    class="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#18181B] border border-[#2A2A2E] rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-white"
+                  >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between border-b border-[#2A2A2E] pb-2.5">
+                      <div class="flex items-center gap-1.5 text-white font-semibold text-xs">
+                        <Icon name="ic:outline-filter-alt" class="text-sm text-[#D0D4F7]" />
+                        <span>Filter Requests</span>
+                      </div>
+                      <button
+                        v-if="hasActiveFilters"
+                        type="button"
+                        @click="resetFilters"
+                        class="text-[11px] text-gray-400 hover:text-[#D0D4F7] transition-colors cursor-pointer"
+                      >
+                        Reset All
+                      </button>
+                    </div>
+
+                    <!-- Filter 1: Artist Type -->
+                    <div class="space-y-1.5">
+                      <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400 block">
+                        Artist Type
+                      </label>
+                      <div class="grid grid-cols-3 gap-1.5">
+                        <button
+                          v-for="t in [
+                            { label: 'All', value: 'all' },
+                            { label: 'Solo', value: 'Solo' },
+                            { label: 'Band', value: 'Band' }
+                          ]"
+                          :key="t.value"
+                          type="button"
+                          @click="artistTypeFilter = t.value as any"
+                          class="px-2.5 py-1.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer"
+                          :class="artistTypeFilter === t.value
+                            ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                            : 'bg-[#1C1C1F] border-[#2A2A2E] text-gray-400 hover:text-white'"
+                        >
+                          {{ t.label }}
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Filter 2: Verification Status -->
+                    <div class="space-y-1.5">
+                      <label class="text-[11px] font-mono uppercase tracking-wider text-gray-400 block">
+                        Verification Status
+                      </label>
+                      <div class="grid grid-cols-2 gap-1.5">
+                        <button
+                          v-for="s in [
+                            { label: 'All', value: 'all' },
+                            { label: 'Pending', value: 'pending' },
+                            { label: 'Verified', value: 'verified' },
+                            { label: 'Rejected', value: 'rejected' }
+                          ]"
+                          :key="s.value"
+                          type="button"
+                          @click="statusFilter = s.value as any"
+                          class="px-2.5 py-1.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer"
+                          :class="statusFilter === s.value
+                            ? 'bg-[#D0D4F7]/20 border-[#D0D4F7] text-white font-semibold shadow-sm'
+                            : 'bg-[#1C1C1F] border-[#2A2A2E] text-gray-400 hover:text-white'"
+                        >
+                          {{ s.label }}
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Result summary in popover -->
+                    <div class="pt-2 border-t border-[#2A2A2E] flex items-center justify-between text-[11px] text-gray-400">
+                      <span>{{ filteredArtists.length }} of {{ users.length }} artists</span>
+                      <button
+                        type="button"
+                        @click="isFilterDropdownOpen = false"
+                        class="px-3 py-1 rounded-lg bg-[#D0D4F7] hover:bg-white text-[#131315] font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Main Content: Flexible row containing the table and the artist review card -->
@@ -323,7 +544,7 @@ watch(pageSize, () => {
                         <AdminPagination 
                             v-model:currentPage="currentPage" 
                             v-model:pageSize="pageSize" 
-                            :totalItems="users.length" 
+                            :totalItems="filteredArtists.length" 
                             itemLabel="requests" 
                         />
                     </div>

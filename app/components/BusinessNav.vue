@@ -112,27 +112,28 @@ useModalScrollLock(isMobileSidebarOpen)
   <div>
     <!-- Top Navigation Bar -->
     <nav class="flex items-center justify-between px-4 sm:px-16 h-16 sm:h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-30 bg-[#131315]/80">
-      <!-- Left (Mobile Only): Hamburger Toggle & Mini Logo -->
-      <div class="flex items-center gap-2.5 sm:hidden">
+      <!-- Left: Mobile Hamburger & Mini Logo, Desktop Logo on Messages -->
+      <div class="flex items-center gap-2.5" :class="isMessagesActive ? 'flex' : 'sm:hidden'">
         <button
+          v-if="!isMessagesActive"
           type="button"
           @click="toggleMobileSidebar"
-          class="flex p-2 -ml-1 text-gray-300 hover:text-white rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+          class="flex p-2 -ml-1 text-gray-300 hover:text-white rounded-xl hover:bg-white/5 transition-colors cursor-pointer sm:hidden"
           aria-label="Open navigation menu">
           <Icon name="ic:round-menu" class="text-2xl text-[#D0D4F7]" />
         </button>
 
         <div class="flex items-center gap-2 cursor-pointer" @click="navigateTo('/businessdash')">
           <img src="/TONO_LOGO.svg" alt="TONO Logo" class="h-7 w-7 rounded-full" />
-          <div class="leading-tight">
-            <span class="text-sm font-bold tracking-tight text-white block">TONO</span>
-            <span class="text-[9px] font-mono text-[#D0D4F7] uppercase tracking-wider block">BUSINESS</span>
+          <div class="flex items-baseline gap-1">
+            <span class="text-xl sm:text-[1.5rem] font-bold tracking-wide">TONO</span>
+            <span class="text-xl sm:text-[1rem] font-light tracking-wide">BUSINESS</span>
           </div>
         </div>
       </div>
 
-      <!-- Left spacer for desktop to maintain right-aligned action buttons -->
-      <div class="hidden sm:block"></div>
+      <!-- Left spacer for desktop to maintain right-aligned action buttons when drawer is visible -->
+      <div v-if="!isMessagesActive" class="hidden sm:block"></div>
 
       <!-- Right: Action Buttons -->
       <div class="flex items-center gap-2 sm:gap-3">
@@ -187,7 +188,7 @@ useModalScrollLock(isMobileSidebarOpen)
 
     <!-- Mobile Backdrop Overlay -->
     <div
-      v-if="isMobileSidebarOpen"
+      v-if="!isMessagesActive && isMobileSidebarOpen"
       @click="closeMobileSidebar"
       class="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs sm:hidden transition-opacity duration-300"
       aria-hidden="true"
@@ -195,6 +196,7 @@ useModalScrollLock(isMobileSidebarOpen)
 
     <!-- Sidebar Drawer -->
     <aside
+      v-if="!isMessagesActive"
       id="logo-sidebar"
       class="fixed top-0 left-0 z-50 w-64 h-dvh transition-transform duration-300 ease-in-out bg-[#201F21]"
       :class="isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full sm:translate-x-0'"

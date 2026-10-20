@@ -105,6 +105,8 @@ const fetchArtistGigs = async () => {
       if (!error && data) {
         gigs.value = data
       }
+
+      await fetchCustomActivities()
     } else {
       // OWNER VIEW: Fetch both job listing gigs and direct client bookings.
       const { data, error } = await db
@@ -157,15 +159,21 @@ const fetchArtistGigs = async () => {
   }
 }
 
-// Fetch artist custom schedule events (rehearsals, personal blocks)
+// Fetch artist custom schedule events (rehearsals, personal blocks, public events)
 const fetchCustomActivities = async () => {
-  if (!props.artistId || !props.isOwner) return
+  if (!props.artistId) return
   try {
-    const { data, error } = await db
+    let query = db
       .from('ARTIST_CUSTOM_SCHEDULE')
       .select('*')
       .eq('Artist_ID', props.artistId)
-      .order('Start_Date', { ascending: true })
+
+    if (!props.isOwner) {
+      // For public visitors, strictly only fetch events marked as public
+      query = query.eq('Is_Public', true)
+    }
+
+    const { data, error } = await query.order('Start_Date', { ascending: true })
 
     if (!error && data) {
       customActivities.value = data
@@ -381,7 +389,7 @@ watch(() => props.artistId, () => {
           class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#D0D4F7] hover:bg-white text-[#0E0E10] text-xs font-bold transition-all cursor-pointer shadow-sm select-none"
         >
           <Icon name="ic:baseline-add" class="text-base" />
-          <span>Add Activity</span>
+          <span>Add Event</span>
         </button>
 
         <!-- Navigation Arrows -->
@@ -406,19 +414,19 @@ watch(() => props.artistId, () => {
       </div>
     </div>
 
-    <!-- Calendar Legend (Owner Mode) -->
-    <div v-if="isOwner" class="flex items-center gap-4 text-[11px] font-mono text-gray-400 flex-wrap border-y border-[#2A2A2E]/60 py-2">
+    <!-- Calendar Legend -->
+    <div class="flex items-center gap-4 text-[11px] font-mono text-gray-400 flex-wrap border-y border-[#2A2A2E]/60 py-2">
       <div class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-sm bg-[#D0D4F7]"></span>
         <span>Public Gigs</span>
       </div>
-      <div class="flex items-center gap-1.5">
+      <div v-if="isOwner" class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-sm bg-purple-500"></span>
         <span>Private Direct Bookings</span>
       </div>
       <div class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>
-        <span>Custom Activity / Blocker</span>
+        <span>{{ isOwner ? 'Artist Events' : 'Public Artist Events' }}</span>
       </div>
     </div>
 

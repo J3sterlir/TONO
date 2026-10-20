@@ -111,6 +111,9 @@ const fetchContracts = async () => {
           Booking_ID,
           Contract_Code,
           Job_ID,
+          Requester_Account_ID,
+          Provider_Artist_ID,
+          Provider_Business_ID,
           Booking_Type,
           Start_Date,
           End_Date,
@@ -769,7 +772,9 @@ onBeforeUnmount(() => {
       :contract-code="selectedReviewBooking?.Contract_Code"
       :event-title="selectedReviewBooking?.JOB_LISTING?.Event_Title || 'Direct Booking Gig'"
       :event-date="selectedReviewBooking?.Start_Date || selectedReviewBooking?.Event_Date"
-      :target-artist-id="selectedReviewBooking?.Provider_Artist_ID"
+      :target-artist-id="selectedReviewBooking?.Provider_Artist_ID || selectedReviewBooking?.ARTIST?.ARTIST_ID"
+      :target-business-id="selectedReviewBooking?.Provider_Business_ID"
+      :target-account-id="selectedReviewBooking?.Requester_Account_ID"
       target-name="Performing Artist"
       @close="isReviewModalOpen = false"
       @submitted="handleReviewSubmitted"

@@ -125,15 +125,26 @@ export default defineEventHandler(async (event) => {
         .select(`
           POST_ID,
           ARTIST_ID,
+          BUSINESS_ID,
           Caption,
           Media,
-          File_URL,
+          Location,
           Created_at,
           ARTIST (
             ARTIST_ID,
             ACCOUNT_ID,
             Artist_Type,
-            StageName,
+            SOLO_ARTIST ( Artist_Name ),
+            BAND ( Band_Name ),
+            USER_ACCOUNT (
+              Username,
+              Profile_Picture
+            )
+          ),
+          BUSINESS_PROFILE (
+            BUSINESS_ID,
+            ACCOUNT_ID,
+            Business_Name,
             USER_ACCOUNT (
               Username,
               Profile_Picture
@@ -143,21 +154,35 @@ export default defineEventHandler(async (event) => {
         .eq('POST_ID', targetId)
         .maybeSingle()
 
+      if (postErr) {
+        console.error('[reports/create] Error querying post:', postErr)
+      }
+
       if (postErr || !postRow) {
         throw createError({ statusCode: 404, statusMessage: 'Reported post not found in system.' })
       }
 
       const artist = postRow.ARTIST as any
-      targetArtistId = postRow.ARTIST_ID
-      targetAccountId = artist?.ACCOUNT_ID || null
+      const business = postRow.BUSINESS_PROFILE as any
+      const artistName = artist
+        ? (artist.Artist_Type === 'Band'
+            ? (artist.BAND?.[0]?.Band_Name || artist.BAND?.Band_Name)
+            : (artist.SOLO_ARTIST?.[0]?.Artist_Name || artist.SOLO_ARTIST?.Artist_Name)) || artist.USER_ACCOUNT?.Username || 'Artist'
+        : null
+      const authorName = artistName || business?.Business_Name || business?.USER_ACCOUNT?.Username || 'Creator'
+
+      targetArtistId = postRow.ARTIST_ID || null
+      targetBusinessId = postRow.BUSINESS_ID || null
+      targetAccountId = artist?.ACCOUNT_ID || business?.ACCOUNT_ID || null
 
       evidenceSnapshot = {
         postId: postRow.POST_ID,
         artistId: postRow.ARTIST_ID,
-        artistStageName: artist?.StageName || 'Artist',
+        businessId: postRow.BUSINESS_ID,
+        authorName,
         caption: postRow.Caption,
         media: postRow.Media,
-        fileUrl: postRow.File_URL,
+        location: postRow.Location,
         createdAt: postRow.Created_at,
         capturedAt: new Date().toISOString()
       }
@@ -227,7 +252,9 @@ export default defineEventHandler(async (event) => {
           ARTIST:Provider_Artist_ID (
             ARTIST_ID,
             ACCOUNT_ID,
-            StageName
+            Artist_Type,
+            SOLO_ARTIST ( Artist_Name ),
+            BAND ( Band_Name )
           ),
           BUSINESS_PROFILE:Provider_Business_ID (
             BUSINESS_ID,
@@ -237,6 +264,10 @@ export default defineEventHandler(async (event) => {
         `)
         .eq('Booking_ID', targetId)
         .maybeSingle()
+
+      if (contractErr) {
+        console.error('[reports/create] Error querying contract:', contractErr)
+      }
 
       if (contractErr || !contractRow) {
         throw createError({ statusCode: 404, statusMessage: 'Reported contract not found in system.' })
@@ -275,6 +306,11 @@ export default defineEventHandler(async (event) => {
 
       if (accRow) {
         targetAccountId = accRow.ACCOUNT_ID
+        const { data: aRow } = await supabaseAdmin.from('ARTIST').select('ARTIST_ID').eq('ACCOUNT_ID', accRow.ACCOUNT_ID).maybeSingle()
+        if (aRow) targetArtistId = aRow.ARTIST_ID
+        const { data: bRow } = await supabaseAdmin.from('BUSINESS_PROFILE').select('BUSINESS_ID').eq('ACCOUNT_ID', accRow.ACCOUNT_ID).maybeSingle()
+        if (bRow) targetBusinessId = bRow.BUSINESS_ID
+
         evidenceSnapshot = {
           targetAccountId: accRow.ACCOUNT_ID,
           username: accRow.Username,
@@ -282,28 +318,38 @@ export default defineEventHandler(async (event) => {
           capturedAt: new Date().toISOString()
         }
       } else {
-        // Try ARTIST
+        // Try ARTIST by ARTIST_ID or ACCOUNT_ID
         const { data: artistRow } = await supabaseAdmin
           .from('ARTIST')
-          .select('ARTIST_ID, ACCOUNT_ID, StageName, USER_ACCOUNT(Username, Profile_Picture)')
-          .eq('ARTIST_ID', targetId)
+          .select(`
+            ARTIST_ID,
+            ACCOUNT_ID,
+            Artist_Type,
+            SOLO_ARTIST ( Artist_Name ),
+            BAND ( Band_Name ),
+            USER_ACCOUNT ( Username, Profile_Picture )
+          `)
+          .or(`ARTIST_ID.eq.${targetId},ACCOUNT_ID.eq.${targetId}`)
           .maybeSingle()
 
         if (artistRow) {
           targetArtistId = artistRow.ARTIST_ID
           targetAccountId = artistRow.ACCOUNT_ID
+          const name = artistRow.Artist_Type === 'Band'
+            ? (artistRow.BAND?.[0]?.Band_Name || (artistRow.BAND as any)?.Band_Name)
+            : (artistRow.SOLO_ARTIST?.[0]?.Artist_Name || (artistRow.SOLO_ARTIST as any)?.Artist_Name)
           evidenceSnapshot = {
             artistId: artistRow.ARTIST_ID,
-            stageName: artistRow.StageName,
+            artistName: name || (artistRow.USER_ACCOUNT as any)?.Username,
             username: (artistRow.USER_ACCOUNT as any)?.Username,
             capturedAt: new Date().toISOString()
           }
         } else {
-          // Try BUSINESS_PROFILE
+          // Try BUSINESS_PROFILE by BUSINESS_ID or ACCOUNT_ID
           const { data: bizRow } = await supabaseAdmin
             .from('BUSINESS_PROFILE')
             .select('BUSINESS_ID, ACCOUNT_ID, Business_Name')
-            .eq('BUSINESS_ID', targetId)
+            .or(`BUSINESS_ID.eq.${targetId},ACCOUNT_ID.eq.${targetId}`)
             .maybeSingle()
 
           if (bizRow) {

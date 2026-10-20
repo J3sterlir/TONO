@@ -401,7 +401,42 @@ const { data: profileData, error: fetchError } = await useAsyncData(
       .neq('JOB_LISTING.Is_Public', false)
       .order('Start_Date', { ascending: true })
 
-    const upcomingEvents = upcomingEventsData || []
+    // E2. Fetch Upcoming Public Custom Artist Events
+    let normalizedCustomEvents: any[] = []
+    try {
+      const { data: publicCustomEventsData } = await db
+        .from('ARTIST_CUSTOM_SCHEDULE')
+        .select('*')
+        .eq('Artist_ID', artistId)
+        .eq('Is_Public', true)
+        .order('Start_Date', { ascending: true })
+
+      if (publicCustomEventsData) {
+        normalizedCustomEvents = publicCustomEventsData.map((ev: any) => ({
+          Booking_ID: ev.Schedule_ID,
+          Contract_Code: null,
+          Job_ID: null,
+          Booking_Type: 'Artist Event',
+          Start_Date: ev.Start_Date,
+          End_Date: ev.End_Date,
+          Event_Date: ev.Start_Date,
+          Start_Time: ev.Start_Time,
+          End_Time: ev.End_Time,
+          Venue_Location: ev.Description || 'Artist Event',
+          Status: 'Confirmed',
+          JOB_LISTING: {
+            Event_Title: ev.Title,
+            Location: ev.Description || 'Artist Event',
+            Is_Public: true
+          },
+          BUSINESS_PROFILE: null
+        }))
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+
+    const upcomingEvents = [...(upcomingEventsData || []), ...normalizedCustomEvents]
 
     // E. Fetch Band Members (Only if artist is a Band)
     let bandMembers: any[] = []
@@ -800,6 +835,16 @@ const handleShareProfile = async () => {
   }
 }
 
+const handleReportPost = (post: any) => {
+  openReportModal({
+    targetType: 'Post',
+    targetId: post.POST_ID,
+    targetAccountId: artistRecord.value?.ACCOUNT_ID || undefined,
+    targetName: displayName.value || `@${username.value}`,
+    previewText: post.Caption || 'Post media'
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Scroll & Parallax / Zoom-Out Behavior (Spotify Artist Profile Style)
 // ---------------------------------------------------------------------------
@@ -1137,8 +1182,8 @@ const isScrolled = computed(() => scrollY.value > 200)
 
               <!-- Report Artist Action Button -->
               <div
-                v-if="!isOwner && artistRecord?.User_ID"
-                @click="openReportModal({ targetType: 'Profile', targetId: artistRecord.ARTIST_ID, targetAccountId: artistRecord.User_ID, targetName: displayName || `@${username}`, previewText: artistBio || undefined })"
+                v-if="!isOwner && (artistRecord?.ACCOUNT_ID || artistRecord?.ARTIST_ID)"
+                @click="openReportModal({ targetType: 'Profile', targetId: artistRecord.ARTIST_ID || artistRecord.ACCOUNT_ID, targetAccountId: artistRecord.ACCOUNT_ID, targetName: displayName || `@${username}`, previewText: artistBio || undefined })"
                 class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
                 title="Report Profile"
               >
@@ -1309,14 +1354,25 @@ const isScrolled = computed(() => scrollY.value > 200)
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      @click="handleShareProfile"
-                      class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
-                      title="Share Post"
-                    >
-                      <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
-                    </button>
+                    <div class="flex items-center gap-3">
+                      <button
+                        type="button"
+                        @click="handleShareProfile"
+                        class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer"
+                        title="Share Post"
+                      >
+                        <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
+                      </button>
+
+                      <button
+                        type="button"
+                        @click="handleReportPost(post)"
+                        class="text-[#C7C5CE] hover:text-rose-400 transition-colors cursor-pointer"
+                        title="Report Post"
+                      >
+                        <Icon name="ic:round-flag" class="text-xl sm:text-2xl" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

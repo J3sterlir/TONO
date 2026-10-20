@@ -328,6 +328,16 @@ const handleSharePost = async (post: PostItem) => {
   }
 }
 
+const handleReportPost = (post: PostItem) => {
+  openReportModal({
+    targetType: 'Post',
+    targetId: post.POST_ID,
+    targetAccountId: business.value?.ACCOUNT_ID || undefined,
+    targetName: business.value?.Business_Name || 'Business Post',
+    previewText: post.Caption || 'Post media'
+  })
+}
+
 const backToDiscoveryRoute = computed(() => {
   if (currentUserRole.value === 'artist') return '/Artisthome'
   if (currentUserRole.value === 'business') return '/BusinessDash'
@@ -603,8 +613,8 @@ const scrollToTop = () => {
 
                 <!-- Report Business Action Button -->
                 <div
-                  v-if="!isOwner && business.User_ID"
-                  @click="openReportModal({ targetType: 'Profile', targetId: business.BUSINESS_ID, targetAccountId: business.User_ID, targetName: business.Business_Name, previewSnippet: business.Business_Bio || business.Business_Address || undefined })"
+                  v-if="!isOwner && (business.ACCOUNT_ID || business.BUSINESS_ID)"
+                  @click="openReportModal({ targetType: 'Profile', targetId: business.BUSINESS_ID || business.ACCOUNT_ID, targetAccountId: business.ACCOUNT_ID, targetName: business.Business_Name, previewSnippet: business.Business_Bio || business.Business_Address || undefined })"
                   class="flex items-center px-4 py-2.5 bg-[#1E1E24]/80 hover:bg-rose-500/10 border border-[#46464D]/60 hover:border-rose-500/40 text-gray-400 hover:text-rose-400 gap-1.5 rounded-full font-Geist cursor-pointer transition-all shadow-md group text-xs sm:text-sm"
                   title="Report Profile"
                 >
@@ -773,10 +783,21 @@ const scrollToTop = () => {
                       </button>
                     </div>
 
-                    <button type="button" @click="handleSharePost(post)"
-                      class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer" title="Share Post">
-                      <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
-                    </button>
+                    <div class="flex items-center gap-3">
+                      <button type="button" @click="handleSharePost(post)"
+                        class="text-[#C7C5CE] hover:text-[#D0D4F7] transition-colors cursor-pointer" title="Share Post">
+                        <Icon name="ic:round-share" class="text-xl sm:text-2xl" />
+                      </button>
+
+                      <button
+                        type="button"
+                        @click="handleReportPost(post)"
+                        class="text-[#C7C5CE] hover:text-rose-400 transition-colors cursor-pointer"
+                        title="Report Post"
+                      >
+                        <Icon name="ic:round-flag" class="text-xl sm:text-2xl" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

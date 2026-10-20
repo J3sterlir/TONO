@@ -428,11 +428,15 @@ const onReviewSubmitted = () => {
 }
 
 // Upcoming Events for Posts Tab Sidebar
+const customPublicEvents = ref<any[]>([])
+
 const upcomingEvents = computed(() => {
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-  return (yourEvents.value || [])
+  const allEvents = [...(yourEvents.value || []), ...(customPublicEvents.value || [])]
+
+  return allEvents
     .filter((e: any) => {
       const dateStr = (e.End_Date || e.Start_Date || e.Event_Date || e.JOB_LISTING?.Start_Date || '').split('T')[0]
       return !dateStr || dateStr >= todayStr
@@ -617,6 +621,40 @@ const fetchArtistEvents = async () => {
       if (route.query.contractId) {
         handleDeepLinkContract(route.query.contractId as string)
       }
+    }
+
+    // 3. Fetch Artist Custom Events (Public ones for events display)
+    try {
+      const { data: customData } = await db
+        .from('ARTIST_CUSTOM_SCHEDULE')
+        .select('*')
+        .eq('Artist_ID', artistId.value)
+        .eq('Is_Public', true)
+        .order('Start_Date', { ascending: true })
+
+      if (customData) {
+        customPublicEvents.value = customData.map((ev: any) => ({
+          Booking_ID: ev.Schedule_ID,
+          Contract_Code: null,
+          Job_ID: null,
+          Booking_Type: 'Artist Event',
+          Start_Date: ev.Start_Date,
+          End_Date: ev.End_Date,
+          Event_Date: ev.Start_Date,
+          Start_Time: ev.Start_Time,
+          End_Time: ev.End_Time,
+          Venue_Location: ev.Description || 'Artist Event',
+          Status: 'Confirmed',
+          JOB_LISTING: {
+            Event_Title: ev.Title,
+            Location: ev.Description || 'Artist Event',
+            Is_Public: true
+          },
+          BUSINESS_PROFILE: null
+        }))
+      }
+    } catch {
+      // Non-blocking fallback
     }
   } catch (e) {
     console.error('Failed to load artist gigs:', e)

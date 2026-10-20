@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTonoSongs } from '~/composables/useTonoSongs'
+
+const user = useSupabaseUser()
+const supabase = useSupabaseClient()
 
 const {
   currentSong,
@@ -13,6 +17,33 @@ const {
   closePlayer,
   toggleSongLike
 } = useTonoSongs()
+
+// Watch authenticated user state: if user logs out, immediately stop playback and hide player
+watch(
+  () => user.value,
+  (newUser) => {
+    if (!newUser) {
+      closePlayer()
+    }
+  }
+)
+
+let authListenerSubscription: any = null
+
+onMounted(() => {
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      closePlayer()
+    }
+  })
+  authListenerSubscription = data?.subscription
+})
+
+onBeforeUnmount(() => {
+  if (authListenerSubscription) {
+    authListenerSubscription.unsubscribe()
+  }
+})
 
 const formatTime = (seconds: number) => {
   if (isNaN(seconds) || seconds < 0) return '0:00'
@@ -37,7 +68,7 @@ const handleSeek = (e: Event) => {
     leave-to-class="transform translate-y-8 opacity-0 scale-95"
   >
     <div
-      v-if="isMiniPlayerVisible && currentSong"
+      v-if="user && isMiniPlayerVisible && currentSong"
       class="fixed bottom-5 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 z-50 bg-[#161619]/95 backdrop-blur-xl border border-[#46464D]/60 hover:border-[#D0D4F7]/40 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.7)] p-3.5 flex flex-col gap-2.5 text-white transition-all select-none"
     >
       <!-- Top Row: Track Info + Controls -->

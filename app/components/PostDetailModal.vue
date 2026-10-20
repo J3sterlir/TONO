@@ -304,10 +304,10 @@ onUnmounted(() => {
                         </span>
                       </div>
                       <button
-                        v-if="user && comment.User_ID && comment.User_ID !== user.id"
+                        v-if="user && comment.ACCOUNT_ID && comment.ACCOUNT_ID !== user.id"
                         type="button"
-                        @click="openReportModal({ targetType: 'Comment', targetId: comment.Comment_ID, targetAccountId: comment.User_ID, targetName: comment.Username, previewSnippet: comment.Content })"
-                        class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-rose-400 p-0.5 rounded-sm hover:bg-rose-500/10 cursor-pointer shrink-0"
+                        @click="openReportModal({ targetType: 'Comment', targetId: comment.Comment_ID, targetAccountId: comment.ACCOUNT_ID, targetName: comment.Username, previewSnippet: comment.Content })"
+                        class="opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-rose-400 p-1 rounded-sm hover:bg-rose-500/10 cursor-pointer shrink-0"
                         title="Report Comment"
                       >
                         <Icon name="ic:round-flag" class="text-xs" />

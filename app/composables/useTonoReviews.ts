@@ -179,12 +179,39 @@ export const useTonoReviews = () => {
     error.value = null
 
     try {
+      let targetArtistId = payload.targetArtistId || null
+      let targetBusinessId = payload.targetBusinessId || null
+      let targetAccountId = payload.targetAccountId || null
+
+      // Fallback: If no target was explicitly passed but bookingId exists, resolve from BOOKING_CONTRACT
+      if (!targetArtistId && !targetBusinessId && !targetAccountId && payload.bookingId) {
+        const { data: bRow } = await db
+          .from('BOOKING_CONTRACT')
+          .select('Requester_Account_ID, Provider_Artist_ID, Provider_Business_ID')
+          .eq('Booking_ID', payload.bookingId)
+          .maybeSingle()
+
+        if (bRow) {
+          if (bRow.Requester_Account_ID === payload.reviewerAccountId) {
+            targetArtistId = bRow.Provider_Artist_ID || null
+            targetBusinessId = bRow.Provider_Business_ID || null
+          } else {
+            targetAccountId = bRow.Requester_Account_ID || null
+            targetBusinessId = bRow.Provider_Business_ID || null
+          }
+        }
+      }
+
+      if (!targetArtistId && !targetBusinessId && !targetAccountId) {
+        throw new Error('Please select or specify a target artist, business, or client to review.')
+      }
+
       const insertPayload = {
         Booking_ID: payload.bookingId || null,
         Reviewer_Account_ID: payload.reviewerAccountId,
-        Target_Artist_ID: payload.targetArtistId || null,
-        Target_Business_ID: payload.targetBusinessId || null,
-        Target_Account_ID: payload.targetAccountId || null,
+        Target_Artist_ID: targetArtistId,
+        Target_Business_ID: targetBusinessId,
+        Target_Account_ID: targetAccountId,
         Rating_Score: Number(payload.ratingScore),
         Written_Feedback: payload.writtenFeedback?.trim() || null
       }

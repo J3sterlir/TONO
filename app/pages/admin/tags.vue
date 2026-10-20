@@ -590,7 +590,7 @@ onMounted(async () => {
 
         <nav
             class="flex items-center px-16 h-20 border-b border-[#46464D] top-0 sticky backdrop-blur-3xl z-10">
-            <h1 class="text-[#D0D4F7] text-[24px] font-medium">Welcome Back Admin!</h1>
+            <h1 class="text-[#D0D4F7] text-lg sm:text-[24px] font-medium tracking-tight">Welcome Back Admin!</h1>
         </nav>
         <main class="p-8 lg:p-16 flex flex-col gap-10">
             <!-- Metric Counters -->

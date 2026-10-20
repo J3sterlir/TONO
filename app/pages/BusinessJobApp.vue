@@ -214,8 +214,8 @@ const handleAcceptApplicant = async (app: any) => {
         await db.rpc('send_notification', {
           p_account_id: artistAccountId,
           p_type: 'contract_offer',
-          p_title: `Contract Offer from ${businessName.value}`,
-          p_content: `${businessName.value} accepted your application for "**${job.Event_Title}**"! Please review the contract and customize your setlist.`,
+          p_title: `**${businessName.value}** accepted your application`,
+          p_content: '',
           p_action_link: `/Artistprofile?tab=events&contractId=${contractCode}`,
           p_svg_type: 'contract_offer',
           p_avatar_text: (businessName.value || 'Host').substring(0, 2).toUpperCase(),
@@ -231,8 +231,8 @@ const handleAcceptApplicant = async (app: any) => {
           Account_ID: artistAccountId,
           Sender_Account_ID: currentAccountId.value || null,
           Type: 'contract_offer',
-          Title: `Contract Offer from ${businessName.value}`,
-          Content: `${businessName.value} has accepted your application for "**${job.Event_Title}**"! Please review the contract and customize your setlist.`,
+          Title: `**${businessName.value}** accepted your application`,
+          Content: '',
           Action_Link: `/Artistprofile?tab=events&contractId=${contractCode}`,
           Svg_Type: 'contract_offer',
           Avatar_Text: (businessName.value || 'Host').substring(0, 2).toUpperCase(),
@@ -533,19 +533,9 @@ onBeforeUnmount(() => {
                 target="_blank"
                 class="px-3 py-1.5 rounded-full border border-[#46464D] hover:bg-white/5 text-gray-300 hover:text-white transition-all cursor-pointer"
               >
-                Profile
+                Check Profile
               </NuxtLink>
 
-              <!-- Edit Application Button (Opens Modal for Notes & Status) -->
-              <button
-                type="button"
-                @click="openEditModal(app)"
-                class="px-3 py-1.5 rounded-full border border-[#46464D] hover:border-[#D0D4F7] hover:text-white text-gray-300 transition-all cursor-pointer flex items-center gap-1"
-                title="Edit review notes or change status"
-              >
-                <Icon name="ic:outline-edit" class="text-xs" />
-                <span>Edit</span>
-              </button>
 
               <template v-if="(app.Status === 'Pending' || app.Status === 'Shortlisted') && !isEventFinished(app.JOB_LISTING) && app.JOB_LISTING?.Status !== 'Completed'">
                 <button
