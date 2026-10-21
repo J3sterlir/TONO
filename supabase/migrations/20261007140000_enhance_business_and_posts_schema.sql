@@ -141,12 +141,24 @@ BEGIN
             WHERE "ACCOUNT_ID" = NEW."ACCOUNT_ID";
 
             INSERT INTO public."NOTIFICATION" (
-                "Account_ID", "Sender_Account_ID", "Title", "Message",
-                "Action_Url", "Type", "Category", "Action_Label", "Entity_ID",
-                "Entity_Type", "Metadata", "Is_Read", "Created_at"
+                "Account_ID",
+                "Sender_Account_ID",
+                "Type",
+                "Title",
+                "Content",
+                "Action_Link",
+                "Svg_Type",
+                "Avatar_Text",
+                "Action_Primary",
+                "Entity_ID",
+                "Entity_Type",
+                "Metadata",
+                "Is_Read",
+                "Created_At"
             ) VALUES (
                 v_owner_account_id,
                 NEW."ACCOUNT_ID",
+                'post_liked',
                 'New Like',
                 COALESCE(v_liker_username, 'Someone') || ' **liked** your post.',
                 CASE WHEN v_is_business THEN '/business/' || v_business_id || '?postId=' || NEW."POST_ID"
@@ -204,12 +216,24 @@ BEGIN
             END IF;
 
             INSERT INTO public."NOTIFICATION" (
-                "Account_ID", "Sender_Account_ID", "Title", "Message",
-                "Action_Url", "Type", "Category", "Action_Label", "Entity_ID",
-                "Entity_Type", "Metadata", "Is_Read", "Created_at"
+                "Account_ID",
+                "Sender_Account_ID",
+                "Type",
+                "Title",
+                "Content",
+                "Action_Link",
+                "Svg_Type",
+                "Avatar_Text",
+                "Action_Primary",
+                "Entity_ID",
+                "Entity_Type",
+                "Metadata",
+                "Is_Read",
+                "Created_At"
             ) VALUES (
                 v_owner_account_id,
                 NEW."ACCOUNT_ID",
+                'post_commented',
                 'New Comment',
                 COALESCE(v_commenter_username, 'Someone') || ' **commented** on your post: "' || v_comment_snippet || '"',
                 CASE WHEN v_is_business THEN '/business/' || v_business_id || '?postId=' || NEW."POST_ID"

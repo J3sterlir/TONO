@@ -11,6 +11,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo(`/Login${redirectQuery}`)
   }
 
+
   const { fetchCurrentUserProfile } = useTonoAuth()
   const profile = await fetchCurrentUserProfile(user.id)
 

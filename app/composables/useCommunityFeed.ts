@@ -288,16 +288,18 @@ export const useCommunityFeed = () => {
 
     try {
       if (prevLiked) {
-        await db
+        const { error } = await db
           .from('POST_LIKES')
           .delete()
           .eq('POST_ID', postId)
           .eq('ACCOUNT_ID', currentUserId)
+        if (error) throw error
       } else {
-        await db.from('POST_LIKES').insert({
+        const { error } = await db.from('POST_LIKES').insert({
           POST_ID: postId,
           ACCOUNT_ID: currentUserId
         })
+        if (error && error.code !== '23505') throw error
       }
     } catch (err) {
       console.error('[useCommunityFeed] toggleLike error:', err)
