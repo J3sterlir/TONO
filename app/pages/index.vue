@@ -1,8 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { motion } from 'motion-v'
 
 const isMobileMenuOpen = ref(false)
+const videoTranslateY = ref(0)
+
+let ticking = false
+const handleScroll = () => {
+    if (!ticking) {
+        window.requestAnimationFrame(() => {
+            if (window.scrollY < 1400) {
+                videoTranslateY.value = window.scrollY * 0.35
+            }
+            ticking = false
+        })
+        ticking = true
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onUnmounted(() => {
+    window.removeEventListener('scroll', handleScroll)
+})
 
 const features = [
     {
@@ -84,8 +106,38 @@ const scrollTo = (id: string) => {
         <!-- Hero & Nav Container -->
 
 
-        <div
-            class="bg-cover bg-center bg-blend-multiply min-h-screen flex flex-col bg-[radial-gradient(circle,rgba(255,255,255,0.09)_5%,rgba(18,18,20,1)_71%),radial-gradient(circle,rgba(255,255,255,0.09)_5%,rgba(18,18,20,1)_71%),linear-gradient(0deg,rgba(18,18,20,0.95)_0%,rgba(93,93,94,0)_51%,rgba(255,255,255,0.1)_100%),url('https://images.unsplash.com/photo-1604514288114-3851479df2f2')]">
+        <div class="relative min-h-screen flex flex-col overflow-hidden">
+            <!-- Background Video & Fallback Image Container with Parallax -->
+            <div class="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none z-0">
+                <!-- Parallax Media Wrapper -->
+                <div
+                    class="absolute top-[-12%] left-0 w-full h-[125%] pointer-events-none"
+                    :style="{
+                        transform: `translate3d(0, ${videoTranslateY}px, 0)`,
+                        willChange: 'transform'
+                    }">
+                    <!-- Base Unsplash Image (serves as poster / fallback while loading and for mobile) -->
+                    <div
+                        class="absolute inset-0 bg-cover bg-center bg-[url('https://images.unsplash.com/photo-1604514288114-3851479df2f2')]">
+                    </div>
+
+                    <!-- Native High-Performance Background Video -->
+                    <video
+                        autoplay
+                        muted
+                        loop
+                        playsinline
+                        preload="auto"
+                        class="absolute inset-0 w-full h-full object-cover">
+                        <source src="/HERO.mp4" type="video/mp4" />
+                    </video>
+                </div>
+            </div>
+
+            <!-- Deep Vignette Overlay: Toned down center for video clarity, matching #features rgba(0,0,0,1) for seamless scroll -->
+            <div
+                class="absolute inset-0 pointer-events-none z-1 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0)_15%,rgba(0,0,0,0.25)_35%,rgba(0,0,0,0.75)_58%,rgba(0,0,0,1)_78%),linear-gradient(0deg,rgba(0,0,0,1)_0%,rgba(0,0,0,0.92)_15%,rgba(0,0,0,0.45)_30%,transparent_50%),linear-gradient(180deg,rgba(0,0,0,0.9)_0%,rgba(0,0,0,0.35)_15%,transparent_30%)]">
+            </div>
 
             <!-- Sticky Navigation Bar -->
 
@@ -116,37 +168,37 @@ const scrollTo = (id: string) => {
                 </div>
             </div>
 
-            <!-- Hero Body -->
+            <!-- Hero Body (Grouped closely on mobile, spaced on desktop) -->
             <div
-                class="relative flex-1 flex flex-col gap-8 sm:gap-10 items-center justify-center py-16 sm:py-24 px-4 text-center">
-                <motion.div class="relative flex flex-col gap-6 sm:gap-10 items-center justify-center max-w-5xl"
-                    :initial="{ opacity: 0, scale: 0 }" :animate="{ opacity: 1, scale: 1 }" :transition="{
-                        duration: 0.10,
-                        scale: { type: 'spring', visualDuration: 0.2, bounce: 0.1 }
+                class="relative z-10 flex-1 flex flex-col justify-end md:justify-between items-start gap-10 pb-12 sm:pb-16 lg:pb-50 pt-16 md:py-26 px-6 sm:px-12 lg:px-16 max-w-7xl mx-auto w-full text-left">
+                <motion.div class="relative flex flex-col gap-4 sm:gap-6 items-start max-w-3xl"
+                    :initial="{ opacity: 0, y: 30 }" :animate="{ opacity: 1, y: 0 }" :transition="{
+                        duration: 0.45,
+                        ease: 'easeOut'
                     }" style="will-change: transform, opacity;">
                     <h1
-                        class="font-StackSansHeadline text-white font-bold text-3xl xs:text-4xl sm:text-6xl md:text-7xl lg:text-[6rem] leading-tight tracking-tight">
+                        class="font-StackSansHeadline text-white font-bold text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-[4.75rem] leading-tight tracking-tight">
                         LOCAL MUSICIANS <br>
-                        <mark class="bg-[#b4b8da]/25 text-[#e5e7ff] px-2">BEST FRIEND</mark>
+                        <mark class="bg-[#b4b8da]/25 text-[#e5e7ff] px-2 rounded-lg">BEST FRIEND</mark>
                     </h1>
                     <h1
-                        class="font-StackSansHeadline text-white font-bold text-3xl xs:text-4xl sm:text-6xl md:text-7xl lg:text-[6rem] leading-tight tracking-tight blur-xl opacity-75 absolute animate-pulse pointer-events-none">
+                        class="font-StackSansHeadline text-white font-bold text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-[4.75rem] leading-tight tracking-tight blur-xl opacity-60 absolute animate-pulse pointer-events-none">
                         LOCAL MUSICIANS <br> BEST FRIEND
                     </h1>
                 </motion.div>
 
                 <!-- Hero CTA Buttons -->
                 <motion.div
-                    class="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-10 w-full sm:w-auto px-4"
+                    class="flex xs:flex-row items-center justify-center gap-3 sm:gap-5 w-fit xs:w-auto"
                     :initial="{ opacity: 0, y: 24 }" :animate="{ opacity: 1, y: 0 }"
                     :transition="{ duration: 0.5, ease: 'easeOut', delay: 0.15 }">
                     <button @click="navigateTo('/Signin')"
-                        class="w-full sm:w-auto bg-[#b4b8da] py-2.5 px-6 sm:px-8 text-[#121214] font-bold rounded-full cursor-pointer hover:bg-[#b4b8da]/80 hover:text-white transition-all shadow-lg text-sm sm:text-base">
+                        class="inline-flex items-center justify-center min-w-31.25 sm:min-w-36.25 bg-[#b4b8da] border border-transparent py-2.5 px-6 sm:px-8 text-[#121214] font-bold rounded-full cursor-pointer hover:bg-[#b4b8da]/80 hover:text-white transition-all shadow-lg text-sm sm:text-base leading-normal">
                         Sign In
                     </button>
 
                     <button @click="scrollTo('features')"
-                        class="w-full sm:w-auto bg-[#121214]/80 py-2.5 px-6 sm:px-8 text-[#b4b8da] font-bold rounded-full cursor-pointer border border-[#b4b8da]/50 hover:bg-[#b4b8da]/20 hover:text-white transition-all text-sm sm:text-base">
+                        class="inline-flex items-center justify-center min-w-31.25 sm:min-w-36.25 bg-[#121214]/80 border border-[#b4b8da]/50 py-2.5 px-6 sm:px-8 text-[#b4b8da] font-bold rounded-full cursor-pointer hover:bg-[#b4b8da]/20 hover:text-white transition-all text-sm sm:text-base backdrop-blur-md leading-normal">
                         Learn More
                     </button>
                 </motion.div>
