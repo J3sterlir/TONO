@@ -6,24 +6,32 @@ const isMobileMenuOpen = ref(false)
 
 const features = [
     {
-        title: 'Discover Local Talent',
-        description: 'Browse featured artists, venues, and emerging sounds from your city in one place.',
-        accent: 'md:col-span-2',
+        title: 'Discover Local Artists',
+        description: 'Find indie musicians, listen to fresh original tracks, and explore the talent shaping your local music scene.',
+        image: '/images/2491050467.jpg',
+        actionText: 'Explore Artists',
+        link: '/Community',
     },
     {
-        title: 'Book with Confidence',
-        description: 'Streamline bookings, share availability, and manage requests without endless back-and-forth.',
-        accent: '',
+        title: 'Find Live Gigs',
+        description: 'Stay up to date with live performances, discover venue open calls, and never miss a great show nearby.',
+        image: '/images/9102450467.jpg',
+        actionText: 'Discover Gigs',
+        link: '/UserNavEvents',
     },
     {
-        title: 'Grow Your Audience',
-        description: 'Promote your performances and connect with fans who are actively looking for live music.',
-        accent: '',
+        title: 'Connect & Share',
+        description: 'Share performance clips, talk about favorite songs, and connect with fellow music lovers in your community.',
+        image: '/images/4532702046791.jpg',
+        actionText: 'Join Community',
+        link: '/Community',
     },
     {
-        title: 'Stay in Sync',
-        description: 'Keep event details, schedules, and communication organized for smooth collaboration.',
-        accent: 'md:col-span-2',
+        title: 'Form Your Band',
+        description: 'Looking to start a band or need a guest musician? Team up with compatible artists ready to make music.',
+        image: '/images/3279102450467.jpg',
+        actionText: 'Find Bandmates',
+        link: '/Signin',
     },
 ]
 
@@ -149,34 +157,73 @@ const scrollTo = (id: string) => {
         <section id="features"
             class="scroll-mt-16 sm:scroll-mt-20 bg-cover bg-center min-h-screen bg-[radial-gradient(circle,rgba(18,18,20,0)_33%,rgba(0,0,0,1)_100%),linear-gradient(180deg,rgba(0,0,0,1)_0%,rgba(180,184,218,1)_70%,rgba(18,18,20,1)_100%)]">
             <div
-                class="flex flex-col items-center justify-center px-4 sm:px-6 py-16 sm:py-20 lg:py-24 max-w-7xl mx-auto">
-                <div class="mb-8 sm:mb-12 text-center">
-                    <p class="mb-2 sm:mb-3 text-xs sm:text-sm uppercase tracking-[0.35em] text-[#b4b8da]">Why TONO</p>
-                    <h2 class="font-StackSansHeadline text-white font-bold text-3xl sm:text-4xl md:text-[3rem]">Features
-                    </h2>
+                class="flex flex-col px-4 sm:px-6 py-16 sm:py-20 lg:py-24 max-w-7xl mx-auto w-full">
+                <!-- Section Header: Headline on Left, Action Pill Button on Right -->
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 sm:mb-14 w-full">
+                    <div>
+                        <p class="mb-2 sm:mb-3 text-xs sm:text-sm uppercase tracking-[0.35em] text-[#b4b8da] font-medium font-Geist">Why TONO</p>
+                        <h2 class="font-Sora text-white font-bold text-3xl sm:text-4xl lg:text-[2.75rem] tracking-tight leading-tight">
+                            Built for local music,<br class="hidden sm:inline" />
+                            made for real connections.
+                        </h2>
+                    </div>
+                    <div class="shrink-0">
+                        <button
+                            @click="navigateTo('/Signin')"
+                            class="inline-flex items-center gap-2.5 rounded-full bg-[#121214]/90 hover:bg-[#1b1b1d] border border-white/15 hover:border-[#b4b8da]/60 text-white hover:text-[#d0d4f7] px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold tracking-wide transition-all duration-300 hover:scale-105 shadow-lg cursor-pointer">
+                            <span class="h-2 w-2 rounded-full bg-[#b4b8da]"></span>
+                            <span>Join TONO</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div class="grid w-full max-w-6xl gap-4 sm:gap-6 md:grid-cols-2">
+                <!-- 2-Column Expansive Feature Cards Layout -->
+                <div class="grid w-full grid-cols-1 md:grid-cols-2 gap-8 lg:gap-10 xl:gap-12 items-stretch">
                     <motion.article v-for="(feature, index) in features" :key="feature.title"
-                        :initial="{ opacity: 0, y: 40 }" :whileInView="{ opacity: 1, y: 0 }"
-                        :viewport="{ once: true, amount: 0.35 }"
-                        :transition="{ duration: 0.7, ease: 'easeOut', delay: index * 0.12 }" :class="[
-                            'group relative overflow-hidden rounded-2xl border border-white/15 bg-[#121214]/70 p-6 sm:p-8 text-white shadow-[0_20px_60px_rgba(0,0,0,0.25)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-[#b4b8da]/50',
-                            feature.accent,
-                        ]">
+                        :initial="{ opacity: 0, y: 30 }"
+                        :whileInView="{ opacity: 1, y: 0 }"
+                        :viewport="{ once: true, amount: 0.15 }"
+                        :transition="{ duration: 0.6, ease: 'easeOut', delay: (index % 2) * 0.12 }"
+                        class="group flex flex-col rounded-3xl border border-white/10 bg-[#121214]/80 p-6 sm:p-7 backdrop-blur-xl transition duration-300 hover:border-[#b4b8da]/40 hover:-translate-y-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+                        <!-- Top Image Container with Expansive Aspect Ratio for Grain & Detail -->
                         <div
-                            class="absolute inset-0 bg-linear-to-br from-white/10 to-transparent opacity-0 transition duration-300 group-hover:opacity-100 pointer-events-none">
-                        </div>
-                        <div class="relative">
+                            class="relative w-full aspect-16/10 overflow-hidden rounded-2xl border border-white/10 bg-[#18181b] shadow-lg mb-6">
+                            <img
+                                :src="feature.image"
+                                :alt="feature.title"
+                                class="w-full h-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
+                            />
                             <div
-                                class="mb-4 flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-[#b4b8da]/20 text-xs sm:text-sm font-semibold text-[#b4b8da]">
-                                {{ index + 1 }}
+                                class="absolute inset-0 bg-linear-to-t from-[#0e0e10]/60 via-transparent to-transparent pointer-events-none">
                             </div>
-                            <h3 class="text-xl sm:text-2xl font-semibold">{{ feature.title }}</h3>
-                            <p class="mt-2 sm:mt-3 text-xs sm:text-sm leading-6 sm:leading-7 text-slate-300">{{
-                                feature.description }}</p>
+                        </div>
+
+                        <!-- Card Content -->
+                        <h3 class="font-Sora text-xl sm:text-2xl font-semibold text-white tracking-tight group-hover:text-[#d0d4f7] transition-colors mb-2.5">
+                            {{ feature.title }}
+                        </h3>
+                        <p class="font-HankenGrotesk text-sm sm:text-base leading-relaxed text-[#c7c5ce] mb-6 flex-1">
+                            {{ feature.description }}
+                        </p>
+
+                        <!-- Bottom Link with Dot -->
+                        <div class="mt-auto pt-2">
+                            <button
+                                @click="navigateTo(feature.link)"
+                                class="inline-flex items-center gap-2.5 text-xs sm:text-sm font-semibold text-[#b4b8da] group-hover:text-white transition-colors cursor-pointer group/link">
+                                <span class="h-2 w-2 rounded-full bg-[#b4b8da] group-hover/link:bg-[#d0d4f7] group-hover/link:scale-125 transition-all"></span>
+                                <span class="tracking-wider uppercase font-Geist text-xs sm:text-[13px]">{{ feature.actionText }}</span>
+                            </button>
                         </div>
                     </motion.article>
+                </div>
+
+                <!-- Section Photo Credit Attribution Badge -->
+                <div class="mt-8 sm:mt-12 flex justify-end w-full">
+                    <span
+                        class="inline-block px-3.5 py-1.5 rounded-full bg-[#0e0e10]/85 backdrop-blur-md border border-white/15 text-[11px] sm:text-xs text-[#c7c5ce] font-Geist tracking-wider">
+                        Photos By Jeremiah Lirag
+                    </span>
                 </div>
             </div>
         </section>
@@ -197,34 +244,133 @@ const scrollTo = (id: string) => {
                         TONO</h2>
                 </div>
 
-                <div class="grid w-full gap-4 sm:gap-6 md:grid-cols-2">
-                    <article
-                        class="rounded-2xl border border-white/15 bg-[#121214]/70 p-6 sm:p-8 backdrop-blur-xl shadow-lg transition duration-300 hover:border-[#b4b8da]/50">
-                        <div
-                            class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#b4b8da]/20 text-[#b4b8da]">
-                            <Icon name="ic:outline-music-note" class="text-xl" />
+                <div class="flex flex-col gap-16 sm:gap-24 lg:gap-32 w-full mt-4 sm:mt-6">
+                    <!-- Section 1: Rooted in Local Music -->
+                    <motion.article
+                        :initial="{ opacity: 0, y: 30 }"
+                        :whileInView="{ opacity: 1, y: 0 }"
+                        :viewport="{ once: true, amount: 0.2 }"
+                        :transition="{ duration: 0.7, ease: 'easeOut' }"
+                        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-stretch w-full">
+                        <!-- Left Column: Category Label & Large Display Headline -->
+                        <div class="sm:col-span-2 lg:col-span-4 flex flex-col justify-between py-1 lg:py-3">
+                            <div class="flex items-center gap-2 text-[#b4b8da]">
+                                <Icon name="ic:outline-music-note" class="text-base" />
+                                <span class="font-Geist text-xs uppercase tracking-[0.25em] font-medium">(ABOUT)</span>
+                            </div>
+                            <h3
+                                class="font-Sora text-3xl sm:text-4xl lg:text-[2.25rem] xl:text-[2.65rem] font-bold text-white tracking-tight uppercase leading-[1.08] mt-6 lg:mt-0">
+                                ROOTED IN<br />
+                                <span class="font-normal italic text-[#d0d4f7]">LOCAL MUSIC.</span>
+                            </h3>
                         </div>
-                        <h3 class="text-xl sm:text-2xl font-semibold text-white mb-3">Rooted in Local Music</h3>
-                        <p class="text-xs sm:text-sm leading-6 sm:leading-7 text-slate-300">
-                            TONO was built by musicians, for musicians. We believe the lifeblood of music begins in
-                            local rehearsal rooms, indie bars, and grassroots communities. Our platform bridges the gap
-                            between independent artists, organizers, and music enthusiasts.
-                        </p>
-                    </article>
 
-                    <article
-                        class="rounded-2xl border border-white/15 bg-[#121214]/70 p-6 sm:p-8 backdrop-blur-xl shadow-lg transition duration-300 hover:border-[#b4b8da]/50">
-                        <div
-                            class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#b4b8da]/20 text-[#b4b8da]">
-                            <Icon name="ic:outline-hub" class="text-xl" />
+                        <!-- Center Column: Editorial Portrait Image -->
+                        <div class="sm:col-span-1 lg:col-span-4 flex flex-col justify-center">
+                            <div
+                                class="relative w-full aspect-4/5 sm:aspect-4/5 lg:aspect-3/4 overflow-hidden rounded-2xl border border-white/10 bg-[#1b1b1d] shadow-2xl group">
+                                <img
+                                    src="/images/554698562.jpg"
+                                    alt="Rooted in Local Music"
+                                    class="w-full h-full object-cover object-center transition duration-700 ease-out group-hover:scale-105"
+                                />
+                                <div
+                                    class="absolute inset-0 bg-linear-to-t from-[#0e0e10]/60 via-transparent to-transparent pointer-events-none">
+                                </div>
+                            </div>
                         </div>
-                        <h3 class="text-xl sm:text-2xl font-semibold text-white mb-3">Seamless Collaboration</h3>
-                        <p class="text-xs sm:text-sm leading-6 sm:leading-7 text-slate-300">
-                            Finding compatible bandmates, showcasing your portfolio, and discovering gigs shouldn’t take
-                            endless back-and-forth. TONO provides the tools local musicians need to get discovered, stay
-                            organized, and grow their craft.
-                        </p>
-                    </article>
+
+                        <!-- Right Column: Narrative Copy & Pill CTA Button -->
+                        <div
+                            class="sm:col-span-1 lg:col-span-4 flex flex-col justify-center lg:justify-start gap-6 lg:gap-8 py-1 lg:py-3">
+                            <div class="space-y-4 font-HankenGrotesk text-sm sm:text-base leading-relaxed text-[#c7c5ce]">
+                                <p>
+                                    TONO was built by musicians, for musicians. We believe the lifeblood of music begins in
+                                    local rehearsal rooms, indie bars, and grassroots communities.
+                                </p>
+                                <p>
+                                    Our platform bridges the gap between independent artists, organizers, and music enthusiasts.
+                                </p>
+                            </div>
+                            <div>
+                                <button
+                                    @click="navigateTo('/Community')"
+                                    class="inline-flex items-center justify-center rounded-full bg-[#b4b8da] hover:bg-[#d0d4f7] text-[#0e0e10] font-Sora font-bold text-xs uppercase tracking-widest px-7 py-3 transition duration-300 hover:scale-105 cursor-pointer">
+                                    Learn More
+                                </button>
+                            </div>
+                        </div>
+                    </motion.article>
+
+                    <!-- Subtle Section Divider -->
+                    <div class="w-full h-px bg-linear-to-r from-transparent via-white/10 to-transparent"></div>
+
+                    <!-- Section 2: Seamless Collaboration -->
+                    <motion.article
+                        :initial="{ opacity: 0, y: 30 }"
+                        :whileInView="{ opacity: 1, y: 0 }"
+                        :viewport="{ once: true, amount: 0.2 }"
+                        :transition="{ duration: 0.7, ease: 'easeOut', delay: 0.15 }"
+                        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-stretch w-full">
+                        <!-- Left Column: Category Label & Large Display Headline -->
+                        <div class="sm:col-span-2 lg:col-span-4 flex flex-col justify-between py-1 lg:py-3">
+                            <div class="flex items-center gap-2 text-[#b4b8da]">
+                                <Icon name="ic:outline-hub" class="text-base" />
+                                <span class="font-Geist text-xs uppercase tracking-[0.25em] font-medium">(COLLABORATION)</span>
+                            </div>
+                            <h3
+                                class="font-Sora text-3xl sm:text-4xl lg:text-[2.25rem] xl:text-[2.65rem] font-bold text-white tracking-tight uppercase leading-[1.08] mt-6 lg:mt-0">
+                                SEAMLESS<br />
+                                <span class="font-normal italic text-[#d0d4f7]">COLLABORATION.</span>
+                            </h3>
+                        </div>
+
+                        <!-- Center Column: Editorial Portrait Image with Attribution -->
+                        <div class="sm:col-span-1 lg:col-span-4 flex flex-col justify-center">
+                            <div
+                                class="relative w-full aspect-4/5 sm:aspect-4/5 lg:aspect-3/4 overflow-hidden rounded-2xl border border-white/10 bg-[#1b1b1d] shadow-2xl group">
+                                <img
+                                    src="/images/1746024537245.jpg"
+                                    alt="Seamless Collaboration"
+                                    class="w-full h-full object-cover object-center transition duration-700 ease-out group-hover:scale-105"
+                                />
+                                <div
+                                    class="absolute inset-0 bg-linear-to-t from-[#0e0e10]/70 via-transparent to-transparent pointer-events-none">
+                                </div>
+                                <!-- Photo Credit Attribution Badge -->
+                                
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Narrative Copy & Pill CTA Button -->
+                        <div
+                            class="sm:col-span-1 lg:col-span-4 flex flex-col justify-center lg:justify-between gap-6 lg:gap-8 py-1 lg:py-3">
+                            <div class="flex flex-col gap-6">
+                                <div class="space-y-4 font-HankenGrotesk text-sm sm:text-base leading-relaxed text-[#c7c5ce]">
+                                <p>
+                                    Finding compatible bandmates, showcasing your portfolio, and discovering gigs shouldn’t take
+                                    endless back-and-forth.
+                                </p>
+                                <p>
+                                    TONO provides the tools local musicians need to get discovered, stay organized, and grow their craft.
+                                </p>
+                            </div>
+                            <div>
+                                <button
+                                    @click="navigateTo('/Signin')"
+                                    class="inline-flex items-center justify-center rounded-full bg-[#b4b8da] hover:bg-[#d0d4f7] text-[#0e0e10] font-Sora font-bold text-xs uppercase tracking-widest px-7 py-3 transition duration-300 hover:scale-105 cursor-pointer">
+                                    Join TONO
+                                </button>
+                            </div>
+                            </div>
+                            <div>
+                                <span
+                                    class="inline-block px-3 py-1 rounded-full bg-[#0e0e10]/85 backdrop-blur-md border border-white/15 text-[10px] sm:text-[11px] text-[#c7c5ce] font-Geist tracking-wider">
+                                    Photo By Dinno Franco Noora
+                                </span>
+                            </div>
+                        </div>
+                    </motion.article>
                 </div>
             </div>
         </section>
