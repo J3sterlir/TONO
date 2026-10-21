@@ -133,7 +133,7 @@ const handleSubmit = async () => {
     >
       <div
         v-if="isReportModalOpen && reportConfig"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+        class="fixed inset-0 z-60 flex items-center justify-center p-4 sm:p-6"
       >
         <!-- Backdrop -->
         <div

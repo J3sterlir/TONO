@@ -87,11 +87,15 @@ export const useTonoSongs = () => {
     return globalAudioElement
   }
 
-  // Real wall-clock time tracking for fraud-protected play counts
+  // Real wall-clock time tracking for fraud-protected play counts (Authenticated listeners only)
   const startWallClockTracking = () => {
     stopWallClockTracking()
     wallClockTimer = setInterval(async () => {
       if (isPlaying.value && currentSong.value && !verifiedPlayCounted.value) {
+        // Omit guests from play count tracking
+        if (!currentUser.value) {
+          return
+        }
         activeListenSeconds.value += 1
         if (activeListenSeconds.value >= 30) {
           verifiedPlayCounted.value = true
@@ -111,6 +115,8 @@ export const useTonoSongs = () => {
 
   // Sends verified play request to backend
   const recordVerifiedPlay = async (songId: string) => {
+    if (!currentUser.value) return
+
     try {
       const res: any = await $fetch('/api/songs/play', {
         method: 'POST',

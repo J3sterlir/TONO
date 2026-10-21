@@ -218,7 +218,7 @@ const handleSave = async () => {
               type="text"
               v-model="title"
               maxlength="80"
-              placeholder="e.g. Winner: Battle of the Bands 2025"
+              placeholder="e.g. Winner: Battle of the Bands"
               class="w-full px-3.5 py-2.5 bg-[#1E1E24] border border-[#46464D]/60 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7] focus:ring-1 focus:ring-[#D0D4F7] transition-all" />
           </div>
 
@@ -244,7 +244,7 @@ const handleSave = async () => {
               type="text"
               v-model="description"
               maxlength="120"
-              placeholder="e.g. Rock Manila Grand Finals • Ranked #1 out of 50 bands"
+              placeholder="e.g. Rockrackan Naga • Ranked #1 out of 50 bands"
               class="w-full px-3.5 py-2.5 bg-[#1E1E24] border border-[#46464D]/60 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7] focus:ring-1 focus:ring-[#D0D4F7] transition-all" />
           </div>
         </div>

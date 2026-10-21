@@ -76,7 +76,7 @@ const handleSave = () => {
                 {{ isEdit ? 'Edit Featured Media' : 'Add Featured Media' }}
               </h2>
               <span class="text-xs text-gray-400 font-Geist">
-                YouTube, Google Drive, or Vimeo Video
+                YouTube, Facebook (Videos & Reels), Google Drive, or Vimeo
               </span>
             </div>
           </div>
@@ -91,13 +91,10 @@ const handleSave = () => {
 
         <!-- Form Body -->
         <div class="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 scrollbar-thin">
-          <!-- Public / Unlisted Notice Banner -->
-          <div class="p-3.5 rounded-xl bg-[#1E1E24] border border-[#46464D]/50 flex items-start gap-3">
-            <Icon name="ic:outline-info" class="text-xl text-[#D0D4F7] shrink-0 mt-0.5" />
-            <div class="text-xs text-gray-300 leading-relaxed">
-              <p class="font-semibold text-white mb-0.5">Sharing Permissions Notice</p>
-              Please ensure your video link is set to <span class="text-[#D0D4F7] font-medium">Public</span> or <span class="text-[#D0D4F7] font-medium">Unlisted</span>. For Google Drive, the file access must be set to <span class="text-[#D0D4F7] font-medium">'Anyone with the link can view'</span>.
-            </div>
+          <!-- Public Sharing Permissions Notice -->
+          <div class="p-3 rounded-xl bg-[#1E1E24] border border-[#46464D]/50 flex items-center gap-2.5 text-xs text-gray-300">
+            <Icon name="mdi:earth" class="text-lg text-[#D0D4F7] shrink-0" />
+            <span>All media must be set to <strong class="text-white font-medium">Public</strong> on their respective upload sites to be embedded.</span>
           </div>
 
           <!-- Video URL Input -->
@@ -108,10 +105,10 @@ const handleSave = () => {
             <input
               type="text"
               v-model="url"
-              placeholder="e.g. https://www.youtube.com/watch?v=... or Google Drive link"
+              placeholder="e.g. YouTube, Facebook Video/Reel, Google Drive, or Vimeo link"
               class="w-full px-3.5 py-2.5 bg-[#1E1E24] border border-[#46464D]/60 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-hidden focus:border-[#D0D4F7] focus:ring-1 focus:ring-[#D0D4F7] transition-all" />
             <p v-if="url && !isValid" class="text-[11px] text-amber-300 mt-1">
-              Please enter a valid YouTube, Google Drive, or Vimeo link.
+              Please enter a valid YouTube, Facebook (Video or Reel), Google Drive, or Vimeo link.
             </p>
           </div>
 

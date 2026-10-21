@@ -57,6 +57,16 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // 0. Rule: Guest / Unauthenticated listeners are strictly omitted from play counts. Prevent guest database entries.
+    if (!listenerAccountId) {
+      return {
+        success: true,
+        counted: false,
+        reason: 'guest_stream_omitted',
+        message: 'Guest plays are omitted from play count.'
+      }
+    }
+
     // 1. Fetch song creator's account ID to check for artist self-listens
     const { data: songData } = await supabaseAdmin
       .from('SONG')
@@ -106,31 +116,6 @@ export default defineEventHandler(async (event) => {
           counted: false,
           reason: 'daily_limit_reached',
           message: 'Daily stream already recorded for this user (Resets in 24 hours).'
-        }
-      }
-    }
-
-    // 4. Guest / Unauthenticated listener rate limiting (cooldown window)
-    if (!listenerAccountId) {
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-      let guestQuery = supabaseAdmin
-        .from('SONG_PLAYS')
-        .select('Play_ID')
-        .eq('Song_ID', songId)
-        .is('Listener_Account_ID', null)
-        .gte('Created_at', twoHoursAgo)
-
-      if (userCity && typeof userCity === 'string') {
-        guestQuery = guestQuery.eq('User_City', userCity.trim())
-      }
-
-      const { data: recentGuestPlays } = await guestQuery.limit(1)
-      if (recentGuestPlays && recentGuestPlays.length > 0) {
-        return {
-          success: true,
-          counted: false,
-          reason: 'guest_cooldown_active',
-          message: 'Recent guest stream recorded for this track.'
         }
       }
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { cities, barangays } from 'select-philippines-address'
 
 interface SigninFormData {
@@ -33,8 +33,16 @@ const emit = defineEmits<{
 }>()
 
 const showPassword = ref(false)
-const passwordMismatch = ref(false)
 const showError = ref(false)
+
+const passwordMismatch = computed(() => {
+  if (!props.form.password || !props.form.confirmPassword) return false
+  return props.form.password !== props.form.confirmPassword
+})
+
+watch(() => props.isValid, (valid) => {
+  if (valid) showError.value = false
+})
 
 // Dropdown state
 const isCityOpen = ref(false)
@@ -93,12 +101,6 @@ const handleContinue = () => {
 
 const updateForm = (key: keyof SigninFormData, value: string) => {
   emit('update:form', { ...props.form, [key]: value })
-}
-
-const checkPasswordMatch = () => {
-  passwordMismatch.value = props.form.password && props.form.confirmPassword 
-    ? props.form.password !== props.form.confirmPassword 
-    : false
 }
 </script>
 
@@ -181,7 +183,7 @@ const checkPasswordMatch = () => {
     <div class="relative">
       <Icon name="ic:outline-lock" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
       <input :type="showPassword ? 'text' : 'password'" placeholder="Enter your password" :value="props.form.password"
-        @input="updateForm('password', ($event.target as HTMLInputElement).value); checkPasswordMatch()"
+        @input="updateForm('password', ($event.target as HTMLInputElement).value)"
         class="placeholder:text-sm w-full pl-12 pr-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
       <button type="button" class="flex absolute right-3 top-1/2 -translate-y-1/2 text-[#7A7A7D]"
         @click="showPassword = !showPassword">
@@ -195,7 +197,7 @@ const checkPasswordMatch = () => {
     <div class="relative">
       <Icon name="ic:outline-lock" class="absolute left-3 top-1/2 -translate-y-1/2 text-2xl text-[#7A7A7D]" />
       <input :type="showPassword ? 'text' : 'password'" placeholder="Re-enter your password" :value="props.form.confirmPassword"
-        @input="updateForm('confirmPassword', ($event.target as HTMLInputElement).value); checkPasswordMatch()"
+        @input="updateForm('confirmPassword', ($event.target as HTMLInputElement).value)"
         class="placeholder:text-sm w-full pl-12 pr-12 p-1.5 rounded-md bg-[#1E1E20] text-white border border-[#3A3A3C] focus:outline-none focus:ring-2 focus:ring-[#D0D4F7] focus:border-transparent" />
       <button type="button" class="flex absolute right-3 top-1/2 -translate-y-1/2 text-[#7A7A7D]"
         @click="showPassword = !showPassword">
@@ -204,7 +206,7 @@ const checkPasswordMatch = () => {
     </div>
 
     <div v-if="passwordMismatch" class="text-red-400 text-sm mt-1">Passwords do not match</div>
-    <div v-if="showError && validationMessage" class="mt-1 text-sm text-amber-300">{{ validationMessage }}</div>
+    <div v-if="showError && validationMessage && (!passwordMismatch || !validationMessage.includes('match'))" class="mt-1 text-sm text-amber-300">{{ validationMessage }}</div>
     
     <div class="flex items-center justify-center mt-3 sm:mt-4">
       <button 

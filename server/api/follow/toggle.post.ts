@@ -67,6 +67,16 @@ export default defineEventHandler(async (event) => {
 
     if (artistRow?.ACCOUNT_ID) {
       resolvedTargetAccountId = artistRow.ACCOUNT_ID
+    } else {
+      const { data: bizRow } = await supabaseAdmin
+        .from('BUSINESS_PROFILE')
+        .select('ACCOUNT_ID')
+        .eq('BUSINESS_ID', resolvedTargetAccountId)
+        .maybeSingle()
+
+      if (bizRow?.ACCOUNT_ID) {
+        resolvedTargetAccountId = bizRow.ACCOUNT_ID
+      }
     }
 
     if (currentUserId.toLowerCase() === resolvedTargetAccountId.toLowerCase()) {

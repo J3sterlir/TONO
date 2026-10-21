@@ -19,10 +19,24 @@ const media = computed(() => parseMediaUrl(props.url))
 
 <template>
   <div class="w-full h-fit">
-    <!-- 1. Video Player (YouTube, Google Drive, Vimeo - 16:9 Fluid Aspect Ratio) -->
+    <!-- 1. Video Player (YouTube, Facebook Video, Google Drive, Vimeo - 16:9 Fluid Aspect Ratio) -->
     <div
       v-if="media.aspect === 'video' && media.embedUrl"
       class="relative w-full aspect-video rounded-xl overflow-hidden bg-black/60 shadow-lg border border-[#46464D]/40"
+      :style="maxHeight ? { maxHeight } : {}">
+      <iframe
+        :src="media.embedUrl"
+        :title="title || media.platformName"
+        class="absolute inset-0 w-full h-full border-0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+        loading="lazy" />
+    </div>
+
+    <!-- 1b. Portrait Video / Reel Player (Facebook Reels, YouTube Shorts - 9:16 Aspect Ratio) -->
+    <div
+      v-else-if="media.aspect === 'video-portrait' && media.embedUrl"
+      class="relative w-full max-w-sm mx-auto aspect-9/16 rounded-xl overflow-hidden bg-black/80 shadow-lg border border-[#46464D]/40"
       :style="maxHeight ? { maxHeight } : {}">
       <iframe
         :src="media.embedUrl"

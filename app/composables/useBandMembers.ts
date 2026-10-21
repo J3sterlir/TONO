@@ -203,35 +203,28 @@ export function useBandMembers() {
     try {
       const normalizedRole = normalizeRole(role) || 'Member'
 
-      const { data, error } = await db.rpc('invite_band_member', {
-        p_band_id: bandId,
-        p_member_account_id: memberAccountId,
-        p_role: normalizedRole,
+      // Call secure backend endpoint that enforces caller is a registered Band
+      const response = await $fetch<{ success: boolean; role: string; error?: string }>('/api/bands/invite', {
+        method: 'POST',
+        body: {
+          bandId,
+          memberAccountId,
+          role: normalizedRole,
+        }
       })
 
-      if (error) {
-        // Fallback upsert if RPC fails
-        console.warn('[useBandMembers] RPC invite_band_member failed, trying upsert fallback:', error.message)
-        const { error: upsertErr } = await db
-          .from('BAND_MEMBERS')
-          .upsert({
-            Band_ID: bandId,
-            Member_ID: memberAccountId,
-            Instrument_Role: normalizedRole,
-            Status: 'Pending',
-            Invited_at: new Date().toISOString(),
-          }, { onConflict: 'Band_ID,Member_ID' })
-
-        if (upsertErr) throw upsertErr
+      if (!response?.success) {
+        throw new Error(response?.error || 'Failed to send invitation.')
       }
 
       // Refresh members list
       await fetchBandMembers(bandId, true)
       return { success: true, role: normalizedRole }
     } catch (err: any) {
-      console.error('[useBandMembers] Error inviting member:', err)
-      errorMessage.value = err.message || 'Failed to send invitation.'
-      return { success: false, error: err.message || 'Failed to send invitation.' }
+      const errMsg = err?.data?.statusMessage || err?.message || 'Failed to send invitation.'
+      console.error('[useBandMembers] Error inviting member:', errMsg)
+      errorMessage.value = errMsg
+      return { success: false, error: errMsg }
     } finally {
       isActionLoading.value = false
     }

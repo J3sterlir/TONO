@@ -538,20 +538,24 @@ export const useArtistPosts = () => {
     }
 
     try {
-      if (newLiked) {
-        const { error } = await db.from('POST_LIKES').insert({
-          POST_ID: postId,
-          ACCOUNT_ID: currentUserId,
-        })
-        if (error && error.code !== '23505') { // 23505 is unique violation (already liked)
-          throw error
+      const response = await $fetch<{
+        success: boolean
+        userHasLiked: boolean
+        likeCount: number
+      }>('/api/posts/like', {
+        method: 'POST',
+        body: { postId }
+      })
+
+      if (response && response.success) {
+        if (targetPost) {
+          targetPost.userHasLiked = response.userHasLiked
+          targetPost.likeCount = response.likeCount
         }
-      } else {
-        const { error } = await db
-          .from('POST_LIKES')
-          .delete()
-          .match({ POST_ID: postId, ACCOUNT_ID: currentUserId })
-        if (error) throw error
+        if (active) {
+          active.userHasLiked = response.userHasLiked
+          active.likeCount = response.likeCount
+        }
       }
       return true
     } catch (err) {

@@ -81,11 +81,11 @@ export const useTonoAuth = () => {
 
     if (error) {
       console.error('Error resolving username:', error)
-      throw new Error('Unable to look up username. (Is the RPC function created in Supabase?)')
+      throw new Error('Unable to look up username.')
     }
 
     if (!data) {
-      throw new Error('Username not found.')
+      throw new Error('User not found.')
     }
     
     return data

@@ -252,7 +252,7 @@ const handleLogout = async () => {
               : 'bg-[#D0D4F7] text-[#0E0E10] border-[#D0D4F7] hover:bg-white shadow-md shadow-[#D0D4F7]/20'">
             <Icon :name="isLocationFilterActive ? 'ic:outline-my-location' : 'ic:baseline-location-searching'"
               class="text-base" />
-            <span>{{ isLocationFilterActive ? 'Disable Location Filter (Show Everywhere)' : 'Re-enable Near Me'
+            <span>{{ isLocationFilterActive ? 'Disable Location Filter (Show Everywhere)' : 'Enable Near Me'
             }}</span>
           </button>
 
@@ -492,7 +492,7 @@ const handleLogout = async () => {
             <NuxtLink v-for="(artist, index) in discoverArtists" :key="artist.artist_id"
               :to="artist.username ? `/artist/${artist.username}` : '#'" :class="[
                 'group/card relative overflow-hidden rounded-2xl cursor-pointer transition-all duration-500 ease-in-out flex-1 min-w-50 hover:min-w-100 hover:flex-[3_3_0%] border-2 border-transparent hover:border-[#D0D4F7] hover:z-10 no-underline text-inherit',
-                index === discoverArtists.length - 1 && discoverArtists.length > 1 ? 'hover:-ml-12' : ''
+                index === discoverArtists.length - 1 && discoverArtists.length > 1 ? 'hover:-ml-50' : ''
               ]">
               <img :src="getArtistCoverUrl(artist)" :alt="artist.display_name"
                 class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-105" />

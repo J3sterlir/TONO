@@ -15,6 +15,7 @@ import { resolveSocialLink } from '~/utils/linkResolver'
 import { useTonoEvents } from '~/composables/useTonoEvents'
 import { useTonoReviews } from '~/composables/useTonoReviews'
 import { formatTimeRange12 } from '~/utils/formatTime'
+import { parseMediaUrl } from '~/utils/embedHelper'
 
 const supabase = useSupabaseClient()
 const { fetchCurrentUserProfile, resolveUserType } = useTonoAuth()
@@ -872,16 +873,18 @@ const removeDraftPoster = (index: number) => {
 
 const onMediaModalSaved = (payload: { url: string; title: string; caption: string }) => {
   const item = editingMediaIndex.value !== null ? draftMediaItems.value[editingMediaIndex.value] : null
+  const detectedPlatform = parseMediaUrl(payload.url).type || 'facebook'
   if (item) {
     item.url = payload.url
     item.title = payload.title
     item.displayText = payload.caption
+    item.platform = detectedPlatform
   } else {
     draftMediaItems.value.push({
       id: `draft_${Date.now()}`,
       artistId: artistId.value,
       category: 'media_embed',
-      platform: 'youtube',
+      platform: detectedPlatform,
       title: payload.title,
       displayText: payload.caption,
       url: payload.url,
@@ -1042,7 +1045,13 @@ onMounted(async () => {
         const tabParam = route.query.tab as string
         if (tabParam === 'events') {
           activeTab.value = 'gigs'
-        } else if (['posts', 'gigs', 'calendar', 'portfolio', 'contact', 'members'].includes(tabParam)) {
+        } else if (tabParam === 'members') {
+          if (artistType.value === 'Band') {
+            activeTab.value = 'members'
+          } else {
+            activeTab.value = 'posts'
+          }
+        } else if (['posts', 'gigs', 'calendar', 'portfolio', 'contact'].includes(tabParam)) {
           activeTab.value = tabParam as any
         }
       }
@@ -1062,6 +1071,31 @@ onMounted(async () => {
     console.error('Error fetching profile:', error)
   } finally {
     isLoading.value = false
+  }
+})
+
+watch(
+  () => [route.query.tab, artistType.value],
+  ([newTab, currentType]) => {
+    if (newTab === 'members') {
+      if (currentType === 'Band') {
+        activeTab.value = 'members'
+      } else {
+        activeTab.value = 'posts'
+      }
+    } else if (newTab && typeof newTab === 'string') {
+      if (newTab === 'events') {
+        activeTab.value = 'gigs'
+      } else if (['posts', 'gigs', 'calendar', 'portfolio', 'contact'].includes(newTab)) {
+        activeTab.value = newTab as any
+      }
+    }
+  }
+)
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'members' && artistType.value !== 'Band') {
+    activeTab.value = 'posts'
   }
 })
 
@@ -1925,15 +1959,9 @@ const handleLogout = async () => {
 
                   <div class="flex flex-col gap-4 p-4 sm:p-6">
                     <div>
-                      <h3 class="font-Sora text-base sm:text-[18px] font-semibold text-white">
-                        {{ artistName || 'Artist' }}
-                      </h3>
                     </div>
 
                     <div>
-                      <p class="text-sm sm:text-base text-gray-300 leading-relaxed">
-                        Caption
-                      </p>
                     </div>
                   </div>
                 </article>
@@ -2019,16 +2047,16 @@ const handleLogout = async () => {
                     <div class="flex flex-col gap-2 pl-3 pt-2">
                       <div class="flex items-center gap-1">
                         <h1 class="text-xs">Title:</h1>
-                        <p v-if="audio.displayText" class="text-xs text-gray-400 rounded w-fit font-bold">
-                        {{ audio.title || 'Song' }}
-                      </p>
+                        <p class="text-xs text-gray-400 rounded w-fit font-bold">
+                          {{ audio.title || 'Song' }}
+                        </p>
                       </div>
                       
-                      <div class="flex items-center gap-1">
+                      <div v-if="audio.displayText" class="flex items-center gap-1">
                         <h1 class="text-xs">Notes / Details:</h1>
-                        <p v-if="audio.displayText" class="text-xs text-gray-400 rounded w-fit font-bold">
-                        {{ audio.displayText }}
-                      </p>
+                        <p class="text-xs text-gray-400 rounded w-fit font-bold">
+                          {{ audio.displayText }}
+                        </p>
                       </div>
                     </div>
                     <MediaEmbed :url="audio.url" :title="audio.title" />
@@ -3011,7 +3039,7 @@ const handleLogout = async () => {
         </div>
 
         <!-- Members Tab Content (Only for Band artists) -->
-        <div v-else-if="activeTab === 'members'" class="w-full space-y-8 font-Sora">
+        <div v-else-if="activeTab === 'members' && artistType === 'Band'" class="w-full space-y-8 font-Sora">
           <!-- Floating Status Toast -->
           <div
             v-if="removeSuccessToast"
@@ -3374,8 +3402,9 @@ const handleLogout = async () => {
       @close="closePostModal"
     />
 
-    <!-- Band Invite Member Modal Component -->
+    <!-- Band Invite Member Modal Component (Only for Band artists) -->
     <BandInviteMemberModal
+      v-if="artistType === 'Band'"
       :is-open="isInviteModalOpen"
       :band-id="artistId"
       :current-members="bandMembers"

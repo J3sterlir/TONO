@@ -4,9 +4,9 @@
  * responsive embed URLs.
  */
 
-export type MediaType = 'youtube' | 'googledrive' | 'spotify' | 'soundcloud' | 'vimeo' | 'unsupported'
+export type MediaType = 'youtube' | 'googledrive' | 'spotify' | 'soundcloud' | 'vimeo' | 'facebook' | 'unsupported'
 
-export type EmbedAspect = 'video' | 'audio-compact' | 'audio-tall'
+export type EmbedAspect = 'video' | 'video-portrait' | 'audio-compact' | 'audio-tall'
 
 export interface ParsedMedia {
   type: MediaType
@@ -40,12 +40,13 @@ export function parseMediaUrl(rawUrl: string | null | undefined): ParsedMedia {
   )
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1]
+    const isShort = /youtube\.com\/shorts\//i.test(url)
     return {
       type: 'youtube',
       embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}`,
       originalUrl: url,
-      aspect: 'video',
-      platformName: 'YouTube',
+      aspect: isShort ? 'video-portrait' : 'video',
+      platformName: isShort ? 'YouTube Shorts' : 'YouTube',
       platformIcon: 'ic:baseline-smart-display',
     }
   }
@@ -106,6 +107,25 @@ export function parseMediaUrl(rawUrl: string | null | undefined): ParsedMedia {
       aspect: 'video',
       platformName: 'Vimeo',
       platformIcon: 'ic:baseline-videocam',
+    }
+  }
+
+  // 6. Facebook (Videos & Reels)
+  const isFbDomain = /(?:facebook\.com|fb\.watch)/i.test(url)
+  if (isFbDomain) {
+    const isFbReel = /(?:facebook\.com\/(?:reel|share\/r)\/|fb\.watch\/)/i.test(url)
+    const isFbVideo = /(?:facebook\.com\/(?:watch|.+?\/videos|video\.php|share\/v)|fb\.watch)/i.test(url)
+
+    if (isFbReel || isFbVideo) {
+      const encoded = encodeURIComponent(url)
+      return {
+        type: 'facebook',
+        embedUrl: `https://www.facebook.com/plugins/video.php?href=${encoded}&show_text=false&t=0`,
+        originalUrl: url,
+        aspect: isFbReel ? 'video-portrait' : 'video',
+        platformName: isFbReel ? 'Facebook Reel' : 'Facebook Video',
+        platformIcon: 'mdi:facebook',
+      }
     }
   }
 

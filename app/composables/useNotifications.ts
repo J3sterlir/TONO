@@ -117,6 +117,12 @@ export const useNotifications = () => {
       }
     }
 
+    let actionLink = row.Action_Link || row.action_link || undefined
+    if (notifType === 'band_invite' && actionLink && actionLink.includes('tab=members')) {
+      const bandUsername = meta.band_username || meta.sender_username || senderAcc?.Username
+      actionLink = bandUsername ? `/artist/${bandUsername}` : undefined
+    }
+
     return {
       id: row.Notification_ID || row.notification_id,
       title: row.Title || row.title || 'Notification',
@@ -133,7 +139,7 @@ export const useNotifications = () => {
       actionSecondary,
       entityId: resolvedEntityId,
       entityType: row.Entity_Type || row.entity_type || (isContractCancel ? 'BOOKING_CONTRACT' : undefined),
-      actionLink: row.Action_Link || row.action_link || undefined,
+      actionLink,
       senderAccountId: row.Sender_Account_ID || row.sender_account_id || meta.sender_account_id || undefined,
       metadata: meta,
       bandName: meta.band_name || undefined,

@@ -2,7 +2,34 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 definePageMeta({
-  middleware: 'auth'
+  middleware: [
+    'auth',
+    async (to) => {
+      const supabase = useSupabaseClient()
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData?.user) return navigateTo('/Login')
+
+      const { fetchCurrentUserProfile } = useTonoAuth()
+      const profile = await fetchCurrentUserProfile(authData.user.id)
+      if (!profile) return navigateTo('/Login')
+
+      const isBanned = profile?.account?.Is_Banned === true
+      const isSuspended =
+        profile?.account?.Is_Suspended === true &&
+        Boolean(profile?.account?.Suspended_Until) &&
+        new Date(profile.account.Suspended_Until!).getTime() > Date.now()
+
+      if (!isBanned && !isSuspended) {
+        if (profile.artistProfile) {
+          return navigateTo('/Artisthome')
+        } else if (profile.businessProfile) {
+          return navigateTo('/BusinessDash')
+        } else {
+          return navigateTo('/userhome')
+        }
+      }
+    }
+  ]
 })
 
 const supabase = useSupabaseClient()
@@ -20,17 +47,47 @@ let timer: any = null
 
 onMounted(async () => {
   const { data: authData } = await supabase.auth.getUser()
-  if (authData?.user) {
-    const profile = await fetchCurrentUserProfile(authData.user.id)
-    account.value = profile?.account || null
-    if (account.value?.Ban_Contested) {
-      appealSubmitted.value = true
+  if (!authData?.user) {
+    navigateTo('/Login')
+    return
+  }
+
+  const profile = await fetchCurrentUserProfile(authData.user.id)
+  account.value = profile?.account || null
+
+  const isBanned = account.value?.Is_Banned === true
+  const isSusp =
+    account.value?.Is_Suspended === true &&
+    Boolean(account.value?.Suspended_Until) &&
+    new Date(account.value.Suspended_Until!).getTime() > Date.now()
+
+  if (!isBanned && !isSusp) {
+    if (profile?.artistProfile) {
+      navigateTo('/Artisthome')
+    } else if (profile?.businessProfile) {
+      navigateTo('/BusinessDash')
+    } else {
+      navigateTo('/userhome')
     }
+    return
+  }
+
+  if (account.value?.Ban_Contested) {
+    appealSubmitted.value = true
   }
   isLoading.value = false
 
   timer = setInterval(() => {
     now.value = Date.now()
+    if (!isPermanentlyBanned.value && !isSuspended.value) {
+      if (profile?.artistProfile) {
+        navigateTo('/Artisthome')
+      } else if (profile?.businessProfile) {
+        navigateTo('/BusinessDash')
+      } else {
+        navigateTo('/userhome')
+      }
+    }
   }, 1000)
 })
 
@@ -125,7 +182,7 @@ const handleLogout = async () => {
     </div>
 
     <div
-      v-else
+      v-else-if="isPermanentlyBanned || isSuspended"
       class="max-w-lg w-full bg-[#18181B] border border-[#2A2A2E] p-6 sm:p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-6 relative overflow-hidden"
     >
       <!-- Top Accent Glow -->

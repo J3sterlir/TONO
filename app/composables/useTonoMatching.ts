@@ -33,7 +33,7 @@ export const useTonoMatching = () => {
   const allRecommendations = ref<MatchRecommendation[]>([])
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
-  const isLocationFilterActive = ref<boolean>(true)
+  const isLocationFilterActive = ref<boolean>(false)
 
   const nuxtUser = useSupabaseUser()
 

@@ -290,6 +290,16 @@ const handleItemClick = (item: NotificationItem) => {
   markAsRead(item)
   if (item.actionLink && !confirmingActionItem.value) {
     isOpen.value = false
+
+    // Guard: band_invite notification must NEVER route to /Artistprofile?tab=members
+    if (item.type === 'band_invite' && item.actionLink.includes('tab=members')) {
+      const bandUsername = item.metadata?.band_username || item.metadata?.sender_username
+      if (bandUsername) {
+        navigateTo(`/artist/${bandUsername}`)
+      }
+      return
+    }
+
     navigateTo(item.actionLink)
   }
 }

@@ -27,7 +27,13 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     }
   } else {
     if (to.path === '/banned') {
-      return navigateTo('/')
+      if (profile?.artistProfile) {
+        return navigateTo('/Artisthome')
+      } else if (profile?.businessProfile) {
+        return navigateTo('/BusinessDash')
+      } else {
+        return navigateTo('/userhome')
+      }
     }
   }
 })

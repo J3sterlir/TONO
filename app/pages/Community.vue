@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCommunityFeed, type CommunityPostItem } from '~/composables/useCommunityFeed'
 import { useTonoSongs, type SongItem } from '~/composables/useTonoSongs'
 import { useSocialFollow } from '~/composables/useSocialFollow'
-import { formatPostTimestamp, formatCount } from '~/utils/postHelpers'
+import { formatPostTimestamp, formatCount, parseCaptionSegments } from '~/utils/postHelpers'
 import type { PostItem } from '~/composables/useArtistPosts'
 
 definePageMeta({
@@ -15,6 +15,21 @@ const { fetchCurrentUserProfile } = useTonoAuth()
 const currentUserRole = ref<'artist' | 'user' | 'business' | 'guest'>('guest')
 const userCity = ref<string>('')
 
+const initialRole = computed<'artist' | 'user' | 'business' | 'guest'>(() => {
+  if (!currentUser.value) return 'guest'
+  const role = (currentUser.value.user_metadata?.role || '').toLowerCase()
+  if (role === 'artist') return 'artist'
+  if (role === 'business') return 'business'
+  return 'user'
+})
+
+const effectiveRole = computed(() => {
+  if (currentUserRole.value !== 'guest') return currentUserRole.value
+  return initialRole.value
+})
+
+const isGuest = computed(() => !currentUser.value || effectiveRole.value === 'guest')
+
 // Social & Feed composables
 const {
   feedPosts,
@@ -22,9 +37,11 @@ const {
   isRefreshing,
   fetchFeed,
   refreshFeed,
+  syncUserLikes,
   toggleLike,
-  toggleFollow: toggleFollowFeed,
-  incrementCommentCount
+  toggleFollow,
+  incrementCommentCount,
+  isFollowingMap
 } = useCommunityFeed()
 
 const {
@@ -36,8 +53,6 @@ const {
   isPlaying,
   togglePlayPause
 } = useTonoSongs()
-
-const { toggleFollow } = useSocialFollow()
 
 // Navigation & Layout state
 const activeMobileTab = ref<'feed' | 'charts'>('feed')
@@ -51,6 +66,11 @@ const selectedPostAuthorUsername = ref('')
 const isPostModalOpen = ref(false)
 
 const openPostDetail = (post: CommunityPostItem) => {
+  if (isGuest.value) {
+    navigateTo('/Login')
+    return
+  }
+
   // Convert CommunityPostItem to PostItem shape for PostDetailModal
   selectedPost.value = {
     POST_ID: post.POST_ID,
@@ -79,8 +99,58 @@ const handleLikeToggledFromModal = (postId: string) => {
   const p = feedPosts.value.find((item) => item.POST_ID === postId)
   if (p) {
     p.userHasLiked = !p.userHasLiked
-    p.likeCount += p.userHasLiked ? 1 : -1
+    p.likeCount = Math.max(0, p.likeCount + (p.userHasLiked ? 1 : -1))
+    if (selectedPost.value && selectedPost.value.POST_ID === postId) {
+      selectedPost.value.userHasLiked = p.userHasLiked
+      selectedPost.value.likeCount = p.likeCount
+    }
   }
+}
+
+const handleCommentAddedFromModal = (postId: string) => {
+  incrementCommentCount(postId)
+  if (selectedPost.value && selectedPost.value.POST_ID === postId) {
+    selectedPost.value.commentCount = (selectedPost.value.commentCount || 0) + 1
+  }
+}
+
+// In-feed caption expansion state
+const expandedPostIds = ref<Set<string>>(new Set())
+
+const isCaptionExpanded = (postId: string): boolean => {
+  return expandedPostIds.value.has(postId)
+}
+
+const toggleCaptionExpand = (postId: string) => {
+  const next = new Set(expandedPostIds.value)
+  if (next.has(postId)) {
+    next.delete(postId)
+  } else {
+    next.add(postId)
+  }
+  expandedPostIds.value = next
+}
+
+// Caption truncation helpers
+const isCaptionTruncated = (caption?: string | null): boolean => {
+  if (!caption) return false
+  return caption.length > 160 || caption.split('\n').length > 3
+}
+
+const getTruncatedCaption = (caption?: string | null): string => {
+  if (!caption) return ''
+  const lines = caption.split('\n')
+  if (lines.length > 3) {
+    const first3 = lines.slice(0, 3).join('\n')
+    if (first3.length > 160) {
+      return first3.slice(0, 160).trim()
+    }
+    return first3.trim()
+  }
+  if (caption.length > 160) {
+    return caption.slice(0, 160).trim()
+  }
+  return caption
 }
 
 // Share toast state
@@ -119,6 +189,11 @@ const { openReportModal } = useModerationReport()
 
 // Report post action
 const handleReportPost = (post: CommunityPostItem) => {
+  if (isGuest.value) {
+    navigateTo('/Login')
+    return
+  }
+
   openReportModal({
     targetType: 'Post',
     targetId: post.POST_ID,
@@ -128,36 +203,23 @@ const handleReportPost = (post: CommunityPostItem) => {
   })
 }
 
-const initialRole = computed<'artist' | 'user' | 'business' | 'guest'>(() => {
-  if (!currentUser.value) return 'guest'
-  const role = (currentUser.value.user_metadata?.role || '').toLowerCase()
-  if (role === 'artist') return 'artist'
-  if (role === 'business') return 'business'
-  return 'user'
-})
-
-const effectiveRole = computed(() => {
-  if (currentUserRole.value !== 'guest') return currentUserRole.value
-  return initialRole.value
-})
-
-onMounted(async () => {
-  if (currentUser.value) {
-    try {
-      const profile = await fetchCurrentUserProfile()
-      if (profile?.artistProfile) {
+const initCommunityData = async () => {
+  try {
+    const profile = await fetchCurrentUserProfile()
+    if (profile?.account) {
+      if (profile.artistProfile) {
         currentUserRole.value = 'artist'
-      } else if (profile?.businessProfile) {
+      } else if (profile.businessProfile) {
         currentUserRole.value = 'business'
       } else {
         currentUserRole.value = 'user'
       }
-      userCity.value = profile?.account?.City || ''
-    } catch {
-      currentUserRole.value = initialRole.value
+      userCity.value = profile.account.City || ''
+    } else {
+      currentUserRole.value = 'guest'
     }
-  } else {
-    currentUserRole.value = 'guest'
+  } catch {
+    currentUserRole.value = initialRole.value
   }
 
   // Load feed & charts
@@ -165,6 +227,22 @@ onMounted(async () => {
     fetchFeed(25),
     fetchLeaderboards(leaderboardScope.value, userCity.value)
   ])
+}
+
+onMounted(async () => {
+  await initCommunityData()
+})
+
+// Reactively re-sync feed and user role when auth state changes / hydrates
+watch(currentUser, async (newUser, oldUser) => {
+  if (newUser?.id !== oldUser?.id) {
+    if (newUser?.id) {
+      await initCommunityData()
+    } else {
+      currentUserRole.value = 'guest'
+      await fetchFeed(25)
+    }
+  }
 })
 
 const handleScopeChange = async (scope: 'local' | 'all') => {
@@ -182,18 +260,20 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
       v-else
       class="w-full bg-[#131315]/90 backdrop-blur-md border-b border-[#46464D]/60 px-4 sm:px-8 py-3.5 flex items-center justify-between sticky top-0 z-40"
     >
-      <NuxtLink to="/userhome" class="flex items-center gap-2">
+      <NuxtLink to="/" class="flex items-center gap-2">
         <span class="text-2xl font-black tracking-wider text-white font-Sora">TONO</span>
         <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#D0D4F7]/10 text-[#D0D4F7] font-mono tracking-wide">
           COMMUNITY
         </span>
       </NuxtLink>
       <div class="flex items-center gap-3">
-        <NuxtLink
-          to="/Login"
-          class="px-4 py-1.5 rounded-xl text-xs font-semibold bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2] transition-colors"
-        >
-          Sign In
+        <NuxtLink to="/Login"
+          class="text-xs sm:text-sm font-medium text-gray-300 hover:text-white px-3 py-1.5 transition-colors">
+          Log In
+        </NuxtLink>
+        <NuxtLink to="/Signin"
+          class="text-xs sm:text-sm font-semibold bg-[#D0D4F7] hover:bg-white text-[#0E0E10] px-4 py-1.5 rounded-xl transition-all shadow-md">
+          Join TONO
         </NuxtLink>
       </div>
     </header>
@@ -308,7 +388,8 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
               <div
                 v-if="post.Media"
                 class="w-full aspect-video max-h-137.5 overflow-hidden bg-black/40 flex items-center justify-center cursor-pointer"
-                @dblclick="toggleLike(post.POST_ID)"
+                @click="openPostDetail(post)"
+                @dblclick.stop="toggleLike(post.POST_ID)"
               >
                 <img
                   :src="post.Media"
@@ -359,19 +440,64 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
                   <!-- Quick Follow / Following Toggle Button -->
                   <button
                     v-if="!post.isOwnPost && (!currentUser || currentUser.id?.toLowerCase() !== post.authorAccountId?.toLowerCase())"
-                    @click="toggleFollow(post.authorAccountId)"
+                    type="button"
+                    @click.stop="toggleFollow(post.authorAccountId || post.ARTIST_ID || post.BUSINESS_ID || '')"
                     class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer"
-                    :class="post.isFollowing ? 'bg-[#18181B] text-gray-300 border border-[#2A2A2E]' : 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2]'"
+                    :class="(post.isFollowing || (post.authorAccountId && isFollowingMap[post.authorAccountId])) ? 'bg-[#18181B] text-gray-300 border border-[#2A2A2E]' : 'bg-[#D0D4F7] text-[#0E0E10] hover:bg-[#b8bdf2]'"
                   >
-                    {{ post.isFollowing ? 'Following' : '+ Follow' }}
+                    {{ (post.isFollowing || (post.authorAccountId && isFollowingMap[post.authorAccountId])) ? 'Following' : '+ Follow' }}
                   </button>
                 </div>
 
                 <!-- Post Caption -->
                 <div v-if="post.Caption">
                   <p class="text-sm sm:text-base text-gray-300 leading-relaxed font-Geist whitespace-pre-line">
-                    {{ post.Caption }}
+                    <template v-if="isCaptionTruncated(post.Caption) && !isCaptionExpanded(post.POST_ID)">
+                      <template v-for="(seg, idx) in parseCaptionSegments(getTruncatedCaption(post.Caption))" :key="idx">
+                        <a
+                          v-if="seg.isLink"
+                          :href="seg.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-[#9d87cb] hover:underline break-all"
+                          @click.stop
+                        >{{ seg.text }}</a>
+                        <span v-else>{{ seg.text }}</span>
+                      </template>
+                      <button
+                        type="button"
+                        @click.stop="toggleCaptionExpand(post.POST_ID)"
+                        class="font-bold text-[#babdf3] hover:underline cursor-pointer ml-1 inline-flex items-center"
+                      >
+                        … See more
+                      </button>
+                    </template>
+                    <template v-else>
+                      <template v-for="(seg, idx) in parseCaptionSegments(post.Caption)" :key="idx">
+                        <a
+                          v-if="seg.isLink"
+                          :href="seg.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-[#9d87cb] hover:underline break-all"
+                          @click.stop
+                        >{{ seg.text }}</a>
+                        <span v-else>{{ seg.text }}</span>
+                      </template>
+                    </template>
                   </p>
+                  <div
+                    v-if="isCaptionTruncated(post.Caption) && isCaptionExpanded(post.POST_ID)"
+                    class="mt-1"
+                  >
+                    <button
+                      type="button"
+                      @click.stop="toggleCaptionExpand(post.POST_ID)"
+                      class="font-bold text-[#babdf3] hover:underline cursor-pointer inline-flex items-center text-sm"
+                    >
+                      See less
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Bottom Action Bar -->
@@ -587,6 +713,7 @@ const handleScopeChange = async (scope: 'local' | 'all') => {
       :artist-username="selectedPostAuthorUsername"
       @close="closePostModal"
       @like-toggled="handleLikeToggledFromModal"
+      @comment-added="handleCommentAddedFromModal"
     />
 
     <!-- Toast Notification -->

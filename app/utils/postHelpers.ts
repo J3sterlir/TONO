@@ -89,3 +89,74 @@ export const formatCount = (count: number | null | undefined): string => {
   const formatted = (count / 1000000).toFixed(1)
   return `${formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted}M`
 }
+
+export interface CaptionSegment {
+  isLink: boolean
+  isUrl: boolean
+  text: string
+  url?: string
+}
+
+/**
+ * Parses caption text into plain text chunks and clickable URLs
+ */
+export const parseCaptionSegments = (text?: string | null): CaptionSegment[] => {
+  if (!text) return []
+
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi
+  const segments: CaptionSegment[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({
+        isLink: false,
+        isUrl: false,
+        text: text.slice(lastIndex, match.index)
+      })
+    }
+
+    let rawUrl = match[0]
+    let trailingPunctuation = ''
+
+    // Strip trailing punctuation from URL match
+    const punctMatch = rawUrl.match(/[.,!?)\]]+$/)
+    if (punctMatch) {
+      trailingPunctuation = punctMatch[0]
+      rawUrl = rawUrl.slice(0, -trailingPunctuation.length)
+    }
+
+    const href = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+      ? rawUrl
+      : `https://${rawUrl}`
+
+    segments.push({
+      isLink: true,
+      isUrl: true,
+      text: rawUrl,
+      url: href
+    })
+
+    if (trailingPunctuation) {
+      segments.push({
+        isLink: false,
+        isUrl: false,
+        text: trailingPunctuation
+      })
+    }
+
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({
+      isLink: false,
+      isUrl: false,
+      text: text.slice(lastIndex)
+    })
+  }
+
+  return segments
+}
+

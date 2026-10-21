@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted, nextTick } from 'vue'
 import type { PostItem, PostCommentItem } from '~/composables/useArtistPosts'
-import { formatPostTimestamp, formatPostRelativeTime, formatCount } from '~/utils/postHelpers'
+import { formatPostTimestamp, formatPostRelativeTime, formatCount, parseCaptionSegments } from '~/utils/postHelpers'
 
 const props = withDefaults(
   defineProps<{
@@ -21,15 +21,33 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'like-toggled', postId: string): void
+  (e: 'comment-added', postId: string): void
 }>()
 
-const { comments, isLoadingComments, fetchComments, addComment, toggleLike } = useArtistPosts()
-const { user } = useTonoAuth()
+const { posts, comments, isLoadingComments, fetchComments, addComment, toggleLike } = useArtistPosts()
+const user = useSupabaseUser()
 const { openReportModal } = useModerationReport()
 
 const newCommentText = ref('')
 const isPostingComment = ref(false)
 const commentsContainerRef = ref<HTMLDivElement | null>(null)
+
+// Local reactive like & comment count state kept in sync with props.post
+const isLiked = ref(false)
+const likeCount = ref(0)
+const commentCount = ref(0)
+
+watch(
+  () => [props.post?.POST_ID, props.post?.userHasLiked, props.post?.likeCount, props.post?.commentCount],
+  () => {
+    if (props.post) {
+      isLiked.value = Boolean(props.post.userHasLiked)
+      likeCount.value = Number(props.post.likeCount) || 0
+      commentCount.value = Number(props.post.commentCount) || 0
+    }
+  },
+  { immediate: true }
+)
 
 // Load comments whenever a post is opened
 watch(
@@ -52,21 +70,78 @@ const scrollToBottom = () => {
 }
 
 const handleLike = async () => {
-  if (!props.post) return
-  await toggleLike(props.post.POST_ID)
-  emit('like-toggled', props.post.POST_ID)
+  if (!user.value) {
+    await navigateTo('/Login')
+    return
+  }
+  const post = props.post
+  if (!post) return
+  const postId = post.POST_ID
+  if (!postId) return
+
+  // 1. Instantly toggle local modal state
+  const prevLiked = isLiked.value
+  const prevCount = likeCount.value
+  const nextLiked = !prevLiked
+  const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1))
+
+  isLiked.value = nextLiked
+  likeCount.value = nextCount
+
+  // Also update props.post object if present
+  post.userHasLiked = nextLiked
+  post.likeCount = nextCount
+
+  // 2. Notify parent component to update feed post in parallel
+  emit('like-toggled', postId)
+
+  // 3. Persist to server via toggleLike
+  try {
+    const success = await toggleLike(postId)
+    if (!success) {
+      // Revert if API rejected or failed
+      isLiked.value = prevLiked
+      likeCount.value = prevCount
+      post.userHasLiked = prevLiked
+      post.likeCount = prevCount
+      emit('like-toggled', postId)
+    }
+  } catch (err) {
+    console.error('Error toggling like in modal:', err)
+    isLiked.value = prevLiked
+    likeCount.value = prevCount
+    post.userHasLiked = prevLiked
+    post.likeCount = prevCount
+    emit('like-toggled', postId)
+  }
 }
 
 const handleAddComment = async () => {
-  if (!props.post || !newCommentText.value.trim() || isPostingComment.value) return
+  if (!user.value) {
+    await navigateTo('/Login')
+    return
+  }
+  const post = props.post
+  if (!post || !newCommentText.value.trim() || isPostingComment.value) return
+  const postId = post.POST_ID
+  if (!postId) return
+
   isPostingComment.value = true
 
-  const result = await addComment(props.post.POST_ID, newCommentText.value)
-  if (result.success) {
-    newCommentText.value = ''
-    scrollToBottom()
+  try {
+    const result = await addComment(postId, newCommentText.value)
+    if (result.success) {
+      newCommentText.value = ''
+      commentCount.value += 1
+      post.commentCount = commentCount.value
+      emit('comment-added', postId)
+      scrollToBottom()
+    }
+  } catch (err) {
+    console.error('Error adding comment:', err)
+  } finally {
+    isPostingComment.value = false
   }
-  isPostingComment.value = false
 }
 
 // Background scroll lock
@@ -213,11 +288,21 @@ onUnmounted(() => {
               <!-- Caption Callout Box -->
               <div
                 v-if="post.Caption"
-                class="p-4 rounded-xl border border-[#2E2E34]"
+                class="p-4 rounded-xl"
                 :class="post.Media ? 'bg-[#202025]/50' : 'bg-[#222228]'"
               >
                 <p class="text-sm sm:text-base text-gray-200 leading-relaxed font-Geist whitespace-pre-line">
-                  {{ post.Caption }}
+                  <template v-for="(seg, idx) in parseCaptionSegments(post.Caption)" :key="idx">
+                    <a
+                      v-if="seg.isUrl"
+                      :href="seg.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-[#9d87cb] hover:underline break-all"
+                      @click.stop
+                    >{{ seg.text }}</a>
+                    <span v-else>{{ seg.text }}</span>
+                  </template>
                 </p>
               </div>
 
@@ -229,17 +314,17 @@ onUnmounted(() => {
                     type="button"
                     @click="handleLike"
                     class="flex items-center gap-1.5 cursor-pointer transition-colors"
-                    :class="post.userHasLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'"
+                    :class="isLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE] hover:text-[#D0D4F7]'"
                   >
                     <Icon
-                      :name="post.userHasLiked ? 'ic:baseline-favorite' : 'ic:baseline-favorite-border'"
+                      :name="isLiked ? 'ic:baseline-favorite' : 'ic:baseline-favorite-border'"
                       class="text-lg text-[#D0D4F7] transition-transform active:scale-125"
                     />
                     <span
                       class="font-medium font-Sora"
-                      :class="post.userHasLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE]'"
+                      :class="isLiked ? 'text-[#D0D4F7]' : 'text-[#C7C5CE]'"
                     >
-                      {{ formatCount(post.likeCount) }} {{ post.likeCount === 1 ? 'like' : 'likes' }}
+                      {{ formatCount(likeCount) }} {{ likeCount === 1 ? 'like' : 'likes' }}
                     </span>
                   </button>
 
@@ -247,7 +332,7 @@ onUnmounted(() => {
                   <span class="flex items-center gap-1.5 text-[#C7C5CE]">
                     <Icon name="ic:sharp-chat-bubble-outline" class="text-lg text-[#D0D4F7]" />
                     <span class="font-medium font-Sora">
-                      {{ formatCount(post.commentCount) }} {{ post.commentCount === 1 ? 'comment' : 'comments' }}
+                      {{ formatCount(commentCount) }} {{ commentCount === 1 ? 'comment' : 'comments' }}
                     </span>
                   </span>
                 </div>

@@ -1751,8 +1751,8 @@ const isScrolled = computed(() => scrollY.value > 200)
                 >
                   {{ member.artistName.charAt(0) }}
                 </div>
-                <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#18181B] flex items-center justify-center">
-                  <Icon name="ic:round-verified" class="bg-indigo-500 text-sm" />
+                <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center">
+                  <Icon name="ic:round-verified" class="text-sm" />
                 </div>
               </div>
 
